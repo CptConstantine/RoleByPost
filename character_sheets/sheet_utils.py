@@ -7,14 +7,21 @@ import discord
 DATA_FILE = 'data/characters.json'
 
 def load_data():
-    if not os.path.exists(DATA_FILE):
-        return {
-            "gm_ids": [],
-            "characters": {},
-            "current_scene": {
-                "npc_ids": []
-            }
+    default_data = {
+        "gm_ids": [],
+        "characters": {},
+        "npcs": {},
+        "current_scene": {
+            "npc_ids": []
         }
+    }
+    if not os.path.exists(DATA_FILE):
+        # Ensure the data directory exists
+        os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
+        # Save the default structure
+        with open(DATA_FILE, 'w') as f:
+            json.dump(default_data, f, indent=2)
+        return default_data
     with open(DATA_FILE, 'r') as f:
         return json.load(f)
 
