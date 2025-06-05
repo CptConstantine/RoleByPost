@@ -93,11 +93,8 @@ async def createchar(ctx):
         "fate_points": 3,
         "is_npc": False,
         "owner_id": ctx.author.id,
-        "aspects": {
-            "high_concept": "",
-            "trouble": "",
-            "free": []
-        },
+        "aspects": [],
+        "hidden_aspects": [],
         "stress": {
             "physical": [False, False, False],
             "mental": [False, False]
@@ -121,11 +118,8 @@ async def createnpc(ctx, name: str):
         "fate_points": 3,
         "is_npc": True,
         "owner_id": ctx.author.id,
-        "aspects": {
-            "high_concept": "",
-            "trouble": "",
-            "free": []
-        },
+        "aspects": [],
+        "hidden_aspects": [],
         "stress": {
             "physical": [False, False, False],
             "mental": [False, False]
@@ -153,13 +147,17 @@ async def sheet(ctx, char_name: str = None):
         return
 
     aspects = character["aspects"]
+    hidden_aspects = character["hidden_aspects"]
+    aspect_lines = []
+    if aspects:
+        for idx, aspect in enumerate(aspects):
+            if idx in hidden_aspects:
+                aspect_lines.append(f"*{aspect}*")
+            else:
+                aspect_lines.append(f"{aspect}")
+
     consequences = character["consequences"]
     stress = character["stress"]
-
-    aspect_lines = [
-        f"**High Concept**: {aspects['high_concept'] or '_None_'}",
-        f"**Trouble**: {aspects['trouble'] or '_None_'}"
-    ] + [f"- {a}" for a in aspects["free"]]
 
     stress_lines = [
         f"**Physical Stress**: {' '.join('[☒]' if x else '[☐]' for x in stress['physical'])}",
@@ -176,35 +174,6 @@ async def sheet(ctx, char_name: str = None):
     await ctx.send(embed=embed)
 
 
-@bot.event
-async def on_interaction(interaction: discord.Interaction):
-    if interaction.type.name != 'component':
-        return
-
-    user_id = interaction.user.id
-    character = sheet_utils.get_character(user_id)
-    if not character:
-        await interaction.response.send_message("❌ You don't have a character.", ephemeral=True)
-        return
-
-    if interaction.data["custom_id"] == "roll_athletics":
-        bonus = character["skills"].get("Athletics", 0)
-        rolls = [random.choice([-1, 0, 1]) for _ in range(4)]
-        symbols = ['+' if r == 1 else '-' if r == -1 else '0' for r in rolls]
-        total = sum(rolls) + bonus
-
-        response = f'🎲 Fudge Rolls: `{" ".join(symbols)}`\nSkill Bonus: +{bonus}\n🧮 Total: {total}'
-        await interaction.response.send_message(response)
-
-    elif interaction.data["custom_id"] == "cheat_fate":
-        if character["fate_points"] <= 0:
-            await interaction.response.send_message("⚠️ You don't have enough Fate Points.", ephemeral=True)
-            return
-        character["fate_points"] -= 1
-        sheet_utils.set_character(user_id, character)
-        await interaction.response.send_message("✨ You cheated fate! +2 to your next roll.")
-
-
 @bot.command()
 @commands.is_owner()
 async def setgm(ctx):
@@ -219,18 +188,19 @@ async def scene_add(ctx, *, name: str):
         return
 
     npc_id = f"npc:{name.lower().replace(' ', '_')}"
-    data = sheet_utils.load_data()
+    char_data = sheet_utils.load_character_data()
+    scene_data = sheet_utils.load_scene_data()
 
-    if npc_id not in data["npcs"]:
+    if npc_id not in char_data["npcs"]:
         await ctx.send("❌ NPC not found. Did you create it with `!createnpc`?")
         return
 
-    if npc_id in data["current_scene"]["npc_ids"]:
+    if npc_id in scene_data["current_scene"]["npc_ids"]:
         await ctx.send("⚠️ That NPC is already in the scene.")
         return
 
-    data["current_scene"]["npc_ids"].append(npc_id)
-    sheet_utils.save_data(data)
+    scene_data["current_scene"]["npc_ids"].append(npc_id)
+    sheet_utils.save_scene_data(scene_data)
     await ctx.send(f"✅ **{name}** added to the scene.")
 
 
@@ -241,14 +211,14 @@ async def scene_remove(ctx, *, name: str):
         return
 
     npc_id = f"npc:{name.lower().replace(' ', '_')}"
-    data = sheet_utils.load_data()
+    scene_data = sheet_utils.load_scene_data()
 
-    if npc_id not in data["current_scene"]["npc_ids"]:
+    if npc_id not in scene_data["current_scene"]["npc_ids"]:
         await ctx.send("❌ That NPC isn't in the scene.")
         return
 
-    data["current_scene"]["npc_ids"].remove(npc_id)
-    sheet_utils.save_data(data)
+    scene_data["current_scene"]["npc_ids"].remove(npc_id)
+    sheet_utils.save_scene_data(scene_data)
     await ctx.send(f"🗑️ **{name}** removed from the scene.")
 
 
@@ -258,54 +228,67 @@ async def scene_clear(ctx):
         await ctx.send("❌ Only GMs can manage the scene.")
         return
 
-    data = sheet_utils.load_data()
-    data["current_scene"]["npc_ids"] = []
-    sheet_utils.save_data(data)
+    scene_data = sheet_utils.load_scene_data()
+    scene_data["current_scene"]["npc_ids"] = []
+    sheet_utils.save_scene_data(scene_data)
     await ctx.send("🧹 Scene NPC list cleared.")
 
 
 @bot.command()
 async def scene(ctx):
-    data = sheet_utils.load_data()
+    data = sheet_utils.load_character_data()
     npc_ids = data["current_scene"]["npc_ids"]
     if not npc_ids:
         await ctx.send("📭 No NPCs are currently in the scene.")
         return
 
+    is_gm = sheet_utils.is_gm(ctx.author.id)
     lines = []
     for npc_id in npc_ids:
-        npc = data["characters"].get(npc_id)
+        npc = data["npcs"].get(npc_id)
         if npc:
-            lines.append(f"- **{npc['name']}**")
+            aspects = npc.get("aspects", [])
+            hidden = npc.get("hidden_aspects", [])
+            aspect_lines = []
+            for idx, aspect in enumerate(aspects):
+                if idx in hidden:
+                    if is_gm:
+                        aspect_lines.append(f"*{aspect}*")
+                    else:
+                        aspect_lines.append("*hidden*")
+                else:
+                    aspect_lines.append(aspect)
+            aspect_str = "\n".join(aspect_lines) if aspect_lines else "_No aspects set_"
+            lines.append(f"**{npc['name']}**\n{aspect_str}")
 
     embed = discord.Embed(
         title="🎭 NPCs in the Scene",
-        description="\n".join(lines),
+        description="\n\n".join(lines),
         color=discord.Color.purple()
     )
     await ctx.send(embed=embed)
 
 
 @bot.tree.command(name="sheet", description="View a character or NPC's full sheet")
-@app_commands.describe(target="Leave blank to view your character, or enter an NPC name.")
-async def sheet(interaction: discord.Interaction, target: str = None):
-    data = sheet_utils.load_data()
+@app_commands.describe(char_name="Leave blank to view your character, or enter an NPC name.")
+async def sheet(interaction: discord.Interaction, char_name: str = None):
+    data = sheet_utils.load_character_data()
 
     view = None
     is_ephemeral = True
 
-    if target:  # NPC
+    if char_name:  # NPC
         if not sheet_utils.is_gm(interaction.user.id):
             await interaction.response.send_message("❌ Only the GM can view NPCs.", ephemeral=True)
             return
 
-        npc = next((npc for npc in data.get("npcs", {}).values() if npc.get("name", "").lower() == target), None)
+        npc = next((npc for npc in data.get("npcs", {}).values() if npc.get("name", "").lower() == char_name), None)
         if not npc:
             await interaction.response.send_message("❌ NPC not found.", ephemeral=True)
             return
 
-        embed = sheet_utils.format_full_sheet(target, npc)
-        view = sheet_views.SheetEditView(interaction.user.id, "npcs", target, target)
+        embed = sheet_utils.format_full_sheet(char_name, npc)
+        view = sheet_views.SheetEditView(interaction.user.id, "npcs", f'npc:{char_name}', char_name)
         is_ephemeral = True  # Still private for GM
 
     else:  # Player character

@@ -1,2 +1,4 @@
 .env
 data/characters.json
+data/server.json
+data/scenes.json
