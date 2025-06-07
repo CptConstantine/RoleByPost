@@ -1,10 +1,8 @@
-
-
 import discord
 
 
-def format_full_sheet(name: str, character: dict) -> discord.Embed:
-    embed = discord.Embed(title=f"{name}'s Character Sheet", color=discord.Color.purple())
+def format_full_sheet(character: dict) -> discord.Embed:
+    embed = discord.Embed(title=f"{character.get("name")}", color=discord.Color.purple())
 
     # --- Aspects ---
     aspects = character.get("aspects", [])

@@ -288,7 +288,6 @@ async def scene(ctx):
 @app_commands.describe(char_name="Leave blank to view your character, or enter an NPC name.")
 async def sheet(interaction: discord.Interaction, char_name: str = None):
     is_ephemeral = True
-    view = None
 
     if char_name:  # Try to fetch as NPC
         char_id = f"npc:{char_name.lower().replace(' ', '_')}"
@@ -306,7 +305,8 @@ async def sheet(interaction: discord.Interaction, char_name: str = None):
             await interaction.response.send_message("❌ Only the GM can view NPCs.", ephemeral=True)
             return
 
-    embed = sheet_utils.format_full_sheet(character["name"], character)
+    embed = sheet_utils.format_full_sheet(character)
+    view = sheet_views.SheetEditView(interaction.user.id, char_id)
     # Optionally, you can add a view here if you have a DB-compatible SheetEditView
     await interaction.response.send_message(embed=embed, view=view, ephemeral=is_ephemeral)
 
