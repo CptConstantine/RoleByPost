@@ -19,7 +19,26 @@ def set_gm(guild_id, user_id):
     with get_db() as conn:
         conn.execute("INSERT OR IGNORE INTO gms (guild_id, user_id) VALUES (?, ?)", (str(guild_id), str(user_id)))
         conn.commit()
-        
+
+
+def set_system(guild_id, system):
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO server_settings (guild_id, system) VALUES (?, ?)",
+            (str(guild_id), system)
+        )
+        conn.commit()
+
+
+def get_system(guild_id):
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT system FROM server_settings WHERE guild_id = ?",
+            (str(guild_id),)
+        )
+        row = cur.fetchone()
+        return row[0] if row else "fate"  # Default to "fate"
+
         
 def set_character(guild_id, char_id, character, system="fate"):
     with get_db() as conn:

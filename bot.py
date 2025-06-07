@@ -29,9 +29,50 @@ async def on_ready():
     print(f'Logged in as {bot.user}!')
 
 
+@bot.event
+async def on_guild_join(guild):
+    # Try to DM the owner
+    try:
+        await guild.owner.send(
+            f"👋 Thanks for adding me to **{guild.name}**!\n"
+            "Please set up your RPG system with:\n"
+            "`!setsystem fate` or `!setsystem mgt2e`"
+        )
+    except Exception:
+        # If DM fails, send to first text channel
+        for channel in guild.text_channels:
+            if channel.permissions_for(guild.me).send_messages:
+                await channel.send(
+                    f"👋 Thanks for adding me to **{guild.name}**!\n"
+                    "Please set up your RPG system with:\n"
+                    "`!setsystem fate` or `!setsystem mgt2e`"
+                )
+                break
+
+
 @bot.command()
 async def myguild(ctx):
     await ctx.send(f"This server's guild_id is {ctx.guild.id}")
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def setsystem(ctx, system: str):
+    """Set the RPG system for this server. Example: !setsystem fate or !setsystem mgt2e"""
+    valid_systems = ["fate", "mgt2e"]
+    system = system.lower()
+    if system not in valid_systems:
+        await ctx.send(f"❌ Invalid system. Valid options: {', '.join(valid_systems)}")
+        return
+    repo.set_system(ctx.guild.id, system)
+    await ctx.send(f"✅ System set to {system.upper()} for this server.")
+
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def setgm(ctx):
+    repo.set_gm(ctx.guild.id, ctx.author.id)
+    await ctx.send(f"✅ {ctx.author.display_name} is now a GM.")
 
 
 @bot.command()
@@ -83,22 +124,38 @@ async def roll(ctx, *, arg):
 
 @bot.command()
 async def createchar(ctx, name: str = None):
-    character = {
-        "name": name if name else f"{ctx.author.display_name}'s Character",
-        "skills": {},
-        "fate_points": 3,
-        "is_npc": False,
-        "owner_id": ctx.author.id,
-        "aspects": [],
-        "hidden_aspects": [],
-        "stress": {
-            "physical": [False, False, False],
-            "mental": [False, False]
-        },
-        "consequences": ["Mild: None", "Moderate: None", "Severe: None"]
-    }
-    repo.set_character(ctx.guild.id, ctx.author.id, character, system="fate")
-    await ctx.send(f'📝 Created character for {ctx.author.display_name}.')
+    system = repo.get_system(ctx.guild.id)
+    if system == "mgt2e":
+        character = {
+            "name": name if name else f"{ctx.author.display_name}'s Character",
+            "owner_id": ctx.author.id,
+            "is_npc": False,
+            # Add MGT2E-specific fields here
+            "career": "",
+            "attributes": {"STR": 0, "DEX": 0, "END": 0, "INT": 0, "EDU": 0, "SOC": 0},
+            "skills": {},
+            "benefits": [],
+            "equipment": [],
+            # ...etc.
+        }
+    elif system == "fate":
+        character = {
+            "name": name if name else f"{ctx.author.display_name}'s Character",
+            "owner_id": ctx.author.id,
+            "is_npc": False,
+            "fate_points": 3,
+            "skills": {},
+            "aspects": [],
+            "hidden_aspects": [],
+            "stress": {"physical": [False, False, False], "mental": [False, False]},
+            "consequences": ["Mild: None", "Moderate: None", "Severe: None"]
+        }
+    else:
+        await ctx.send("❌ Please set a valid RPG system with `!setsystem`.")
+        return
+    
+    repo.set_character(ctx.guild.id, ctx.author.id, character, system=system)
+    await ctx.send(f'📝 Created {system.upper()} character for {ctx.author.display_name}.')
 
 
 @bot.command()
@@ -144,13 +201,6 @@ async def sheet(ctx, char_name: str = None):
 
     embed = sheet_utils.format_full_sheet(character["name"], character)
     await ctx.send(embed=embed)
-
-
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def setgm(ctx):
-    repo.set_gm(ctx.guild.id, ctx.author.id)
-    await ctx.send(f"✅ {ctx.author.display_name} is now a GM.")
 
 
 @bot.command()
