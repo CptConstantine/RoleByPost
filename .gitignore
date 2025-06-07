@@ -2,3 +2,12 @@
 data/init_db.py
 data/dbmisc.py
 discord.log
+# Ignore Python virtual environments
+venv/
+# Ignore Python cache files
+__pycache__/
+data/__pycache__/
+character/__pycache__/
+*.pyc
+*.pyo
+*.pyd
