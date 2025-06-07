@@ -1,4 +1,4 @@
 .env
-data/characters.json
-data/server.json
-data/scenes.json
+data/init_db.py
+data/dbmisc.py
+discord.log

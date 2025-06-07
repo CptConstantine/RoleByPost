@@ -1,18 +1,20 @@
 import re
 import random
 import discord
+from data import repo
 from character_sheets import sheet_utils, sheet_views
 from discord.ext import commands
 from discord.ui import View, Button
 from discord import app_commands
 from dotenv import load_dotenv
 import os
+import logging
+
 
 load_dotenv()
 
 intents = discord.Intents.default()
 intents.message_content = True
-
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
@@ -28,10 +30,12 @@ async def on_ready():
 
 
 @bot.command()
+async def myguild(ctx):
+    await ctx.send(f"This server's guild_id is {ctx.guild.id}")
+
+
+@bot.command()
 async def roll(ctx, *, arg):
-    """
-    Rolls standard dice (e.g. 2d6+1) or Fudge dice (e.g. 4df).
-    """
     arg = arg.replace(" ", "").lower()
 
     # Fudge dice pattern
@@ -77,18 +81,10 @@ async def roll(ctx, *, arg):
     await ctx.send("❌ Invalid format. Use like `2d6+3` or `4df+1`.")
 
 
-class CharacterView(View):
-    def __init__(self, user_id):
-        super().__init__()
-        self.user_id = user_id
-        self.add_item(Button(label="Roll Athletics", style=discord.ButtonStyle.primary, custom_id="roll_athletics"))
-        self.add_item(Button(label="Cheat Fate (+2)", style=discord.ButtonStyle.danger, custom_id="cheat_fate"))
-
-
 @bot.command()
-async def createchar(ctx):
+async def createchar(ctx, name: str = None):
     character = {
-        "name": "default name",
+        "name": name if name else f"{ctx.author.display_name}'s Character",
         "skills": {},
         "fate_points": 3,
         "is_npc": False,
@@ -101,13 +97,13 @@ async def createchar(ctx):
         },
         "consequences": ["Mild: None", "Moderate: None", "Severe: None"]
     }
-    sheet_utils.set_character(ctx.author.id, character)
+    repo.set_character(ctx.guild.id, ctx.author.id, character, system="fate")
     await ctx.send(f'📝 Created character for {ctx.author.display_name}.')
 
 
 @bot.command()
 async def createnpc(ctx, name: str):
-    if not sheet_utils.is_gm(ctx.author.id):
+    if not repo.is_gm(ctx.guild.id, ctx.author.id):
         await ctx.send("❌ Only GMs can create NPCs.")
         return
 
@@ -126,7 +122,7 @@ async def createnpc(ctx, name: str):
         },
         "consequences": ["Mild: None"]
     }
-    sheet_utils.set_npc(npc_id, character)
+    repo.set_npc(ctx.guild.id, npc_id, character, system="fate")
     await ctx.send(f"🤖 Created NPC: **{name}**")
 
 
@@ -135,117 +131,86 @@ async def sheet(ctx, char_name: str = None):
     if char_name is None:
         char_id = str(ctx.author.id)
     else:
-        if sheet_utils.is_gm(ctx.author.id):
+        if repo.is_gm(ctx.guild.id, ctx.author.id):
             char_id = f"npc:{char_name.lower().replace(' ', '_')}"
         else:
             await ctx.send("❌ You can only view your own sheet.")
             return
 
-    character = sheet_utils.get_character(char_id)
+    character = repo.get_character(ctx.guild.id, char_id)
     if not character:
         await ctx.send("❌ Character not found.")
         return
 
-    aspects = character["aspects"]
-    hidden_aspects = character["hidden_aspects"]
-    aspect_lines = []
-    if aspects:
-        for idx, aspect in enumerate(aspects):
-            if idx in hidden_aspects:
-                aspect_lines.append(f"*{aspect}*")
-            else:
-                aspect_lines.append(f"{aspect}")
-
-    consequences = character["consequences"]
-    stress = character["stress"]
-
-    stress_lines = [
-        f"**Physical Stress**: {' '.join('[☒]' if x else '[☐]' for x in stress['physical'])}",
-        f"**Mental Stress**: {' '.join('[☒]' if x else '[☐]' for x in stress['mental'])}"
-    ]
-
-    conseq_lines = consequences
-
-    embed = discord.Embed(title=f"{character['name']}'s Sheet")
-    embed.add_field(name="Aspects", value="\n".join(aspect_lines), inline=False)
-    embed.add_field(name="Stress", value="\n".join(stress_lines), inline=False)
-    embed.add_field(name="Consequences", value="\n".join(conseq_lines), inline=False)
-
+    embed = sheet_utils.format_full_sheet(character["name"], character)
     await ctx.send(embed=embed)
 
 
 @bot.command()
-@commands.is_owner()
+@commands.has_permissions(administrator=True)
 async def setgm(ctx):
-    sheet_utils.set_gm(ctx.author.id)
+    repo.set_gm(ctx.guild.id, ctx.author.id)
     await ctx.send(f"✅ {ctx.author.display_name} is now a GM.")
 
 
 @bot.command()
 async def scene_add(ctx, *, name: str):
-    if not sheet_utils.is_gm(ctx.author.id):
+    if not repo.is_gm(ctx.guild.id, ctx.author.id):
         await ctx.send("❌ Only GMs can manage the scene.")
         return
 
     npc_id = f"npc:{name.lower().replace(' ', '_')}"
-    char_data = sheet_utils.load_character_data()
-    scene_data = sheet_utils.load_scene_data()
-
-    if npc_id not in char_data["npcs"]:
+    npc = repo.get_character(ctx.guild.id, npc_id)
+    if not npc:
         await ctx.send("❌ NPC not found. Did you create it with `!createnpc`?")
         return
 
-    if npc_id in scene_data["current_scene"]["npc_ids"]:
+    scene_npcs = repo.get_scenes(ctx.guild.id)
+    if npc_id in scene_npcs:
         await ctx.send("⚠️ That NPC is already in the scene.")
         return
 
-    scene_data["current_scene"]["npc_ids"].append(npc_id)
-    sheet_utils.save_scene_data(scene_data)
+    repo.add_scene_npc(ctx.guild.id, npc_id)
     await ctx.send(f"✅ **{name}** added to the scene.")
 
 
 @bot.command()
 async def scene_remove(ctx, *, name: str):
-    if not sheet_utils.is_gm(ctx.author.id):
+    if not repo.is_gm(ctx.guild.id, ctx.author.id):
         await ctx.send("❌ Only GMs can manage the scene.")
         return
 
     npc_id = f"npc:{name.lower().replace(' ', '_')}"
-    scene_data = sheet_utils.load_scene_data()
-
-    if npc_id not in scene_data["current_scene"]["npc_ids"]:
+    scene_npcs = repo.get_scenes(ctx.guild.id)
+    if npc_id not in scene_npcs:
         await ctx.send("❌ That NPC isn't in the scene.")
         return
 
-    scene_data["current_scene"]["npc_ids"].remove(npc_id)
-    sheet_utils.save_scene_data(scene_data)
+    repo.remove_scene_npc(ctx.guild.id, npc_id)
     await ctx.send(f"🗑️ **{name}** removed from the scene.")
 
 
 @bot.command()
 async def scene_clear(ctx):
-    if not sheet_utils.is_gm(ctx.author.id):
+    if not repo.is_gm(ctx.guild.id, ctx.author.id):
         await ctx.send("❌ Only GMs can manage the scene.")
         return
 
-    scene_data = sheet_utils.load_scene_data()
-    scene_data["current_scene"]["npc_ids"] = []
-    sheet_utils.save_scene_data(scene_data)
+    repo.clear_scenes(ctx.guild.id)
     await ctx.send("🧹 Scene NPC list cleared.")
 
 
 @bot.command()
 async def scene(ctx):
-    data = sheet_utils.load_character_data()
-    npc_ids = data["current_scene"]["npc_ids"]
+    npc_ids = repo.get_scenes(ctx.guild.id)
     if not npc_ids:
         await ctx.send("📭 No NPCs are currently in the scene.")
         return
 
-    is_gm = sheet_utils.is_gm(ctx.author.id)
+    is_gm = repo.is_gm(ctx.guild.id, ctx.author.id)
     lines = []
     for npc_id in npc_ids:
-        npc = data["npcs"].get(npc_id)
+        npc = repo.get_character(ctx.guild.id, npc_id)
         if npc:
             aspects = npc.get("aspects", [])
             hidden = npc.get("hidden_aspects", [])
@@ -272,36 +237,30 @@ async def scene(ctx):
 @bot.tree.command(name="sheet", description="View a character or NPC's full sheet")
 @app_commands.describe(char_name="Leave blank to view your character, or enter an NPC name.")
 async def sheet(interaction: discord.Interaction, char_name: str = None):
-    data = sheet_utils.load_character_data()
-
-    view = None
     is_ephemeral = True
+    view = None
 
-    if char_name:  # NPC
-        if not sheet_utils.is_gm(interaction.user.id):
+    if char_name:  # Try to fetch as NPC
+        char_id = f"npc:{char_name.lower().replace(' ', '_')}"
+    else:  # Player character
+        char_id = str(interaction.user.id)
+
+    character = repo.get_character(interaction.guild.id, char_id)
+    if not character:
+        await interaction.response.send_message("❌ Character not found.", ephemeral=True)
+        return
+
+    # If it's an NPC, only GMs can view
+    if character.get("is_npc"):
+        if not repo.is_gm(interaction.guild.id, interaction.user.id):
             await interaction.response.send_message("❌ Only the GM can view NPCs.", ephemeral=True)
             return
 
-        npc = next((npc for npc in data.get("npcs", {}).values() if npc.get("name", "").lower() == char_name), None)
-        if not npc:
-            await interaction.response.send_message("❌ NPC not found.", ephemeral=True)
-            return
-
-        embed = sheet_utils.format_full_sheet(char_name, npc)
-        view = sheet_views.SheetEditView(interaction.user.id, "npcs", f'npc:{char_name}', char_name)
-        is_ephemeral = True  # Still private for GM
-
-    else:  # Player character
-        cid = str(interaction.user.id)
-        character = data["characters"].get(cid)
-        if not character:
-            await interaction.response.send_message("❌ Character not found.", ephemeral=True)
-            return
-
-        embed = sheet_utils.format_full_sheet(character["name"], character)
-        view = sheet_views.SheetEditView(interaction.user.id, "characters", cid, character["name"])
-
+    embed = sheet_utils.format_full_sheet(character["name"], character)
+    # Optionally, you can add a view here if you have a DB-compatible SheetEditView
     await interaction.response.send_message(embed=embed, view=view, ephemeral=is_ephemeral)
 
 
-bot.run(os.getenv("DISCORD_BOT_TOKEN"))
+handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
+
+bot.run(os.getenv("DISCORD_BOT_TOKEN"), log_handler=handler, log_level=logging.DEBUG)
