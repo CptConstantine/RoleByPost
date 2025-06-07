@@ -1,7 +1,7 @@
 from discord import ui
 import discord
 from data import repo
-import character_sheets.sheet_utils as sheet_utils
+import rpg_systems.fate.sheet_utils as sheet_utils
 
 SYSTEM = "fate"
 

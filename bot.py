@@ -1,22 +1,27 @@
 import re
 import random
-import discord
-from data import repo
-from character_sheets import sheet_utils, sheet_views
-from discord.ext import commands
-from discord.ui import View, Button
-from discord import app_commands
-from dotenv import load_dotenv
 import os
 import logging
+import importlib
+import dotenv
+import discord
+from data import repo
+from discord.ext import commands
+from discord import app_commands
 
 
-load_dotenv()
+dotenv.load_dotenv()
 
 intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
+
+
+def get_system_modules(system):
+    sheet_utils = importlib.import_module(f"rpg_systems.{system}.sheet_utils")
+    sheet_views = importlib.import_module(f"rpg_systems.{system}.sheet_views")
+    return sheet_utils, sheet_views
 
 
 @bot.event
@@ -185,6 +190,9 @@ async def createnpc(ctx, name: str):
 
 @bot.command()
 async def sheet(ctx, char_name: str = None):
+    system = repo.get_system(ctx.guild.id)
+    sheet_utils, sheet_views = get_system_modules(system)
+    
     if char_name is None:
         char_id = str(ctx.author.id)
     else:
@@ -288,6 +296,9 @@ async def scene(ctx):
 @app_commands.describe(char_name="Leave blank to view your character, or enter an NPC name.")
 async def sheet(interaction: discord.Interaction, char_name: str = None):
     is_ephemeral = True
+    
+    system = repo.get_system(interaction.guild.id)
+    sheet_utils, sheet_views = get_system_modules(system)
 
     if char_name:  # Try to fetch as NPC
         char_id = f"npc:{char_name.lower().replace(' ', '_')}"
