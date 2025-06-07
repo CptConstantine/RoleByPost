@@ -1,6 +1,25 @@
 import discord
 
 
+SYSTEM_SPECIFIC_CHARACTER = {
+    "fate_points": 3,
+    "skills": {},
+    "aspects": [],
+    "hidden_aspects": [],
+    "stress": {"physical": [False, False, False], "mental": [False, False]},
+    "consequences": ["Mild: None", "Moderate: None", "Severe: None"]
+}
+
+SYSTEM_SPECIFIC_NPC = {
+    "fate_points": 0,
+    "skills": {},
+    "aspects": [],
+    "hidden_aspects": [],
+    "stress": {"physical": [False, False, False], "mental": [False, False]},
+    "consequences": ["Mild: None"]
+}
+
+
 def format_full_sheet(character: dict) -> discord.Embed:
     embed = discord.Embed(title=f"{character.get("name")}", color=discord.Color.purple())
 
@@ -50,3 +69,16 @@ def format_full_sheet(character: dict) -> discord.Embed:
     embed.add_field(name="Fate Points", value=str(fp), inline=True)
 
     return embed
+
+
+def format_npc_scene_entry(npc, is_gm):
+    aspects = npc.get("aspects", [])
+    hidden = npc.get("hidden_aspects", [])
+    aspect_lines = []
+    for idx, aspect in enumerate(aspects):
+        if idx in hidden:
+            aspect_lines.append(f"*{aspect}*" if is_gm else "*hidden*")
+        else:
+            aspect_lines.append(aspect)
+    aspect_str = "\n".join(aspect_lines) if aspect_lines else "_No aspects set_"
+    return f"**{npc['name']}**\n{aspect_str}"

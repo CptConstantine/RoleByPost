@@ -130,35 +130,17 @@ async def roll(ctx, *, arg):
 @bot.command()
 async def createchar(ctx, name: str = None):
     system = repo.get_system(ctx.guild.id)
-    if system == "mgt2e":
-        character = {
-            "name": name if name else f"{ctx.author.display_name}'s Character",
-            "owner_id": ctx.author.id,
-            "is_npc": False,
-            # Add MGT2E-specific fields here
-            "career": "",
-            "attributes": {"STR": 0, "DEX": 0, "END": 0, "INT": 0, "EDU": 0, "SOC": 0},
-            "skills": {},
-            "benefits": [],
-            "equipment": [],
-            # ...etc.
-        }
-    elif system == "fate":
-        character = {
-            "name": name if name else f"{ctx.author.display_name}'s Character",
-            "owner_id": ctx.author.id,
-            "is_npc": False,
-            "fate_points": 3,
-            "skills": {},
-            "aspects": [],
-            "hidden_aspects": [],
-            "stress": {"physical": [False, False, False], "mental": [False, False]},
-            "consequences": ["Mild: None", "Moderate: None", "Severe: None"]
-        }
-    else:
-        await ctx.send("❌ Please set a valid RPG system with `!setsystem`.")
-        return
-    
+    sheet_utils, _ = get_system_modules(system)
+
+    character = {
+        "name": name if name else f"{ctx.author.display_name}'s Character",
+        "owner_id": ctx.author.id,
+        "is_npc": False
+    }
+    # Add system-specific defaults
+    for key, default_value in sheet_utils.SYSTEM_SPECIFIC_CHARACTER.items():
+        character[key] = default_value
+
     repo.set_character(ctx.guild.id, ctx.author.id, character, system=system)
     await ctx.send(f'📝 Created {system.upper()} character for {ctx.author.display_name}.')
 
@@ -168,22 +150,20 @@ async def createnpc(ctx, name: str):
     if not repo.is_gm(ctx.guild.id, ctx.author.id):
         await ctx.send("❌ Only GMs can create NPCs.")
         return
+    
+    system = repo.get_system(ctx.guild.id)
+    sheet_utils, _ = get_system_modules(system)
 
     npc_id = f"npc:{name.lower().replace(' ', '_')}"
     character = {
-        "name": name,
-        "skills": {},
-        "fate_points": 3,
-        "is_npc": True,
+        "name": name if name else f"{ctx.author.display_name}'s Character",
         "owner_id": ctx.author.id,
-        "aspects": [],
-        "hidden_aspects": [],
-        "stress": {
-            "physical": [False, False, False],
-            "mental": [False, False]
-        },
-        "consequences": ["Mild: None"]
+        "is_npc": True
     }
+    # Add system-specific defaults
+    for key, default_value in sheet_utils.SYSTEM_SPECIFIC_NPC.items():
+        character[key] = default_value
+
     repo.set_npc(ctx.guild.id, npc_id, character, system="fate")
     await ctx.send(f"🤖 Created NPC: **{name}**")
 
@@ -192,7 +172,7 @@ async def createnpc(ctx, name: str):
 async def sheet(ctx, char_name: str = None):
     system = repo.get_system(ctx.guild.id)
     sheet_utils, sheet_views = get_system_modules(system)
-    
+
     if char_name is None:
         char_id = str(ctx.author.id)
     else:
@@ -207,7 +187,7 @@ async def sheet(ctx, char_name: str = None):
         await ctx.send("❌ Character not found.")
         return
 
-    embed = sheet_utils.format_full_sheet(character["name"], character)
+    embed = sheet_utils.format_full_sheet(character)
     await ctx.send(embed=embed)
 
 
@@ -260,6 +240,9 @@ async def scene_clear(ctx):
 
 @bot.command()
 async def scene(ctx):
+    system = repo.get_system(ctx.guild.id)
+    sheet_utils, _ = get_system_modules(system)
+
     npc_ids = repo.get_scenes(ctx.guild.id)
     if not npc_ids:
         await ctx.send("📭 No NPCs are currently in the scene.")
@@ -270,19 +253,7 @@ async def scene(ctx):
     for npc_id in npc_ids:
         npc = repo.get_character(ctx.guild.id, npc_id)
         if npc:
-            aspects = npc.get("aspects", [])
-            hidden = npc.get("hidden_aspects", [])
-            aspect_lines = []
-            for idx, aspect in enumerate(aspects):
-                if idx in hidden:
-                    if is_gm:
-                        aspect_lines.append(f"*{aspect}*")
-                    else:
-                        aspect_lines.append("*hidden*")
-                else:
-                    aspect_lines.append(aspect)
-            aspect_str = "\n".join(aspect_lines) if aspect_lines else "_No aspects set_"
-            lines.append(f"**{npc['name']}**\n{aspect_str}")
+            lines.append(sheet_utils.format_npc_scene_entry(npc, is_gm))
 
     embed = discord.Embed(
         title="🎭 NPCs in the Scene",

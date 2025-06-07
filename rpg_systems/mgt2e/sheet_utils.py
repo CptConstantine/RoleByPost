@@ -1,6 +1,23 @@
 import discord
 
 
+SYSTEM_SPECIFIC_CHARACTER = {
+    "career": "",
+    "attributes": {"STR": 0, "DEX": 0, "END": 0, "INT": 0, "EDU": 0, "SOC": 0},
+    "skills": {},
+    "benefits": [],
+    "equipment": []
+}
+
+SYSTEM_SPECIFIC_NPC = {
+    "career": "",
+    "attributes": {"STR": 0, "DEX": 0, "END": 0, "INT": 0, "EDU": 0, "SOC": 0},
+    "skills": {},
+    "benefits": [],
+    "equipment": []
+}
+
+
 def format_full_sheet(character: dict) -> discord.Embed:
     embed = discord.Embed(title=f"{character.get("name")}", color=discord.Color.purple())
 
