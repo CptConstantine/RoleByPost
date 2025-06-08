@@ -47,6 +47,15 @@ CREATE TABLE IF NOT EXISTS scenes (
 )
 """)
 
+cur.execute("""
+CREATE TABLE IF NOT EXISTS default_skills (
+    guild_id TEXT NOT NULL,
+    system TEXT NOT NULL,
+    skills_json TEXT NOT NULL,
+    PRIMARY KEY (guild_id, system)
+)
+""")
+
 conn.commit()
 conn.close()
-print("Database initialized.")
+print("Database updated.")

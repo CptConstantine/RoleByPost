@@ -145,6 +145,27 @@ def set_npc(guild_id, npc_id, npc, system=None):
     set_character(guild_id, npc_id, npc, system)
 
 
+def set_default_skills(guild_id, system, skills_dict):
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO default_skills (guild_id, system, skills_json) VALUES (?, ?, ?)",
+            (str(guild_id), system, json.dumps(skills_dict))
+        )
+        conn.commit()
+
+
+def get_default_skills(guild_id, system):
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT skills_json FROM default_skills WHERE guild_id = ? AND system = ?",
+            (str(guild_id), system)
+        )
+        row = cur.fetchone()
+        if row:
+            return json.loads(row[0])
+        return None
+
+
 def add_scene_npc(guild_id, npc_id):
     with get_db() as conn:
         conn.execute("INSERT OR IGNORE INTO scenes (guild_id, npc_id) VALUES (?, ?)", (str(guild_id), str(npc_id)))

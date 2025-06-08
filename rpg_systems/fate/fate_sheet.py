@@ -1,8 +1,12 @@
 import discord
 from character_sheets.base_sheet import BaseSheet
+from data import repo
 
 
 class FateSheet(BaseSheet):
+    DEFAULT_SKILLS = {
+        # ...your Fate skills...
+    }
     SYSTEM_SPECIFIC_CHARACTER = {
         "fate_points": 3,
         "skills": {},
@@ -11,7 +15,6 @@ class FateSheet(BaseSheet):
         "stress": {"physical": [False, False, False], "mental": [False, False]},
         "consequences": ["Mild: None", "Moderate: None", "Severe: None"]
     }
-
     SYSTEM_SPECIFIC_NPC = {
         "fate_points": 0,
         "skills": {},
@@ -20,6 +23,38 @@ class FateSheet(BaseSheet):
         "stress": {"physical": [False, False, False], "mental": [False, False]},
         "consequences": ["Mild: None"]
     }
+
+    def apply_defaults(self, character_dict, is_npc=False, guild_id=None):
+        system_defaults = self.SYSTEM_SPECIFIC_NPC if is_npc else self.SYSTEM_SPECIFIC_CHARACTER
+        for key, value in system_defaults.items():
+            if key == "skills":
+                # Use per-guild default if available
+                skills = None
+                if guild_id:
+                    skills = repo.get_default_skills(guild_id, "fate")
+                default_skills = dict(skills) if skills else dict(self.DEFAULT_SKILLS)
+                character_dict.setdefault("skills", {})
+                for skill, val in default_skills.items():
+                    if skill not in character_dict["skills"]:
+                        character_dict["skills"][skill] = val
+            else:
+                if key not in character_dict:
+                    character_dict[key] = value
+
+
+    @staticmethod
+    def parse_and_validate_skills(skills_str):
+        """Parse a skills string like 'Fight:2, Stealth:1' into a dict. Add Fate-specific validation here."""
+        skills_dict = {}
+        for entry in skills_str.split(","):
+            if ":" in entry:
+                k, v = entry.split(":", 1)
+                try:
+                    skills_dict[k.strip()] = int(v.strip())
+                except ValueError:
+                    continue
+        # Add Fate-specific validation here if needed (e.g., pyramid structure)
+        return skills_dict
 
 
     def format_full_sheet(self, character: dict) -> discord.Embed:
