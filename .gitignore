@@ -1,5 +1,5 @@
 .env
-data/init_db.py
+data/bot.db
 data/dbmisc.py
 discord.log
 # Ignore Python virtual environments
