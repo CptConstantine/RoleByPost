@@ -89,11 +89,6 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 
 ---
 
-## Customization
-
-
----
-
 ## Contributing
 
 Pull requests and suggestions are welcome! Please open an issue or PR for bug fixes, new features, or system support.
