@@ -1,5 +1,6 @@
 import sqlite3
 import json
+import character_sheets.sheet_factory as sheet_factory
 
 
 DB_FILE = 'data/bot.db'
@@ -39,21 +40,28 @@ def get_system(guild_id):
         row = cur.fetchone()
         return row[0] if row else "fate"  # Default to "fate"
 
-        
-def set_character(guild_id, char_id, character, system="fate"):
+
+def set_character(guild_id, char_id, character, system=None):
+    if system is None:
+        system = get_system(guild_id)
+    sheet = sheet_factory.get_specific_sheet(system)
+    # Use the system's defined fields
+    if character.get("is_npc"):
+        system_fields = sheet.SYSTEM_SPECIFIC_NPC
+    else:
+        system_fields = sheet.SYSTEM_SPECIFIC_CHARACTER
+
+    system_specific_data = {}
+    for key in system_fields:
+        system_specific_data[key] = character.get(key)
+
+    notes = character.get("notes", "")
+
     with get_db() as conn:
-        system_specific_data = {
-            "fate_points": character.get("fate_points"),
-            "skills": character.get("skills", {}),
-            "aspects": character.get("aspects", []),
-            "hidden_aspects": character.get("hidden_aspects", []),
-            "stress": character.get("stress", {}),
-            "consequences": character.get("consequences", []),
-        }
         conn.execute("""
             INSERT OR REPLACE INTO characters
-            (id, guild_id, system, name, owner_id, is_npc, system_specific_data)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (id, guild_id, system, name, owner_id, is_npc, system_specific_data, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             str(char_id),
             str(guild_id),
@@ -61,63 +69,79 @@ def set_character(guild_id, char_id, character, system="fate"):
             character.get("name"),
             str(character.get("owner_id")),
             bool(character.get("is_npc")),
-            json.dumps(system_specific_data)
+            json.dumps(system_specific_data),
+            notes
         ))
         conn.commit()
 
 
 def get_character(guild_id, char_id):
     with get_db() as conn:
-        cur = conn.execute("SELECT name, owner_id, is_npc, system_specific_data FROM characters WHERE guild_id = ? AND id = ?", (str(guild_id), str(char_id)))
-        row = cur.fetchone()
-        if not row:
-            return None
-        name, owner_id, is_npc, system_specific_data = row
+        try:
+            cur = conn.execute("SELECT system, name, owner_id, is_npc, system_specific_data, notes FROM characters WHERE guild_id = ? AND id = ?", (str(guild_id), str(char_id)))
+            row = cur.fetchone()
+            if not row:
+                return None
+            system, name, owner_id, is_npc, system_specific_data, notes = row
+        except sqlite3.OperationalError:
+            cur = conn.execute("SELECT system, name, owner_id, is_npc, system_specific_data FROM characters WHERE guild_id = ? AND id = ?", (str(guild_id), str(char_id)))
+            row = cur.fetchone()
+            if not row:
+                return None
+            system, name, owner_id, is_npc, system_specific_data = row
+            notes = ""
+
+        sheet = sheet_factory.get_specific_sheet(system)
+        system_fields = sheet.SYSTEM_SPECIFIC_NPC if is_npc else sheet.SYSTEM_SPECIFIC_CHARACTER
         system_specific = json.loads(system_specific_data)
         character = {
             "name": name,
             "owner_id": owner_id,
             "is_npc": is_npc,
-            "fate_points": system_specific.get("fate_points", 0),
-            "skills": system_specific.get("skills", {}),
-            "aspects": system_specific.get("aspects", []),
-            "hidden_aspects": system_specific.get("hidden_aspects", []),
-            "stress": system_specific.get("stress", {}),
-            "consequences": system_specific.get("consequences", []),
+            "notes": notes or "",
         }
+        for key in system_fields:
+            character[key] = system_specific.get(key, system_fields[key])
         return character
-    
+
 
 def get_all_characters(guild_id):
-    """Retrieve all characters for a guild."""
     characters = []
     with get_db() as conn:
-        cur = conn.execute(
-            "SELECT name, owner_id, is_npc, system_specific_data FROM characters WHERE guild_id = ?",
-            (str(guild_id),)
-        )
-        rows = cur.fetchall()
+        try:
+            cur = conn.execute(
+                "SELECT system, name, owner_id, is_npc, system_specific_data, notes FROM characters WHERE guild_id = ?",
+                (str(guild_id),)
+            )
+            rows = cur.fetchall()
+        except sqlite3.OperationalError:
+            cur = conn.execute(
+                "SELECT system, name, owner_id, is_npc, system_specific_data FROM characters WHERE guild_id = ?",
+                (str(guild_id),)
+            )
+            rows = cur.fetchall()
+            rows = [row + ("",) for row in rows]
+
         if not rows:
             return []
         for row in rows:
-            name, owner_id, is_npc, system_specific_data = row
+            system, name, owner_id, is_npc, system_specific_data, notes = row
+            sheet = sheet_factory.get_specific_sheet(system)
+            system_fields = sheet.SYSTEM_SPECIFIC_NPC if is_npc else sheet.SYSTEM_SPECIFIC_CHARACTER
             system_specific = json.loads(system_specific_data)
             character = {
                 "name": name,
                 "owner_id": owner_id,
                 "is_npc": is_npc,
-                "fate_points": system_specific.get("fate_points", 0),
-                "skills": system_specific.get("skills", {}),
-                "aspects": system_specific.get("aspects", []),
-                "hidden_aspects": system_specific.get("hidden_aspects", []),
-                "stress": system_specific.get("stress", {}),
-                "consequences": system_specific.get("consequences", []),
+                "notes": notes or "",
             }
+            for key in system_fields:
+                character[key] = system_specific.get(key, system_fields[key])
             characters.append(character)
     return characters
 
 
-def set_npc(guild_id, npc_id, npc, system="fate"):
+def set_npc(guild_id, npc_id, npc, system=None):
     set_character(guild_id, npc_id, npc, system)
 
 

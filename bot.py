@@ -2,10 +2,11 @@ import re
 import random
 import os
 import logging
-import importlib
 import dotenv
 import discord
 from data import repo
+from character_sheets.base_sheet import get_pc_id, get_npc_id
+import character_sheets.sheet_factory as sheet_factory
 from discord.ext import commands
 from discord import app_commands
 
@@ -16,12 +17,6 @@ intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
-
-
-def get_system_modules(system):
-    sheet_utils = importlib.import_module(f"rpg_systems.{system}.sheet_utils")
-    sheet_views = importlib.import_module(f"rpg_systems.{system}.sheet_views")
-    return sheet_utils, sheet_views
 
 
 @bot.event
@@ -130,18 +125,21 @@ async def roll(ctx, *, arg):
 @bot.command()
 async def createchar(ctx, name: str = None):
     system = repo.get_system(ctx.guild.id)
-    sheet_utils, _ = get_system_modules(system)
+    sheet = sheet_factory.get_specific_sheet(system)
 
+    char_name = name if name else f"{ctx.author.display_name}'s Character"
+    char_id = get_pc_id(char_name)
     character = {
-        "name": name if name else f"{ctx.author.display_name}'s Character",
+        "name": char_name,
         "owner_id": ctx.author.id,
-        "is_npc": False
+        "is_npc": False,
+        "notes": ""
     }
     # Add system-specific defaults
-    for key, default_value in sheet_utils.SYSTEM_SPECIFIC_CHARACTER.items():
+    for key, default_value in sheet.SYSTEM_SPECIFIC_CHARACTER.items():
         character[key] = default_value
 
-    repo.set_character(ctx.guild.id, ctx.author.id, character, system=system)
+    repo.set_character(ctx.guild.id, char_id, character, system=system)
     await ctx.send(f'📝 Created {system.upper()} character for {ctx.author.display_name}.')
 
 
@@ -152,42 +150,55 @@ async def createnpc(ctx, name: str):
         return
     
     system = repo.get_system(ctx.guild.id)
-    sheet_utils, _ = get_system_modules(system)
+    sheet = sheet_factory.get_specific_sheet(system)
 
-    npc_id = f"npc:{name.lower().replace(' ', '_')}"
+    npc_id = get_npc_id(name)
     character = {
-        "name": name if name else f"{ctx.author.display_name}'s Character",
+        "name": name,
         "owner_id": ctx.author.id,
-        "is_npc": True
+        "is_npc": True,
+        "notes": ""
     }
     # Add system-specific defaults
-    for key, default_value in sheet_utils.SYSTEM_SPECIFIC_NPC.items():
+    for key, default_value in sheet.SYSTEM_SPECIFIC_NPC.items():
         character[key] = default_value
 
-    repo.set_npc(ctx.guild.id, npc_id, character, system="fate")
+    repo.set_npc(ctx.guild.id, npc_id, character, system=system)
     await ctx.send(f"🤖 Created NPC: **{name}**")
 
 
 @bot.command()
 async def sheet(ctx, char_name: str = None):
     system = repo.get_system(ctx.guild.id)
-    sheet_utils, sheet_views = get_system_modules(system)
+    sheet = sheet_factory.get_specific_sheet(system)
 
     if char_name is None:
-        char_id = str(ctx.author.id)
+        # Default to the user's own character
+        char_name = f"{ctx.author.display_name}'s Character"
+        char_id = get_pc_id(char_name)
     else:
+        # If GM, allow viewing NPCs or any PC by name
         if repo.is_gm(ctx.guild.id, ctx.author.id):
-            char_id = f"npc:{char_name.lower().replace(' ', '_')}"
+            # Try NPC first
+            npc_id = get_npc_id(char_name)
+            npc = repo.get_character(ctx.guild.id, npc_id)
+            if npc:
+                char_id = npc_id
+            else:
+                char_id = get_pc_id(char_name)
         else:
-            await ctx.send("❌ You can only view your own sheet.")
-            return
+            # Only allow viewing their own PC
+            char_id = get_pc_id(f"{ctx.author.display_name}'s Character")
+            if char_name and char_name.lower() != ctx.author.display_name.lower():
+                await ctx.send("❌ You can only view your own sheet.")
+                return
 
     character = repo.get_character(ctx.guild.id, char_id)
     if not character:
         await ctx.send("❌ Character not found.")
         return
 
-    embed = sheet_utils.format_full_sheet(character)
+    embed = sheet.format_full_sheet(character)
     await ctx.send(embed=embed)
 
 
@@ -241,7 +252,7 @@ async def scene_clear(ctx):
 @bot.command()
 async def scene(ctx):
     system = repo.get_system(ctx.guild.id)
-    sheet_utils, _ = get_system_modules(system)
+    sheet = sheet_factory.get_specific_sheet(system)
 
     npc_ids = repo.get_scenes(ctx.guild.id)
     if not npc_ids:
@@ -253,7 +264,7 @@ async def scene(ctx):
     for npc_id in npc_ids:
         npc = repo.get_character(ctx.guild.id, npc_id)
         if npc:
-            lines.append(sheet_utils.format_npc_scene_entry(npc, is_gm))
+            lines.append(sheet.format_npc_scene_entry(npc, is_gm))
 
     embed = discord.Embed(
         title="🎭 NPCs in the Scene",
@@ -267,14 +278,22 @@ async def scene(ctx):
 @app_commands.describe(char_name="Leave blank to view your character, or enter an NPC name.")
 async def sheet(interaction: discord.Interaction, char_name: str = None):
     is_ephemeral = True
-    
-    system = repo.get_system(interaction.guild.id)
-    sheet_utils, sheet_views = get_system_modules(system)
 
-    if char_name:  # Try to fetch as NPC
-        char_id = f"npc:{char_name.lower().replace(' ', '_')}"
-    else:  # Player character
-        char_id = str(interaction.user.id)
+    if char_name:
+        # Try NPC first
+        npc_id = get_npc_id(char_name)
+        npc = repo.get_character(interaction.guild.id, npc_id)
+        if npc:
+            char_id = npc_id
+        else:
+            char_id = get_pc_id(char_name)
+    else:
+        char_name = f"{interaction.user.display_name}'s Character"
+        char_id = get_pc_id(char_name)
+
+    system = repo.get_system(interaction.guild.id)
+    sheet = sheet_factory.get_specific_sheet(system)
+    sheet_view = sheet_factory.get_specific_sheet_view(system, interaction.user.id, char_id)
 
     character = repo.get_character(interaction.guild.id, char_id)
     if not character:
@@ -287,10 +306,8 @@ async def sheet(interaction: discord.Interaction, char_name: str = None):
             await interaction.response.send_message("❌ Only the GM can view NPCs.", ephemeral=True)
             return
 
-    embed = sheet_utils.format_full_sheet(character)
-    view = sheet_views.SheetEditView(interaction.user.id, char_id)
-    # Optionally, you can add a view here if you have a DB-compatible SheetEditView
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=is_ephemeral)
+    embed = sheet.format_full_sheet(character)
+    await interaction.response.send_message(embed=embed, view=sheet_view, ephemeral=is_ephemeral)
 
 
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
