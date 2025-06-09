@@ -7,6 +7,8 @@ import character_sheets.sheet_factory as sheet_factory
 import json
 import re
 import random
+import asyncio
+import datetime
 
 
 async def skill_autocomplete(interaction: discord.Interaction, current: str):
@@ -31,6 +33,23 @@ async def attribute_autocomplete(interaction: discord.Interaction, current: str)
     attributes = character.get("attributes", {})
     options = [k for k in attributes.keys() if current.lower() in k.lower()]
     return [app_commands.Choice(name=k, value=k) for k in options[:25]]
+
+async def pc_name_autocomplete(interaction: discord.Interaction, current: str):
+    """Autocomplete for player's own PCs (for /setactive)."""
+    all_chars = repo.get_all_characters(interaction.guild.id)
+    pcs = [
+        c for c in all_chars
+        if not c.get("is_npc") and str(c.get("owner_id")) == str(interaction.user.id)
+    ]
+    options = [c["name"] for c in pcs if current.lower() in c["name"].lower()]
+    return [app_commands.Choice(name=name, value=name) for name in options[:25]]
+
+async def pc_name_gm_autocomplete(interaction: discord.Interaction, current: str):
+    """Autocomplete for all PCs (for GM in /transferchar)."""
+    all_chars = repo.get_all_characters(interaction.guild.id)
+    pcs = [c for c in all_chars if not c.get("is_npc")]
+    options = [c["name"] for c in pcs if current.lower() in c["name"].lower()]
+    return [app_commands.Choice(name=name, value=name) for name in options[:25]]
 
 
 def setup(bot):
@@ -107,8 +126,7 @@ def setup(bot):
 
     @bot.tree.command(
         name="roll",
-        description="Roll dice for your system (Players only).",
-        guild=discord.Object(id=1379609249834864721)
+        description="Roll dice for your system (Players only)."
     )
     @app_commands.describe(
         skill="Skill name (optional)",
@@ -127,60 +145,71 @@ def setup(bot):
 
         system = repo.get_system(interaction.guild.id)
         sheet = sheet_factory.get_specific_sheet(system)
-        all_chars = repo.get_all_characters(interaction.guild.id, system=system)
-        is_gm = repo.is_gm(interaction.guild.id, interaction.user.id)
 
-        # Only allow players to use this command
-        if is_gm:
-            await interaction.followup.send("❌ Only players can use this command.", ephemeral=True)
-            return
-
-        character = next((c for c in all_chars if not c.get("is_npc") and str(c.get("owner_id")) == str(interaction.user.id)), None)
+        char_id = repo.get_active_character_id(interaction.guild.id, interaction.user.id)
+        character = repo.get_character(interaction.guild.id, char_id) if char_id else None
         if not character:
-            await interaction.followup.send("❌ Character not found.", ephemeral=True)
+            await interaction.followup.send("❌ No active character set or character not found.", ephemeral=True)
             return
 
         result = sheet.roll(character, skill=skill, attribute=attribute)
         await interaction.followup.send(result, ephemeral=True)
 
 
-    @bot.command()
-    async def createchar(ctx, name: str = None):
-        system = repo.get_system(ctx.guild.id)
+    @bot.tree.command(name="createchar", description="Create a new character (PC) with a required name.")
+    @app_commands.describe(char_name="The name of your new character")
+    async def createchar(interaction: discord.Interaction, char_name: str):
+        await interaction.response.defer(ephemeral=True)
+        system = repo.get_system(interaction.guild.id)
         sheet = sheet_factory.get_specific_sheet(system)
 
-        char_name = name if name else f"{ctx.author.display_name}'s Character"
+        # Check for duplicate character name in this guild
         char_id = get_pc_id(char_name)
+        existing = repo.get_character(interaction.guild.id, char_id)
+        if existing:
+            await interaction.followup.send(f"❌ A character named `{char_name}` already exists.", ephemeral=True)
+            return
+
         character = {
             "name": char_name,
-            "owner_id": ctx.author.id,
+            "owner_id": interaction.user.id,
             "is_npc": False,
             "notes": ""
         }
-        sheet.apply_defaults(character, is_npc=False, guild_id=ctx.guild.id)
-        repo.set_character(ctx.guild.id, char_id, character, system=system)
-        await ctx.send(f'📝 Created {system.upper()} character for {ctx.author.display_name}.')
+        sheet.apply_defaults(character, is_npc=False, guild_id=interaction.guild.id)
+        repo.set_character(interaction.guild.id, char_id, character, system=system)
+        # Set the character as active if no active character exists
+        if not repo.get_active_character_id(interaction.guild.id, interaction.user.id):
+            repo.set_active_character(interaction.guild.id, interaction.user.id, char_id)
+        await interaction.followup.send(f'📝 Created {system.upper()} character: **{char_name}**.', ephemeral=True)
 
 
-    @bot.command()
-    async def createnpc(ctx, name: str):
-        if not repo.is_gm(ctx.guild.id, ctx.author.id):
-            await ctx.send("❌ Only GMs can create NPCs.")
+    @bot.tree.command(name="createnpc", description="GM: Create a new NPC with a required name.")
+    @app_commands.describe(npc_name="The name of the new NPC")
+    async def createnpc(interaction: discord.Interaction, npc_name: str):
+        await interaction.response.defer(ephemeral=True)
+        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+            await interaction.followup.send("❌ Only GMs can create NPCs.", ephemeral=True)
             return
-        
-        system = repo.get_system(ctx.guild.id)
+
+        system = repo.get_system(interaction.guild.id)
         sheet = sheet_factory.get_specific_sheet(system)
 
-        npc_id = get_npc_id(name)
+        npc_id = get_npc_id(npc_name)
+        existing = repo.get_character(interaction.guild.id, npc_id)
+        if existing:
+            await interaction.followup.send(f"❌ An NPC named `{npc_name}` already exists.", ephemeral=True)
+            return
+
         character = {
-            "name": name,
-            "owner_id": ctx.author.id,
+            "name": npc_name,
+            "owner_id": interaction.user.id,
             "is_npc": True,
             "notes": ""
         }
-        sheet.apply_defaults(character, is_npc=True, guild_id=ctx.guild.id)
-        repo.set_npc(ctx.guild.id, npc_id, character, system=system)
-        await ctx.send(f"🤖 Created NPC: **{name}**")
+        sheet.apply_defaults(character, is_npc=True, guild_id=interaction.guild.id)
+        repo.set_npc(interaction.guild.id, npc_id, character, system=system)
+        await interaction.followup.send(f"🤖 Created NPC: **{npc_name}**", ephemeral=True)
 
 
     @bot.command()
@@ -189,9 +218,11 @@ def setup(bot):
         sheet = sheet_factory.get_specific_sheet(system)
 
         if char_name is None:
-            # Default to the user's own character
-            char_name = f"{ctx.author.display_name}'s Character"
-            char_id = get_pc_id(char_name)
+            # Use active character if set
+            char_id = repo.get_active_character_id(ctx.guild.id, ctx.author.id)
+            if not char_id:
+                await ctx.send("❌ No active character set. Use /setactive to choose one.")
+                return
         else:
             # If GM, allow viewing NPCs or any PC by name
             if repo.is_gm(ctx.guild.id, ctx.author.id):
@@ -203,11 +234,7 @@ def setup(bot):
                 else:
                     char_id = get_pc_id(char_name)
             else:
-                # Only allow viewing their own PC
-                char_id = get_pc_id(f"{ctx.author.display_name}'s Character")
-                if char_name and char_name.lower() != ctx.author.display_name.lower():
-                    await ctx.send("❌ You can only view your own sheet.")
-                    return
+                char_id = get_pc_id(char_name)
 
         character = repo.get_character(ctx.guild.id, char_id)
         if not character:
@@ -215,7 +242,46 @@ def setup(bot):
             return
 
         embed = sheet.format_full_sheet(character)
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, ephemeral=True)
+
+
+    @bot.tree.command(name="sheet", description="View a character or NPC's full sheet")
+    @app_commands.describe(char_name="Leave blank to view your character, or enter an NPC name.")
+    async def sheet(interaction: discord.Interaction, char_name: str = None):
+        is_ephemeral = True
+
+        if char_name:
+            # Try NPC first
+            npc_id = get_npc_id(char_name)
+            npc = repo.get_character(interaction.guild.id, npc_id)
+            if npc:
+                char_id = npc_id
+            else:
+                char_id = get_pc_id(char_name)
+        else:
+            # Use active character if set
+            char_id = repo.get_active_character_id(interaction.guild.id, interaction.user.id)
+            if not char_id:
+                await interaction.response.send_message("❌ No active character set. Use /setactive to choose one.", ephemeral=True)
+                return
+
+        system = repo.get_system(interaction.guild.id)
+        sheet_obj = sheet_factory.get_specific_sheet(system)
+        sheet_view = sheet_factory.get_specific_sheet_view(system, interaction.user.id, char_id)
+
+        character = repo.get_character(interaction.guild.id, char_id)
+        if not character:
+            await interaction.response.send_message("❌ Character not found.", ephemeral=True)
+            return
+
+        # If it's an NPC, only GMs can view
+        if character.get("is_npc"):
+            if not repo.is_gm(interaction.guild.id, interaction.user.id):
+                await interaction.response.send_message("❌ Only the GM can view NPCs.", ephemeral=True)
+                return
+
+        embed = sheet_obj.format_full_sheet(character)
+        await interaction.response.send_message(embed=embed, view=sheet_view, ephemeral=is_ephemeral)
 
 
     @bot.command()
@@ -288,42 +354,6 @@ def setup(bot):
             color=discord.Color.purple()
         )
         await ctx.send(embed=embed)
-
-
-    @bot.tree.command(name="sheet", description="View a character or NPC's full sheet")
-    @app_commands.describe(char_name="Leave blank to view your character, or enter an NPC name.")
-    async def sheet(interaction: discord.Interaction, char_name: str = None):
-        is_ephemeral = True
-
-        if char_name:
-            # Try NPC first
-            npc_id = get_npc_id(char_name)
-            npc = repo.get_character(interaction.guild.id, npc_id)
-            if npc:
-                char_id = npc_id
-            else:
-                char_id = get_pc_id(char_name)
-        else:
-            char_name = f"{interaction.user.display_name}'s Character"
-            char_id = get_pc_id(char_name)
-
-        system = repo.get_system(interaction.guild.id)
-        sheet = sheet_factory.get_specific_sheet(system)
-        sheet_view = sheet_factory.get_specific_sheet_view(system, interaction.user.id, char_id)
-
-        character = repo.get_character(interaction.guild.id, char_id)
-        if not character:
-            await interaction.response.send_message("❌ Character not found.", ephemeral=True)
-            return
-
-        # If it's an NPC, only GMs can view
-        if character.get("is_npc"):
-            if not repo.is_gm(interaction.guild.id, interaction.user.id):
-                await interaction.response.send_message("❌ Only the GM can view NPCs.", ephemeral=True)
-                return
-
-        embed = sheet.format_full_sheet(character)
-        await interaction.response.send_message(embed=embed, view=sheet_view, ephemeral=is_ephemeral)
 
 
     @bot.command()
@@ -493,3 +523,110 @@ def setup(bot):
             repo.set_character(interaction.guild.id, char_id, data, system=system)
 
         await interaction.followup.send(f"✅ Imported {'NPC' if is_npc else 'character'} `{name}`.", ephemeral=True)
+    
+
+    @bot.tree.command(name="transferchar", description="GM: Transfer a PC to another player.")
+    @app_commands.describe(
+        char_name="Name of the character to transfer",
+        new_owner="The user to transfer ownership to"
+    )
+    @app_commands.autocomplete(char_name=pc_name_gm_autocomplete)
+    async def transferchar(interaction: discord.Interaction, char_name: str, new_owner: discord.Member):
+        # Only GM can use this command
+        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+            await interaction.response.send_message("❌ Only GMs can transfer characters.", ephemeral=True)
+            return
+
+        char_id = get_pc_id(char_name)
+        character = repo.get_character(interaction.guild.id, char_id)
+        if not character or character.get("is_npc"):
+            await interaction.response.send_message("❌ PC not found.", ephemeral=True)
+            return
+
+        character["owner_id"] = new_owner.id
+        system = repo.get_system(interaction.guild.id)
+        repo.set_character(interaction.guild.id, char_id, character, system=system)
+        await interaction.response.send_message(
+            f"✅ Ownership of `{char_name}` transferred to {new_owner.display_name}.", ephemeral=True
+        )
+    
+
+    @bot.tree.command(name="setactive", description="Set your active character (PC) for this server.")
+    @app_commands.describe(char_name="The name of your character to set as active")
+    @app_commands.autocomplete(char_name=pc_name_autocomplete)
+    async def setactive(interaction: discord.Interaction, char_name: str):
+        all_chars = repo.get_all_characters(interaction.guild.id)
+        character = next(
+            (c for c in all_chars if not c.get("is_npc") and str(c.get("owner_id")) == str(interaction.user.id) and c["name"].lower() == char_name.lower()),
+            None
+        )
+        if not character:
+            await interaction.response.send_message(f"❌ You don't have a character named `{char_name}`.", ephemeral=True)
+            return
+        char_id = get_pc_id(char_name)
+        repo.set_active_character(interaction.guild.id, interaction.user.id, char_id)
+        await interaction.response.send_message(f"✅ `{char_name}` is now your active character.", ephemeral=True)
+
+
+    @bot.tree.command(name="remind", description="GM: Remind a player or a role to post.")
+    @app_commands.describe(
+        user="Select a user to remind",
+        role="Optionally select a role to remind all its members",
+        message="Optional custom reminder message",
+        delay="How long to wait before DMing (e.g. '24h', '2d', '90m'). Default: 24h"
+    )
+    async def remind(
+        interaction: discord.Interaction,
+        user: discord.Member = None,
+        role: discord.Role = None,
+        message: str = "Please remember to post your actions!",
+        delay: str = "24h"
+    ):
+        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+            await interaction.response.send_message("❌ Only GMs can send reminders.", ephemeral=True)
+            return
+
+        targets = set()
+        if user:
+            targets.add(user)
+        if role:
+            targets.update(role.members)
+
+        if not targets:
+            await interaction.response.send_message("❌ Please specify at least one user or role to remind.", ephemeral=True)
+            return
+
+        # Parse delay string
+        import re
+        delay_seconds = 86400  # default 24h
+        match = re.fullmatch(r"(\d+)([dhm]?)", delay.strip().lower())
+        if match:
+            num = int(match.group(1))
+            unit = match.group(2)
+            if unit == "d":
+                delay_seconds = num * 86400
+            elif unit == "h":
+                delay_seconds = num * 3600
+            elif unit == "m":
+                delay_seconds = num * 60
+            else:
+                delay_seconds = num  # treat as seconds if no unit
+        else:
+            await interaction.response.send_message("❌ Invalid delay format. Use like '24h', '2d', or '90m'.", ephemeral=True)
+            return
+
+        now = datetime.datetime.now(datetime.timezone.utc).timestamp()
+        for user in targets:
+            repo.set_reminder_time(interaction.guild.id, user.id, now)
+            bot.loop.create_task(schedule_dm_reminder(interaction.guild.id, user, message, now, delay_seconds))
+
+        await interaction.response.send_message(f"⏰ Reminder scheduled for {delay}.", ephemeral=True)
+
+    async def schedule_dm_reminder(guild_id, user, message, reminder_time, delay_seconds):
+        await asyncio.sleep(delay_seconds)
+        last_msg = repo.get_last_message_time(guild_id, user.id)
+        if not last_msg or last_msg < reminder_time:
+            try:
+                await user.send(message)
+            except Exception:
+                pass  # Can't DM user

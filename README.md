@@ -7,7 +7,7 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 ## Features
 
 - **Character Sheet Management**  
-  - Create, edit, and view player characters and NPCs for supported systems.
+  - Create, edit, and view player characters and NPCs for supported systems. Users can set their "active" character, which is used by default for `/roll` and `/sheet`.
   - System-specific fields and validation (e.g., Fate aspects, Traveller skills).
   - Import/export characters as JSON files for easy transfer between servers.
 
@@ -22,48 +22,70 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 - **Dice Rolling**  
   - Supports standard dice notation (e.g., `2d6+3`) and Fate/Fudge dice (`4df+1`).
 
+- **Reminders**  
+  - GMs can remind specific users or roles to post, with a custom message and delay (e.g., "in 2d" or "in 12h").
+
 ---
 
 ## Supported Systems
 
-- **Fate Core** (aspects, skills, stress, consequences, fate points)
-- **Mongoose Traveller 2e** (attributes, skills, notes)
+- **Fate Core**
+- **Mongoose Traveller 2e**
 
 ---
 
 ## Usage
 
-### Basic Commands
+The following are the commands that are currently available.
+
+### Setup
 
 - `!setgm`  
-  Set yourself as a GM for the server.
+  Set yourself as a GM for the server. You must be an Admin in the server.
 
 - `!setsystem fate` or `!setsystem mgt2e`  
-  Set the RPG system for your server.
+  Set the RPG system for your server. You must be an Admin in the server.
   
 - `!setdefaultskillsfile [.txt file]` or `!setdefaultskills [skill1:0, skill2:0, skill3:1, etc.]`
   (GM only) Set default skills via command or file upload. Skills are validated per system.
 
-- `!createchar [name]`  
+### Characters
+
+- `/roll [skill] [attribute]`  
+  Roll dice for your active character (PC).
+  
+- `/createchar [name]`  
   Create a new character.
 
-- `!createnpc [name]`  
+- `/createnpc [name]`  
   (GM only) Create a new NPC.
 
-- `!sheet [name]` or `/sheet [name]`  
-  View a character or NPC's sheet.
+- `/setactive [char_name]`  
+  Set your active character (PC) for this server.
 
-- `/exportchar [name]`  
+- `/transferchar [char_name] [new_owner]`  
+  (GM only) Transfer a PC to another player.
+
+- `!sheet [char_name]`
+  View a character or NPC's sheet. Defaults to your active character if no name is given.
+
+- `/sheet [char_name]`  
+  View a character or NPC's sheet with buttons for editing. Defaults to your active character if no name is given.
+
+- `/exportchar [char_name]`  
   Export your character or an NPC (if GM) as a JSON file.
 
-- `/importchar <.json file>`  
+- `/importchar [.json file]`  
   Import a character or NPC from a JSON file.
 
-- `!roll 2d6+3` or `!roll 4df+1`  
-  Roll dice.
+- `/remind [user] [role] [message] [delay]`  
+  (GM only) Remind a user or role to post. Sends a DM if they haven't posted in the server since the reminder. Delay supports formats like `24h`, `2d`, `90m` or `60` for seconds.
 
 ### Scene Management
 
+- `!scene`  
+  View all NPCs in the current scene.
+  
 - `!scene_add [npc name]`  
   Add an NPC to the current scene.
 
@@ -73,17 +95,13 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 - `!scene_clear`  
   Clear all NPCs from the scene.
 
-- `!scene`  
-  View all NPCs in the current scene.
-
 ---
 
 ## Features Planned
 
 - Support for other systems
-- Ability to have multiple characters per discord user
-- System specific commands (ex. starships, travel, and maintenence cost calculations for Traveller; system specific damage calculations)
-- User can provide an openai API key to gain access to commands that use AI (summarize recent posts, ask rules questions)
+- System specific commands (ex. starships, travel, and maintenance cost calculations for Traveller; system specific damage calculations)
+- User can provide an OpenAI API key to gain access to commands that use AI (summarize recent posts, ask rules questions)
 
 ---
 

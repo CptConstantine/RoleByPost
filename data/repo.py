@@ -200,3 +200,60 @@ def get_scenes(guild_id):
     with get_db() as conn:
         cur = conn.execute("SELECT npc_id FROM scenes WHERE guild_id = ?", (str(guild_id),))
         return [row[0] for row in cur.fetchall()]
+
+
+def set_active_character(guild_id, user_id, char_id):
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO active_characters (guild_id, user_id, char_id) VALUES (?, ?, ?)",
+            (str(guild_id), str(user_id), str(char_id))
+        )
+        conn.commit()
+
+
+def get_active_character_id(guild_id, user_id):
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT char_id FROM active_characters WHERE guild_id = ? AND user_id = ?",
+            (str(guild_id), str(user_id))
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
+
+
+def set_last_message_time(guild_id, user_id, timestamp):
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO last_message_times (guild_id, user_id, timestamp) VALUES (?, ?, ?)",
+            (str(guild_id), str(user_id), timestamp)
+        )
+        conn.commit()
+
+
+def get_last_message_time(guild_id, user_id):
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT timestamp FROM last_message_times WHERE guild_id = ? AND user_id = ?",
+            (str(guild_id), str(user_id))
+        )
+        row = cur.fetchone()
+        return float(row[0]) if row else None
+
+
+def set_reminder_time(guild_id, user_id, timestamp):
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO reminders (guild_id, user_id, timestamp) VALUES (?, ?, ?)",
+            (str(guild_id), str(user_id), timestamp)
+        )
+        conn.commit()
+
+
+def get_reminder_time(guild_id, user_id):
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT timestamp FROM reminders WHERE guild_id = ? AND user_id = ?",
+            (str(guild_id), str(user_id))
+        )
+        row = cur.fetchone()
+        return float(row[0]) if row else None

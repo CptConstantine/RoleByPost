@@ -4,6 +4,8 @@ import dotenv
 import discord
 from discord.ext import commands
 
+from data import repo
+
 
 dotenv.load_dotenv()
 
@@ -15,7 +17,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
 async def setup_hook():
-    await bot.tree.sync(guild=discord.Object(id=1379609249834864721))
+    await bot.tree.sync()
 
 
 @bot.event
@@ -42,6 +44,13 @@ async def on_guild_join(guild):
                     "`!setsystem fate` or `!setsystem mgt2e`"
                 )
                 break
+
+
+@bot.event
+async def on_message(message):
+    if message.guild and not message.author.bot:
+        repo.set_last_message_time(message.guild.id, message.author.id, message.created_at.timestamp())
+    await bot.process_commands(message)
 
 
 import bot_commands
