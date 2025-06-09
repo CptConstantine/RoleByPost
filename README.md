@@ -38,9 +38,9 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 
 ### Prerequisites
 
-- Python 3.8+
+- Developed on Python 3.12.10
 - A Discord bot token ([how to create one](https://discord.com/developers/applications))
-- (Optional) [python-dotenv](https://pypi.org/project/python-dotenv/) for environment variable management
+- [python-dotenv](https://pypi.org/project/python-dotenv/) for environment variable management
 
 ## Usage
 

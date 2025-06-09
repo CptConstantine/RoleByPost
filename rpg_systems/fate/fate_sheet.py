@@ -1,3 +1,4 @@
+import random
 import discord
 from character_sheets.base_sheet import BaseSheet
 from data import repo
@@ -5,7 +6,24 @@ from data import repo
 
 class FateSheet(BaseSheet):
     DEFAULT_SKILLS = {
-        # ...your Fate skills...
+        "Athletics": 0,
+        "Burglary": 0,
+        "Contacts": 0,
+        "Crafts": 0,
+        "Deceive": 0,
+        "Drive": 0,
+        "Empathy": 0,
+        "Fight": 0,
+        "Investigate": 0,
+        "Lore": 0,
+        "Notice": 0,
+        "Physique": 0,
+        "Provoke": 0,
+        "Rapport": 0,
+        "Resources": 0,
+        "Shoot": 0,
+        "Stealth": 0,
+        "Will": 0
     }
     SYSTEM_SPECIFIC_CHARACTER = {
         "fate_points": 3,
@@ -111,7 +129,6 @@ class FateSheet(BaseSheet):
 
         return embed
 
-
     def format_npc_scene_entry(self, npc, is_gm):
         aspects = npc.get("aspects", [])
         hidden = npc.get("hidden_aspects", [])
@@ -126,3 +143,13 @@ class FateSheet(BaseSheet):
         if is_gm and npc.get("notes"):
             lines.append(f"**Notes:** *{npc['notes']}*")
         return "\n".join(lines)
+    
+    def roll(self, character, *, skill=None, attribute=None):
+        if not skill:
+            return "❌ Please specify a skill."
+        skill_val = character.get("skills", {}).get(skill, 0)
+        rolls = [random.choice([-1, 0, 1]) for _ in range(4)]
+        symbols = ['+' if r == 1 else '-' if r == -1 else '0' for r in rolls]
+        total = sum(rolls) + skill_val
+        response = f'🎲 4dF: `{" ".join(symbols)}` + **{skill}** ({skill_val})\n🧮 Total: {total}'
+        return response

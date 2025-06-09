@@ -105,28 +105,40 @@ def get_character(guild_id, char_id):
         return character
 
 
-def get_all_characters(guild_id):
+def get_all_characters(guild_id, system=None):
     characters = []
     with get_db() as conn:
         try:
-            cur = conn.execute(
-                "SELECT system, name, owner_id, is_npc, system_specific_data, notes FROM characters WHERE guild_id = ?",
-                (str(guild_id),)
-            )
+            if system:
+                cur = conn.execute(
+                    "SELECT system, name, owner_id, is_npc, system_specific_data, notes FROM characters WHERE guild_id = ? AND system = ?",
+                    (str(guild_id), system)
+                )
+            else:
+                cur = conn.execute(
+                    "SELECT system, name, owner_id, is_npc, system_specific_data, notes FROM characters WHERE guild_id = ?",
+                    (str(guild_id),)
+                )
             rows = cur.fetchall()
         except sqlite3.OperationalError:
-            cur = conn.execute(
-                "SELECT system, name, owner_id, is_npc, system_specific_data FROM characters WHERE guild_id = ?",
-                (str(guild_id),)
-            )
+            if system:
+                cur = conn.execute(
+                    "SELECT system, name, owner_id, is_npc, system_specific_data FROM characters WHERE guild_id = ? AND system = ?",
+                    (str(guild_id), system)
+                )
+            else:
+                cur = conn.execute(
+                    "SELECT system, name, owner_id, is_npc, system_specific_data FROM characters WHERE guild_id = ?",
+                    (str(guild_id),)
+                )
             rows = cur.fetchall()
             rows = [row + ("",) for row in rows]
 
         if not rows:
             return []
         for row in rows:
-            system, name, owner_id, is_npc, system_specific_data, notes = row
-            sheet = sheet_factory.get_specific_sheet(system)
+            system_val, name, owner_id, is_npc, system_specific_data, notes = row
+            sheet = sheet_factory.get_specific_sheet(system_val)
             system_fields = sheet.SYSTEM_SPECIFIC_NPC if is_npc else sheet.SYSTEM_SPECIFIC_CHARACTER
             system_specific = json.loads(system_specific_data)
             character = {

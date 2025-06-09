@@ -15,7 +15,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
 async def setup_hook():
-    await bot.tree.sync()
+    await bot.tree.sync(guild=discord.Object(id=1379609249834864721))
 
 
 @bot.event

@@ -1,11 +1,11 @@
-from discord import ui
+from character_sheets.shared_views import PaginatedSelectView
+from discord import ui, SelectOption
 import discord
 from data import repo
 from rpg_systems.fate.fate_sheet import FateSheet
 
 
 SYSTEM = "fate"
-
 sheet = FateSheet()
 
 
@@ -14,6 +14,7 @@ class SheetEditView(ui.View):
         super().__init__(timeout=120)
         self.editor_id = editor_id
         self.char_id = char_id
+        self.add_item(RollButton(char_id, editor_id))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.editor_id:
@@ -33,7 +34,19 @@ class SheetEditView(ui.View):
 
     @ui.button(label="Edit Skills", style=discord.ButtonStyle.secondary, row=2)
     async def edit_skills(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.send_modal(EditSkillsModal(self.char_id))
+        character = repo.get_character(interaction.guild.id, self.char_id)
+        skills = character.get("skills", {})
+        skill_options = [SelectOption(label=k, value=k) for k in sorted(skills.keys())]
+
+        async def on_skill_selected(view, interaction2, skill):
+            current_value = skills.get(skill, 0)
+            await interaction2.response.send_modal(EditSkillValueModal(self.char_id, skill, current_value))
+
+        await interaction.response.send_message(
+            "Select a skill to edit:",
+            view=PaginatedSelectView(skill_options, on_skill_selected, interaction.user.id, prompt="Select a skill to edit:"),
+            ephemeral=True
+        )
 
     @ui.button(label="Edit Stress", style=discord.ButtonStyle.primary, row=1)
     async def edit_stress(self, interaction: discord.Interaction, button: ui.Button):
@@ -213,27 +226,6 @@ class AddAspectModal(ui.Modal, title="Add Aspect"):
         repo.set_character(interaction.guild.id, self.char_id, character, system=SYSTEM)
         await interaction.response.edit_message(content="✅ Aspect added.", embed=sheet.format_full_sheet(character), view=EditAspectsView(interaction.guild.id, interaction.user.id, self.char_id))
 
-class EditSkillsModal(ui.Modal, title="Edit Skills"):
-    skills = ui.TextInput(label="Skills (format: Skill1:2,Skill2:1)", required=False)
-
-    def __init__(self, char_id):
-        super().__init__()
-        self.char_id = char_id
-
-    async def on_submit(self, interaction: discord.Interaction):
-        character = repo.get_character(interaction.guild.id, self.char_id)
-        skills_dict = {}
-        for entry in self.skills.value.split(","):
-            if ":" in entry:
-                k, v = entry.split(":", 1)
-                try:
-                    skills_dict[k.strip()] = int(v.strip())
-                except ValueError:
-                    continue
-        character["skills"] = skills_dict or []
-        repo.set_character(interaction.guild.id, self.char_id, character, system=SYSTEM)
-        await interaction.response.edit_message(content="✅ Skills updated!", embed=sheet.format_full_sheet(character), view=SheetEditView(interaction.user.id, self.char_id))
-
 class EditStressModal(ui.Modal, title="Edit Stress"):
     physical = ui.TextInput(label="Physical Stress (e.g. 1 1 0)", required=False)
     mental = ui.TextInput(label="Mental Stress (e.g. 1 0)", required=False)
@@ -361,6 +353,52 @@ class EditConsequencesView(ui.View):
             await interaction.response.edit_message(view=self)
         return callback
 
+class RollButton(ui.Button):
+    def __init__(self, char_id, editor_id):
+        super().__init__(label="Roll", style=discord.ButtonStyle.primary, row=0)
+        self.char_id = char_id
+        self.editor_id = editor_id
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.editor_id:
+            await interaction.response.send_message("You can’t roll for this character.", ephemeral=True)
+            return
+        character = repo.get_character(interaction.guild.id, self.char_id)
+        skills = character.get("skills", {})
+        skill_options = [SelectOption(label=k, value=k) for k in sorted(skills.keys())]
+
+        async def on_skill_selected(view, interaction, skill):
+            result = sheet.roll(character, skill=skill)
+            await interaction.response.send_message(result, ephemeral=True)
+
+        await interaction.response.send_message(
+            "Select a skill to roll:",
+            view=PaginatedSelectView(skill_options, on_skill_selected, interaction.user.id, prompt="Select a skill to roll:"),
+            ephemeral=True
+        )
+
+class RollSelectView(ui.View):
+    def __init__(self, char_id, skills, editor_id):
+        super().__init__(timeout=60)
+        self.char_id = char_id
+        self.editor_id = editor_id
+        skill_options = [SelectOption(label=k, value=k) for k in sorted(skills.keys())]
+        self.add_item(SkillSelect(skill_options))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user.id == self.editor_id
+
+class SkillSelect(ui.Select):
+    def __init__(self, options):
+        super().__init__(placeholder="Select skill...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        char_id = self.view.char_id
+        character = repo.get_character(interaction.guild.id, char_id)
+        skill = self.values[0]
+        result = sheet.roll(character, skill=skill)
+        await interaction.response.send_message(result, ephemeral=True)
+
 class EditNotesModal(ui.Modal, title="Edit Notes"):
     def __init__(self, char_id: str, notes: str):
         super().__init__()
@@ -381,3 +419,35 @@ class EditNotesModal(ui.Modal, title="Edit Notes"):
         embed = sheet.format_full_sheet(character)
         view = SheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(content="✅ Notes updated.", embed=embed, view=view)
+
+class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
+    def __init__(self, char_id: str, skill: str, current_value: int = 0):
+        super().__init__()
+        self.char_id = char_id
+        self.skill = skill
+        label = f"Set value for {skill} (-3 to 6)"
+        if len(label) > 45:
+            label = label[:42] + "..."
+        self.value_field = ui.TextInput(
+            label=label,
+            required=True,
+            default=str(current_value),
+            max_length=3
+        )
+        self.add_item(self.value_field)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        character = repo.get_character(interaction.guild.id, self.char_id)
+        value = self.value_field.value.strip()
+        try:
+            value_int = int(value)
+            if value_int < -3 or value_int > 6:
+                raise ValueError
+        except Exception:
+            await interaction.response.send_message("❌ Please enter an integer from -3 to 6.", ephemeral=True)
+            return
+        character["skills"][self.skill] = value_int
+        repo.set_character(interaction.guild.id, self.char_id, character, system=SYSTEM)
+        embed = sheet.format_full_sheet(character)
+        view = SheetEditView(interaction.user.id, self.char_id)
+        await interaction.response.edit_message(content=f"✅ {self.skill} updated.", embed=embed, view=view)

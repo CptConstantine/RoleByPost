@@ -9,10 +9,41 @@ import re
 import random
 
 
+async def skill_autocomplete(interaction: discord.Interaction, current: str):
+    try:
+        all_chars = repo.get_all_characters(interaction.guild.id)
+        character = next((c for c in all_chars if not c.get("is_npc") and str(c.get("owner_id")) == str(interaction.user.id)), None)
+        if not character:
+            return []
+        skills = character.get("skills", {})
+        options = [k for k in skills.keys() if current.lower() in k.lower()]
+        return [app_commands.Choice(name=k, value=k) for k in options[:25]]
+    except Exception as e:
+        print("Autocomplete error:", e)
+        return []
+
+async def attribute_autocomplete(interaction: discord.Interaction, current: str):
+    # Get user's character
+    all_chars = repo.get_all_characters(interaction.guild.id)
+    character = next((c for c in all_chars if not c.get("is_npc") and str(c.get("owner_id")) == str(interaction.user.id)), None)
+    if not character:
+        return []
+    attributes = character.get("attributes", {})
+    options = [k for k in attributes.keys() if current.lower() in k.lower()]
+    return [app_commands.Choice(name=k, value=k) for k in options[:25]]
+
+
 def setup(bot):
     @bot.command()
     async def myguild(ctx):
         await ctx.send(f"This server's guild_id is {ctx.guild.id}")
+
+
+    @bot.command()
+    @commands.has_permissions(administrator=True)
+    async def setgm(ctx):
+        repo.set_gm(ctx.guild.id, ctx.author.id)
+        await ctx.send(f"✅ {ctx.author.display_name} is now a GM.")
 
 
     @bot.command()
@@ -26,13 +57,6 @@ def setup(bot):
             return
         repo.set_system(ctx.guild.id, system)
         await ctx.send(f"✅ System set to {system.upper()} for this server.")
-
-
-    @bot.command()
-    @commands.has_permissions(administrator=True)
-    async def setgm(ctx):
-        repo.set_gm(ctx.guild.id, ctx.author.id)
-        await ctx.send(f"✅ {ctx.author.display_name} is now a GM.")
 
 
     @bot.command()
@@ -80,6 +104,44 @@ def setup(bot):
             return
 
         await ctx.send("❌ Invalid format. Use like `2d6+3` or `4df+1`.")
+
+    @bot.tree.command(
+        name="roll",
+        description="Roll dice for your system (Players only).",
+        guild=discord.Object(id=1379609249834864721)
+    )
+    @app_commands.describe(
+        skill="Skill name (optional)",
+        attribute="Attribute name (optional)"
+    )
+    @app_commands.autocomplete(
+        skill=skill_autocomplete,
+        attribute=attribute_autocomplete
+    )
+    async def roll(
+        interaction: discord.Interaction,
+        skill: str = None,
+        attribute: str = None
+    ):
+        await interaction.response.defer(ephemeral=True)
+
+        system = repo.get_system(interaction.guild.id)
+        sheet = sheet_factory.get_specific_sheet(system)
+        all_chars = repo.get_all_characters(interaction.guild.id, system=system)
+        is_gm = repo.is_gm(interaction.guild.id, interaction.user.id)
+
+        # Only allow players to use this command
+        if is_gm:
+            await interaction.followup.send("❌ Only players can use this command.", ephemeral=True)
+            return
+
+        character = next((c for c in all_chars if not c.get("is_npc") and str(c.get("owner_id")) == str(interaction.user.id)), None)
+        if not character:
+            await interaction.followup.send("❌ Character not found.", ephemeral=True)
+            return
+
+        result = sheet.roll(character, skill=skill, attribute=attribute)
+        await interaction.followup.send(result, ephemeral=True)
 
 
     @bot.command()
@@ -310,7 +372,7 @@ def setup(bot):
             await interaction.followup.send("❌ Could not decode file. Please ensure it's a UTF-8 encoded .txt file.", ephemeral=True)
             return
 
-        # Parse lines: allow "Skill" or "Skill:Value" (default 0)
+        # Parse lines: allow "Skill" or "Skill:Value" (default -3)
         skills_dict = {}
         for line in content.splitlines():
             line = line.strip()
@@ -324,7 +386,7 @@ def setup(bot):
                     await interaction.followup.send(f"❌ Invalid value for skill: `{line}`. All values must be integers.", ephemeral=True)
                     return
             else:
-                skills_dict[line] = 0
+                skills_dict[line] = -3
 
         if not skills_dict:
             await interaction.followup.send("❌ No skills found in the file.", ephemeral=True)
@@ -352,7 +414,7 @@ def setup(bot):
 
         # If no name is given, find the user's PC by owner_id
         if char_name is None:
-            all_chars = repo.get_all_characters(interaction.guild.id)
+            all_chars = repo.get_all_characters(interaction.guild.id, system=system)
             character = next((c for c in all_chars if not c.get("is_npc") and str(c.get("owner_id")) == str(interaction.user.id)), None)
             if not character:
                 await interaction.followup.send("❌ You don't have a character to export.", ephemeral=True)
@@ -420,15 +482,6 @@ def setup(bot):
             char_id = get_npc_id(name)
         else:
             char_id = get_pc_id(name)
-
-        existing = repo.get_character(interaction.guild.id, char_id)
-        if existing:
-            name = f"{name} (imported)"
-            if is_npc:
-                char_id = get_npc_id(name)
-            else:
-                char_id = get_pc_id(name)
-            data["name"] = name
 
         system = repo.get_system(interaction.guild.id)
         sheet = sheet_factory.get_specific_sheet(system)
