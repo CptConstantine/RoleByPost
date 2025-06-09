@@ -1,6 +1,6 @@
 # PlayByPostBot
 
-A Discord bot for running play-by-post tabletop RPGs, supporting multiple systems (currently Fate and Mongoose Traveller 2e). PlayByPostBot helps manage character sheets, NPCs, scenes, and dice rolls, making it easy to run and play RPGs asynchronously on Discord.
+A Discord bot for running play-by-post tabletop RPGs, supporting multiple systems (currently Fate and Mongoose Traveller 2e). PlayByPostBot helps manage character sheets, NPCs, scenes, and dice rolls, making it easy to run and play pbp games on Discord.
 
 ---
 
@@ -21,9 +21,6 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 
 - **Dice Rolling**  
   - Supports standard dice notation (e.g., `2d6+3`) and Fate/Fudge dice (`4df+1`).
-
-- **Slash Commands and Classic Commands**  
-  - Most features are available via both classic (`!command`) and slash (`/command`) commands.
 
 ---
 
@@ -85,7 +82,8 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 
 - Support for other systems
 - Ability to have multiple characters per discord user
-- System specific commands (ex. starships, travel, and maintenence cost calculations for Traveller)
+- System specific commands (ex. starships, travel, and maintenence cost calculations for Traveller; system specific damage calculations)
+- User can provide an openai API key to gain access to commands that use AI (summarize recent posts, ask rules questions)
 
 ---
 
