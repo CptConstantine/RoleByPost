@@ -34,14 +34,6 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 
 ---
 
-## Getting Started
-
-### Prerequisites
-
-- Developed on Python 3.12.10
-- A Discord bot token ([how to create one](https://discord.com/developers/applications))
-- [python-dotenv](https://pypi.org/project/python-dotenv/) for environment variable management
-
 ## Usage
 
 ### Basic Commands
@@ -89,11 +81,27 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 
 ---
 
+## Features Planned
+
+- Support for other systems
+- Ability to have multiple characters per discord user
+- System specific commands (ex. starships, travel, and maintenence cost calculations for Traveller)
+
+---
+
 ## Contributing
 
 Pull requests and suggestions are welcome! Please open an issue or PR for bug fixes, new features, or system support.
 
 ---
+
+## Getting Started
+
+### Prerequisites
+
+- Developed on Python 3.12.10
+- A Discord bot token ([how to create one](https://discord.com/developers/applications))
+- [python-dotenv](https://pypi.org/project/python-dotenv/) for environment variable management
 
 ### Installation for Development
 
