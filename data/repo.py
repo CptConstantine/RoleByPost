@@ -180,26 +180,45 @@ def get_default_skills(guild_id, system):
 
 def add_scene_npc(guild_id, npc_id):
     with get_db() as conn:
-        conn.execute("INSERT OR IGNORE INTO scenes (guild_id, npc_id) VALUES (?, ?)", (str(guild_id), str(npc_id)))
+        conn.execute("INSERT OR IGNORE INTO scene_npcs (guild_id, npc_id) VALUES (?, ?)", (str(guild_id), str(npc_id)))
         conn.commit()
 
 
 def remove_scene_npc(guild_id, npc_id):
     with get_db() as conn:
-        conn.execute("DELETE FROM scenes WHERE guild_id = ? AND npc_id = ?", (str(guild_id), str(npc_id)))
+        conn.execute("DELETE FROM scene_npcs WHERE guild_id = ? AND npc_id = ?", (str(guild_id), str(npc_id)))
         conn.commit()
 
 
 def clear_scenes(guild_id):
     with get_db() as conn:
-        conn.execute("DELETE FROM scenes WHERE guild_id = ?", (str(guild_id),))
+        conn.execute("DELETE FROM scene_npcs WHERE guild_id = ?", (str(guild_id),))
         conn.commit()
 
 
 def get_scenes(guild_id):
     with get_db() as conn:
-        cur = conn.execute("SELECT npc_id FROM scenes WHERE guild_id = ?", (str(guild_id),))
+        cur = conn.execute("SELECT npc_id FROM scene_npcs WHERE guild_id = ?", (str(guild_id),))
         return [row[0] for row in cur.fetchall()]
+    
+
+def set_scene_notes(guild_id, notes):
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO scene_notes (guild_id, notes) VALUES (?, ?)",
+            (str(guild_id), notes)
+        )
+        conn.commit()
+
+
+def get_scene_notes(guild_id):
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT notes FROM scene_notes WHERE guild_id = ?",
+            (str(guild_id),)
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
 
 
 def set_active_character(guild_id, user_id, char_id):

@@ -34,7 +34,7 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 
 ---
 
-## Usage
+## Usage and Commands
 
 The following are the commands that are currently available.
 

@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from character_sheets import shared_views
 from data import repo
 from character_sheets.base_sheet import get_pc_id, get_npc_id
 import character_sheets.sheet_factory as sheet_factory
@@ -49,6 +50,18 @@ async def pc_name_gm_autocomplete(interaction: discord.Interaction, current: str
     all_chars = repo.get_all_characters(interaction.guild.id)
     pcs = [c for c in all_chars if not c.get("is_npc")]
     options = [c["name"] for c in pcs if current.lower() in c["name"].lower()]
+    return [app_commands.Choice(name=name, value=name) for name in options[:25]]
+
+async def npc_name_autocomplete(interaction: discord.Interaction, current: str):
+    """Autocomplete for NPCs not already in the scene."""
+    all_chars = repo.get_all_characters(interaction.guild.id)
+    # Only NPCs not already in the scene
+    scene_npcs = set(repo.get_scenes(interaction.guild.id))
+    npcs = [
+        c for c in all_chars
+        if c.get("is_npc") and get_npc_id(c["name"]) not in scene_npcs and current.lower() in c["name"].lower()
+    ]
+    options = [c["name"] for c in npcs]
     return [app_commands.Choice(name=name, value=name) for name in options[:25]]
 
 
@@ -284,25 +297,27 @@ def setup(bot):
         await interaction.response.send_message(embed=embed, view=sheet_view, ephemeral=is_ephemeral)
 
 
-    @bot.command()
-    async def scene_add(ctx, *, name: str):
-        if not repo.is_gm(ctx.guild.id, ctx.author.id):
-            await ctx.send("❌ Only GMs can manage the scene.")
+    @bot.tree.command(name="scene_add", description="Add an NPC to the current scene.")
+    @app_commands.describe(npc_name="The name of the NPC to add to the scene")
+    @app_commands.autocomplete(npc_name=npc_name_autocomplete)
+    async def scene_add(interaction: discord.Interaction, npc_name: str):
+        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+            await interaction.response.send_message("❌ Only GMs can manage the scene.", ephemeral=True)
             return
 
-        npc_id = f"npc:{name.lower().replace(' ', '_')}"
-        npc = repo.get_character(ctx.guild.id, npc_id)
+        npc_id = get_npc_id(npc_name)
+        npc = repo.get_character(interaction.guild.id, npc_id)
         if not npc:
-            await ctx.send("❌ NPC not found. Did you create it with `!createnpc`?")
+            await interaction.response.send_message("❌ NPC not found. Did you create it with `/createnpc`?", ephemeral=True)
             return
 
-        scene_npcs = repo.get_scenes(ctx.guild.id)
+        scene_npcs = repo.get_scenes(interaction.guild.id)
         if npc_id in scene_npcs:
-            await ctx.send("⚠️ That NPC is already in the scene.")
+            await interaction.response.send_message("⚠️ That NPC is already in the scene.", ephemeral=True)
             return
 
-        repo.add_scene_npc(ctx.guild.id, npc_id)
-        await ctx.send(f"✅ **{name}** added to the scene.")
+        repo.add_scene_npc(interaction.guild.id, npc_id)
+        await interaction.response.send_message(f"✅ **{npc_name}** added to the scene.", ephemeral=True)
 
 
     @bot.command()
@@ -337,10 +352,6 @@ def setup(bot):
         sheet = sheet_factory.get_specific_sheet(system)
 
         npc_ids = repo.get_scenes(ctx.guild.id)
-        if not npc_ids:
-            await ctx.send("📭 No NPCs are currently in the scene.")
-            return
-
         is_gm = repo.is_gm(ctx.guild.id, ctx.author.id)
         lines = []
         for npc_id in npc_ids:
@@ -348,12 +359,22 @@ def setup(bot):
             if npc:
                 lines.append(sheet.format_npc_scene_entry(npc, is_gm))
 
+        notes = repo.get_scene_notes(ctx.guild.id)
+        description = ""
+        if notes:
+            description += f"**Notes:**\n{notes}\n\n"
+        if lines:
+            description += "\n\n".join(lines)
+        else:
+            description += "📭 No NPCs are currently in the scene."
+
         embed = discord.Embed(
-            title="🎭 NPCs in the Scene",
-            description="\n\n".join(lines),
+            title="🎭 The Current Scene",
+            description=description,
             color=discord.Color.purple()
         )
-        await ctx.send(embed=embed)
+        view = shared_views.SceneNotesEditView(ctx.guild.id, is_gm)
+        await ctx.send(embed=embed, view=view)
 
 
     @bot.command()

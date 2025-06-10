@@ -40,10 +40,17 @@ CREATE TABLE IF NOT EXISTS server_settings (
 """)
 
 cur.execute("""
-CREATE TABLE IF NOT EXISTS scenes (
+CREATE TABLE IF NOT EXISTS scene_npcs (
     guild_id TEXT NOT NULL,
     npc_id TEXT NOT NULL,
     PRIMARY KEY (guild_id, npc_id)
+)
+""")
+
+cur.execute("""
+CREATE TABLE IF NOT EXISTS scene_notes (
+    guild_id TEXT PRIMARY KEY,
+    notes TEXT
 )
 """)
 
