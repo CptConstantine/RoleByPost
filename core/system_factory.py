@@ -1,6 +1,16 @@
-from rpg_systems.fate import fate_sheet, fate_views
-from rpg_systems.mgt2e import mgt2e_sheet, mgt2e_views
+from rpg_systems.fate import fate_sheet, fate_views, fate_character
+from rpg_systems.mgt2e import mgt2e_sheet, mgt2e_views, mgt2e_character
 
+def get_specific_character(system: str):
+    """
+    Returns the correct Character class for the given system string.
+    """
+    if system == "fate":
+        return fate_character.FateCharacter
+    elif system == "mgt2e":
+        return mgt2e_character.MGT2ECharacter
+    else:
+        raise ValueError(f"Unknown system: {system}")
 
 def get_specific_sheet(system: str):
     if system == "fate":

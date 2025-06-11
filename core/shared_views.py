@@ -1,6 +1,6 @@
 import discord
 from discord import ui
-from character_sheets import sheet_factory
+from core import system_factory
 from data import repo
 
 
@@ -107,7 +107,7 @@ class EditSceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
         repo.set_scene_notes(self.guild_id, self.notes.value)
         # Rebuild the scene embed and view
         system = repo.get_system(self.guild_id)
-        sheet = sheet_factory.get_specific_sheet(system)
+        sheet = system_factory.get_specific_sheet(system)
         npc_ids = repo.get_scenes(self.guild_id)
         is_gm = repo.is_gm(self.guild_id, interaction.user.id)
         lines = []

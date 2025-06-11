@@ -1,6 +1,7 @@
 import sqlite3
 import json
-import character_sheets.sheet_factory as sheet_factory
+from core.abstract_models import BaseCharacter
+import core.system_factory as system_factory
 
 
 DB_FILE = 'data/bot.db'
@@ -41,21 +42,26 @@ def get_system(guild_id):
         return row[0] if row else "fate"  # Default to "fate"
 
 
-def set_character(guild_id, char_id, character, system=None):
+def set_character(guild_id, character: BaseCharacter, system=None):
+    """
+    Save a character to the database.
+    character: An instance of a system-specific Character.
+    """
     if system is None:
         system = get_system(guild_id)
-    sheet = sheet_factory.get_specific_sheet(system)
+    CharacterClass = system_factory.get_specific_character(system)
+
     # Use the system's defined fields
-    if character.get("is_npc"):
-        system_fields = sheet.SYSTEM_SPECIFIC_NPC
+    if character.is_npc():
+        system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC
     else:
-        system_fields = sheet.SYSTEM_SPECIFIC_CHARACTER
+        system_fields = CharacterClass.SYSTEM_SPECIFIC_CHARACTER
 
     system_specific_data = {}
     for key in system_fields:
-        system_specific_data[key] = character.get(key)
+        system_specific_data[key] = character.data.get(key)
 
-    notes = character.get("notes", "")
+    notes = character.get_notes() or ""
 
     with get_db() as conn:
         conn.execute("""
@@ -63,12 +69,12 @@ def set_character(guild_id, char_id, character, system=None):
             (id, guild_id, system, name, owner_id, is_npc, system_specific_data, notes)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            str(char_id),
+            str(character.get_id()),
             str(guild_id),
             system,
-            character.get("name"),
-            str(character.get("owner_id")),
-            bool(character.get("is_npc")),
+            character.get_name(),
+            str(character.get_owner_id()),
+            bool(character.is_npc()),
             json.dumps(system_specific_data),
             notes
         ))
@@ -76,6 +82,9 @@ def set_character(guild_id, char_id, character, system=None):
 
 
 def get_character(guild_id, char_id):
+    """
+    Load a character from the database and return an instance of the system-specific Character class.
+    """
     with get_db() as conn:
         try:
             cur = conn.execute("SELECT system, name, owner_id, is_npc, system_specific_data, notes FROM characters WHERE guild_id = ? AND id = ?", (str(guild_id), str(char_id)))
@@ -91,8 +100,8 @@ def get_character(guild_id, char_id):
             system, name, owner_id, is_npc, system_specific_data = row
             notes = ""
 
-        sheet = sheet_factory.get_specific_sheet(system)
-        system_fields = sheet.SYSTEM_SPECIFIC_NPC if is_npc else sheet.SYSTEM_SPECIFIC_CHARACTER
+        CharacterClass = system_factory.get_specific_character(system)
+        system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC if is_npc else CharacterClass.SYSTEM_SPECIFIC_CHARACTER
         system_specific = json.loads(system_specific_data)
         character = {
             "name": name,
@@ -102,10 +111,14 @@ def get_character(guild_id, char_id):
         }
         for key in system_fields:
             character[key] = system_specific.get(key, system_fields[key])
-        return character
+        return CharacterClass.from_dict(character)
 
 
 def get_all_characters(guild_id, system=None):
+    """
+    Load all characters for a guild (optionally filtered by system).
+    Returns a list of system-specific Character class instances.
+    """
     characters = []
     with get_db() as conn:
         try:
@@ -138,8 +151,8 @@ def get_all_characters(guild_id, system=None):
             return []
         for row in rows:
             system_val, name, owner_id, is_npc, system_specific_data, notes = row
-            sheet = sheet_factory.get_specific_sheet(system_val)
-            system_fields = sheet.SYSTEM_SPECIFIC_NPC if is_npc else sheet.SYSTEM_SPECIFIC_CHARACTER
+            CharacterClass = system_factory.get_specific_character(system_val)
+            system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC if is_npc else CharacterClass.SYSTEM_SPECIFIC_CHARACTER
             system_specific = json.loads(system_specific_data)
             character = {
                 "name": name,
@@ -149,12 +162,8 @@ def get_all_characters(guild_id, system=None):
             }
             for key in system_fields:
                 character[key] = system_specific.get(key, system_fields[key])
-            characters.append(character)
+            characters.append(CharacterClass.from_dict(character))
     return characters
-
-
-def set_npc(guild_id, npc_id, npc, system=None):
-    set_character(guild_id, npc_id, npc, system)
 
 
 def set_default_skills(guild_id, system, skills_dict):
