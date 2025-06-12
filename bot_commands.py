@@ -14,10 +14,10 @@ import datetime
 async def skill_autocomplete(interaction: discord.Interaction, current: str):
     try:
         all_chars = repo.get_all_characters(interaction.guild.id)
-        character = next((c for c in all_chars if not c.is_npc() and str(c.get_owner_id()) == str(interaction.user.id)), None)
+        character = next((c for c in all_chars if not c.is_npc and str(c.owner_id) == str(interaction.user.id)), None)
         if not character:
             return []
-        skills = character.get_skills()
+        skills = character.skills
         options = [k for k in skills.keys() if current.lower() in k.lower()]
         return [app_commands.Choice(name=k, value=k) for k in options[:25]]
     except Exception as e:
@@ -26,10 +26,10 @@ async def skill_autocomplete(interaction: discord.Interaction, current: str):
 
 async def attribute_autocomplete(interaction: discord.Interaction, current: str):
     all_chars = repo.get_all_characters(interaction.guild.id)
-    character = next((c for c in all_chars if not c.is_npc() and str(c.get_owner_id()) == str(interaction.user.id)), None)
+    character = next((c for c in all_chars if not c.is_npc and str(c.owner_id) == str(interaction.user.id)), None)
     if not character:
         return []
-    attributes = character.get_attributes()
+    attributes = character.attributes
     options = [k for k in attributes.keys() if current.lower() in k.lower()]
     return [app_commands.Choice(name=k, value=k) for k in options[:25]]
 
@@ -37,25 +37,25 @@ async def pc_name_autocomplete(interaction: discord.Interaction, current: str):
     all_chars = repo.get_all_characters(interaction.guild.id)
     pcs = [
         c for c in all_chars
-        if not c.is_npc() and str(c.get_owner_id()) == str(interaction.user.id)
+        if not c.is_npc and str(c.owner_id) == str(interaction.user.id)
     ]
-    options = [c.get_name() for c in pcs if current.lower() in c.get_name().lower()]
+    options = [c.name for c in pcs if current.lower() in c.name.lower()]
     return [app_commands.Choice(name=name, value=name) for name in options[:25]]
 
 async def pc_name_gm_autocomplete(interaction: discord.Interaction, current: str):
     all_chars = repo.get_all_characters(interaction.guild.id)
-    pcs = [c for c in all_chars if not c.is_npc()]
-    options = [c.get_name() for c in pcs if current.lower() in c.get_name().lower()]
+    pcs = [c for c in all_chars if not c.is_npc]
+    options = [c.name for c in pcs if current.lower() in c.name.lower()]
     return [app_commands.Choice(name=name, value=name) for name in options[:25]]
 
 async def npc_name_autocomplete(interaction: discord.Interaction, current: str):
     all_chars = repo.get_all_characters(interaction.guild.id)
-    scene_npcs = set(repo.get_scenes(interaction.guild.id))
+    scene_npcs = set(repo.get_scene_npcs(interaction.guild.id))
     npcs = [
         c for c in all_chars
-        if c.is_npc() and get_npc_id(c.get_name()) not in scene_npcs and current.lower() in c.get_name().lower()
+        if c.is_npc and get_npc_id(c.name) not in scene_npcs and current.lower() in c.name.lower()
     ]
-    options = [c.get_name() for c in npcs]
+    options = [c.name for c in npcs]
     return [app_commands.Choice(name=name, value=name) for name in options[:25]]
 
 def setup(bot):
@@ -161,7 +161,7 @@ def setup(bot):
             "name": char_name,
             "owner_id": interaction.user.id,
             "is_npc": False,
-            "notes": ""
+            "notes": []
         })
         character.apply_defaults(is_npc=False, guild_id=interaction.guild.id)
         repo.set_character(interaction.guild.id, character, system=system)
@@ -189,7 +189,7 @@ def setup(bot):
             "name": npc_name,
             "owner_id": interaction.user.id,
             "is_npc": True,
-            "notes": ""
+            "notes": []
         })
         character.apply_defaults(is_npc=True, guild_id=interaction.guild.id)
         repo.set_character(interaction.guild.id, character, system=system)
@@ -244,7 +244,7 @@ def setup(bot):
         if not character:
             await interaction.response.send_message("❌ Character not found.", ephemeral=True)
             return
-        if character.is_npc():
+        if character.is_npc:
             if not repo.is_gm(interaction.guild.id, interaction.user.id):
                 await interaction.response.send_message("❌ Only the GM can view NPCs.", ephemeral=True)
                 return
@@ -263,7 +263,7 @@ def setup(bot):
         if not npc:
             await interaction.response.send_message("❌ NPC not found. Did you create it with `/createnpc`?", ephemeral=True)
             return
-        scene_npcs = repo.get_scenes(interaction.guild.id)
+        scene_npcs = repo.get_scene_npcs(interaction.guild.id)
         if npc_id in scene_npcs:
             await interaction.response.send_message("⚠️ That NPC is already in the scene.", ephemeral=True)
             return
@@ -276,7 +276,7 @@ def setup(bot):
             await ctx.send("❌ Only GMs can manage the scene.")
             return
         npc_id = get_npc_id(name)
-        scene_npcs = repo.get_scenes(ctx.guild.id)
+        scene_npcs = repo.get_scene_npcs(ctx.guild.id)
         if npc_id not in scene_npcs:
             await ctx.send("❌ That NPC isn't in the scene.")
             return
@@ -295,7 +295,7 @@ def setup(bot):
     async def scene(ctx):
         system = repo.get_system(ctx.guild.id)
         sheet = system_factory.get_specific_sheet(system)
-        npc_ids = repo.get_scenes(ctx.guild.id)
+        npc_ids = repo.get_scene_npcs(ctx.guild.id)
         is_gm = repo.is_gm(ctx.guild.id, ctx.author.id)
         lines = []
         for npc_id in npc_ids:
@@ -386,11 +386,11 @@ def setup(bot):
         system = repo.get_system(interaction.guild.id)
         if char_name is None:
             all_chars = repo.get_all_characters(interaction.guild.id, system=system)
-            character = next((c for c in all_chars if not c.is_npc() and str(c.get_owner_id()) == str(interaction.user.id)), None)
+            character = next((c for c in all_chars if not c.is_npc and str(c.owner_id) == str(interaction.user.id)), None)
             if not character:
                 await interaction.followup.send("❌ You don't have a character to export.", ephemeral=True)
                 return
-            char_id = get_pc_id(character.get_name())
+            char_id = get_pc_id(character.name)
         else:
             if repo.is_gm(interaction.guild.id, interaction.user.id):
                 npc_id = get_npc_id(char_name)
@@ -404,21 +404,21 @@ def setup(bot):
             else:
                 char_id = get_pc_id(char_name)
                 character = repo.get_character(interaction.guild.id, char_id)
-                if character and str(character.get_owner_id()) != str(interaction.user.id):
+                if character and str(character.owner_id) != str(interaction.user.id):
                     await interaction.followup.send("❌ You can only export your own character.", ephemeral=True)
                     return
         if not character:
             await interaction.followup.send("❌ Character not found.", ephemeral=True)
             return
-        if character.is_npc() and not repo.is_gm(interaction.guild.id, interaction.user.id):
+        if character.is_npc and not repo.is_gm(interaction.guild.id, interaction.user.id):
             await interaction.followup.send("❌ Only the GM can export NPCs.", ephemeral=True)
             return
-        export_data = character.to_dict()
+        export_data = character.data
         export_data["system"] = system
         import io
         file_content = json.dumps(export_data, indent=2)
-        file = discord.File(io.BytesIO(file_content.encode('utf-8')), filename=f"{character.get_name()}.json")
-        await interaction.followup.send(f"Here is your exported character `{character.get_name()}`.", file=file, ephemeral=True)
+        file = discord.File(io.BytesIO(file_content.encode('utf-8')), filename=f"{character.name}.json")
+        await interaction.followup.send(f"Here is your exported character `{character.name}`.", file=file, ephemeral=True)
 
     @bot.tree.command(name="importchar", description="Import a character or NPC from a JSON file. The owner will be set to you.")
     @app_commands.describe(file="A .json file exported from this bot")
@@ -436,12 +436,9 @@ def setup(bot):
         system = repo.get_system(interaction.guild.id)
         CharacterClass = system_factory.get_specific_character(system)
         character = CharacterClass.from_dict(data)
-        character.apply_defaults(is_npc=character.is_npc(), guild_id=interaction.guild.id)
-        if character.is_npc():
-            repo.set_npc(interaction.guild.id, character, system=system)
-        else:
-            repo.set_character(interaction.guild.id, character, system=system)
-        await interaction.followup.send(f"✅ Imported {'NPC' if character.is_npc() else 'character'} `{character.get_name()}`.", ephemeral=True)
+        character.apply_defaults(is_npc=character.is_npc, guild_id=interaction.guild.id)
+        repo.set_character(interaction.guild.id, character, system=system)
+        await interaction.followup.send(f"✅ Imported {'NPC' if character.is_npc else 'character'} `{character.name}`.", ephemeral=True)
 
     @bot.tree.command(name="transferchar", description="GM: Transfer a PC to another player.")
     @app_commands.describe(
@@ -455,10 +452,10 @@ def setup(bot):
             return
         char_id = get_pc_id(char_name)
         character = repo.get_character(interaction.guild.id, char_id)
-        if not character or character.is_npc():
+        if not character or character.is_npc:
             await interaction.response.send_message("❌ PC not found.", ephemeral=True)
             return
-        character.data["owner_id"] = new_owner.id
+        character.owner_id = new_owner.id
         system = repo.get_system(interaction.guild.id)
         repo.set_character(interaction.guild.id, character, system=system)
         await interaction.response.send_message(
@@ -471,7 +468,7 @@ def setup(bot):
     async def setactive(interaction: discord.Interaction, char_name: str):
         all_chars = repo.get_all_characters(interaction.guild.id)
         character = next(
-            (c for c in all_chars if not c.is_npc() and str(c.get_owner_id()) == str(interaction.user.id) and c.get_name().lower() == char_name.lower()),
+            (c for c in all_chars if not c.is_npc and str(c.owner_id) == str(interaction.user.id) and c.name.lower() == char_name.lower()),
             None
         )
         if not character:

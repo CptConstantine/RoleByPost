@@ -108,7 +108,7 @@ class EditSceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
         # Rebuild the scene embed and view
         system = repo.get_system(self.guild_id)
         sheet = system_factory.get_specific_sheet(system)
-        npc_ids = repo.get_scenes(self.guild_id)
+        npc_ids = repo.get_scene_npcs(self.guild_id)
         is_gm = repo.is_gm(self.guild_id, interaction.user.id)
         lines = []
         for npc_id in npc_ids:

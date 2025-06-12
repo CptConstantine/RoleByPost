@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import discord
 
@@ -11,7 +11,52 @@ def get_npc_id(name):
     """Generate an NPC ID from a name."""
     return f"npc:{name.lower().replace(' ', '_')}"
 
-class BaseCharacter(ABC):
+class NotesMixin:
+    def add_note(self, note: str):
+        if "notes" not in self.data or not isinstance(self.data["notes"], list):
+            self.data["notes"] = []
+        self.data["notes"].append(note)
+
+    def get_notes(self) -> List[str]:
+        return self.data.get("notes", [])
+
+class BaseRpgObj(ABC, NotesMixin):
+    """
+    Abstract base class for a "thing".
+    """
+    def __init__(self, data: Dict[str, Any]):
+        self.data = data
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "BaseRpgObj":
+        """Deserialize an entity from a dict."""
+        return cls(data)
+
+    @property
+    def id(self) -> str:
+        return self.data.get("id")
+
+    @id.setter
+    def id(self, value: str):
+        self.data["id"] = value
+
+    @property
+    def owner_id(self) -> Optional[str]:
+        return self.data.get("owner_id")
+
+    @owner_id.setter
+    def owner_id(self, value: str):
+        self.data["owner_id"] = value
+
+    @property
+    def notes(self) -> list:
+        return self.data.get("notes", [])
+
+    @notes.setter
+    def notes(self, value: list):
+        self.data["notes"] = value
+
+class BaseCharacter(BaseRpgObj):
     """
     Abstract base class for a character (PC or NPC).
     System-specific character classes should inherit from this and implement all methods.
@@ -20,30 +65,27 @@ class BaseCharacter(ABC):
     SYSTEM_SPECIFIC_NPC = {}
 
     def __init__(self, data: Dict[str, Any]):
-        self.data = data
+        super().__init__(data)
+        if not hasattr(self, 'SYSTEM_SPECIFIC_CHARACTER'):
+            raise NotImplementedError("SYSTEM_SPECIFIC_CHARACTER must be defined in the subclass.")
+        if not hasattr(self, 'SYSTEM_SPECIFIC_NPC'):
+            raise NotImplementedError("SYSTEM_SPECIFIC_NPC must be defined in the subclass.")
 
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "BaseCharacter":
-        """Deserialize a character from a dict."""
-        return cls(data)
-
-    def get_id(self) -> str:
-        return self.data.get("id")
-
-    def get_name(self) -> str:
+    @property
+    def name(self) -> str:
         return self.data.get("name")
 
-    def get_owner_id(self) -> Optional[str]:
-        return self.data.get("owner_id")
+    @name.setter
+    def name(self, value: str):
+        self.data["name"] = value
 
+    @property
     def is_npc(self) -> bool:
         return self.data.get("is_npc", False)
 
-    def get_notes(self) -> str:
-        return self.data.get("notes", "")
-
-    def to_dict(self) -> Dict[str, Any]:
-        return dict(self.data)
+    @is_npc.setter
+    def is_npc(self, value: bool):
+        self.data["is_npc"] = value
 
     @abstractmethod
     def apply_defaults(self, is_npc=False, guild_id=None):
@@ -51,9 +93,6 @@ class BaseCharacter(ABC):
         pass
 
 class BaseSheet(ABC):
-    SYSTEM_SPECIFIC_CHARACTER = {}
-    SYSTEM_SPECIFIC_NPC = {}
-
     @abstractmethod
     def format_full_sheet(self, character: Dict[str, Any]) -> discord.Embed:
         """Return a Discord Embed representing the full character sheet."""

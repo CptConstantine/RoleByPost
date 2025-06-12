@@ -6,13 +6,14 @@ from rpg_systems.mgt2e.mgt2e_character import MGT2ECharacter
 
 class MGT2ESheet(BaseSheet):
     def format_full_sheet(self, character: MGT2ECharacter) -> discord.Embed:
+        # Use the .name property instead of get_name()
         embed = discord.Embed(
-            title=f"{character.get_name() or 'Traveller'}",
+            title=f"{character.name or 'Traveller'}",
             color=discord.Color.dark_teal()
         )
 
         # --- Attributes ---
-        attributes = character.get_attributes()
+        attributes = character.attributes  # Use property
         if attributes:
             attr_lines = [
                 f"**STR**: {attributes.get('STR', 0)}   **DEX**: {attributes.get('DEX', 0)}   **END**: {attributes.get('END', 0)}",
@@ -23,8 +24,8 @@ class MGT2ESheet(BaseSheet):
             embed.add_field(name="Attributes", value="None", inline=False)
 
         # --- Skills ---
-        skills = character.get_skills()
-        trained_skills = self.get_trained_skills(skills)
+        skills = character.skills  # Use property
+        trained_skills = character.get_trained_skills(skills)
         if trained_skills:
             sorted_skills = sorted(trained_skills.items(), key=lambda x: (x[0]))
             skill_lines = []
@@ -45,15 +46,18 @@ class MGT2ESheet(BaseSheet):
             embed.add_field(name="Skills", value="None", inline=False)
 
         # --- Notes ---
-        notes = character.get_notes()
-        embed.add_field(name="Notes", value=notes if notes else "_No notes_", inline=False)
+        notes = character.notes  # Use property, which is a list
+        notes_display = "\n".join(notes) if notes else "_No notes_"
+        embed.add_field(name="Notes", value=notes_display, inline=False)
 
         return embed
 
     def format_npc_scene_entry(self, npc: MGT2ECharacter, is_gm: bool):
-        lines = [f"**{npc.get_name() or 'NPC'}**"]
-        if is_gm and npc.get_notes():
-            lines.append(f"**Notes:** *{npc.get_notes()}*")
+        # Use .name and .notes properties
+        lines = [f"**{npc.name or 'NPC'}**"]
+        if is_gm and npc.notes:
+            notes_display = "\n".join(npc.notes)
+            lines.append(f"**Notes:** *{notes_display}*")
         return "\n".join(lines)
 
     def roll(self, character: MGT2ECharacter, *, skill=None, attribute=None, formula=None):
@@ -93,10 +97,10 @@ class MGT2ESheet(BaseSheet):
 
         if not skill or not attribute:
             return "❌ Please specify both a skill and an attribute."
-        skills = character.get_skills()
-        skill_mod = self.get_skill_modifier(skills, skill)
-        attr_val = character.get_attributes().get(attribute.upper(), 0)
-        attr_mod = self.get_attribute_modifier(attr_val)
+        skills = character.skills  # Use property
+        skill_mod = character.get_skill_modifier(skills, skill)
+        attr_val = character.attributes.get(attribute.upper(), 0)  # Use property
+        attr_mod = character.get_attribute_modifier(attr_val)
         rolls = [random.randint(1, 6) for _ in range(2)]
         total = sum(rolls) + skill_mod + attr_mod
         response = (

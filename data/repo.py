@@ -52,7 +52,7 @@ def set_character(guild_id, character: BaseCharacter, system=None):
     CharacterClass = system_factory.get_specific_character(system)
 
     # Use the system's defined fields
-    if character.is_npc():
+    if character.is_npc:
         system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC
     else:
         system_fields = CharacterClass.SYSTEM_SPECIFIC_CHARACTER
@@ -61,7 +61,7 @@ def set_character(guild_id, character: BaseCharacter, system=None):
     for key in system_fields:
         system_specific_data[key] = character.data.get(key)
 
-    notes = character.get_notes() or ""
+    notes = character.notes or ""
 
     with get_db() as conn:
         conn.execute("""
@@ -69,12 +69,12 @@ def set_character(guild_id, character: BaseCharacter, system=None):
             (id, guild_id, system, name, owner_id, is_npc, system_specific_data, notes)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            str(character.get_id()),
+            str(character.id),
             str(guild_id),
             system,
-            character.get_name(),
-            str(character.get_owner_id()),
-            bool(character.is_npc()),
+            character.name,
+            str(character.owner_id),
+            bool(character.is_npc),
             json.dumps(system_specific_data),
             notes
         ))
@@ -203,9 +203,11 @@ def clear_scenes(guild_id):
     with get_db() as conn:
         conn.execute("DELETE FROM scene_npcs WHERE guild_id = ?", (str(guild_id),))
         conn.commit()
+        conn.execute("DELETE FROM scene_notes WHERE guild_id = ?", (str(guild_id),))
+        conn.commit()
 
 
-def get_scenes(guild_id):
+def get_scene_npcs(guild_id):
     with get_db() as conn:
         cur = conn.execute("SELECT npc_id FROM scene_npcs WHERE guild_id = ?", (str(guild_id),))
         return [row[0] for row in cur.fetchall()]

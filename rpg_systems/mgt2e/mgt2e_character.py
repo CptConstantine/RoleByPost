@@ -4,19 +4,6 @@ from typing import Any, Dict
 from data import repo
 
 class MGT2ECharacter(BaseCharacter):
-    def __init__(self, data: Dict[str, Any]):
-        self.data = data
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MGT2ECharacter":
-        return cls(data)
-    
-    def get_attributes(self) -> Dict[str, int]:
-        return self.data.get("attributes", {})
-
-    def get_skills(self) -> Dict[str, int]:
-        return self.data.get("skills", {})
-    
     DEFAULT_SKILLS = {
         "Admin": -3,
         "Advocate": -3,
@@ -125,7 +112,34 @@ class MGT2ECharacter(BaseCharacter):
         "skills": {}
     }
 
+    def __init__(self, data: Dict[str, Any]):
+        super().__init__(data)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "MGT2ECharacter":
+        return cls(data)
+
+    @property
+    def attributes(self) -> Dict[str, int]:
+        return self.data.get("attributes", {})
+
+    @attributes.setter
+    def attributes(self, value: Dict[str, int]):
+        self.data["attributes"] = value
+
+    @property
+    def skills(self) -> Dict[str, int]:
+        return self.data.get("skills", {})
+
+    @skills.setter
+    def skills(self, value: Dict[str, int]):
+        self.data["skills"] = value
+
     def apply_defaults(self, is_npc=False, guild_id=None):
+        """
+        Apply system-specific default fields to a character dict.
+        This method uses the @property accessors for all fields.
+        """
         super().apply_defaults(is_npc=is_npc, guild_id=guild_id)
         system_defaults = self.SYSTEM_SPECIFIC_NPC if is_npc else self.SYSTEM_SPECIFIC_CHARACTER
         for key, value in system_defaults.items():
@@ -135,17 +149,27 @@ class MGT2ECharacter(BaseCharacter):
                 if guild_id:
                     skills = repo.get_default_skills(guild_id, "mgt2e")
                 default_skills = dict(skills) if skills else dict(self.DEFAULT_SKILLS)
-                self.data.setdefault("skills", {})
-                for skill, val in default_skills.items():
-                    if skill not in self.data["skills"]:
-                        self.data["skills"][skill] = val
+                if not self.skills:
+                    self.skills = default_skills
+                else:
+                    # Only add missing skills, don't overwrite existing ones
+                    updated_skills = dict(self.skills)
+                    for skill, val in default_skills.items():
+                        if skill not in updated_skills:
+                            updated_skills[skill] = val
+                    self.skills = updated_skills
             else:
-                if key not in self.data:
-                    self.data[key] = value
+                # Use property setters for all other fields
+                if not hasattr(self, key) or getattr(self, key) in (None, [], {}, 0, False):
+                    setattr(self, key, value)
 
     @staticmethod
     def parse_and_validate_skills(skills_str):
-        """Parse a skills string like 'Admin:0, Gun Combat:1' into a dict. Add MGT2E-specific validation here."""
+        """
+        Parse a skills string like 'Admin:0, Gun Combat:1' into a dict.
+        This method is static and does not use properties, but you can use the result
+        to assign to the .skills property of a MGT2ECharacter instance.
+        """
         skills_dict = {}
         for entry in skills_str.split(","):
             if ":" in entry:

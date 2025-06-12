@@ -41,13 +41,13 @@ class SheetEditView(ui.View):
     @ui.button(label="Edit Attributes", style=discord.ButtonStyle.secondary, row=1)
     async def edit_attributes(self, interaction: discord.Interaction, button: ui.Button):
         character = get_mgt2e_character(interaction.guild.id, self.char_id)
-        attrs = character.get_attributes() if character else {}
+        attrs = character.attributes if character else {}
         await interaction.response.send_modal(EditAttributesModal(self.char_id, attrs))
 
     @ui.button(label="Edit Skills", style=discord.ButtonStyle.secondary, row=1)
     async def edit_skills(self, interaction: discord.Interaction, button: ui.Button):
         character = get_mgt2e_character(interaction.guild.id, self.char_id)
-        skills = character.get_skills() if character else {}
+        skills = character.skills if character else {}
         categories = get_skill_categories(sheet.DEFAULT_SKILLS)
         category_options = [SelectOption(label=cat, value=cat) for cat in sorted(categories.keys())]
 
@@ -71,17 +71,17 @@ class SheetEditView(ui.View):
     async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
         character = get_mgt2e_character(interaction.guild.id, self.char_id)
         # Only allow owner or GM
-        if (interaction.user.id != int(character.get_owner_id()) and
+        if (interaction.user.id != int(character.owner_id) and
             not repo.is_gm(interaction.guild.id, interaction.user.id)):
             await interaction.response.send_message("❌ Only the owner or a GM can edit notes.", ephemeral=True)
             return
-        notes = character.get_notes() if character else ""
+        notes = "\n".join(character.notes) if character and character.notes else ""
         await interaction.response.send_modal(EditNotesModal(self.char_id, notes))
 
     @ui.button(label="Edit Name", style=discord.ButtonStyle.secondary, row=2)
     async def edit_name(self, interaction: discord.Interaction, button: ui.Button):
         character = get_mgt2e_character(interaction.guild.id, self.char_id)
-        current_name = character.get_name() if character else ""
+        current_name = character.name if character else ""
         await interaction.response.send_modal(EditNameModal(self.char_id, current_name))
 
 class RollButton(ui.Button):
@@ -145,7 +145,7 @@ class EditNameModal(ui.Modal, title="Edit Character Name"):
             await interaction.response.send_message("❌ Name cannot be empty.", ephemeral=True)
             return
 
-        character.data["name"] = new_name
+        character.name = new_name  # Use property setter
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
 
         embed = sheet.format_full_sheet(character)
@@ -171,14 +171,14 @@ class EditAttributesModal(ui.Modal, title="Edit Attributes"):
             values = [int(x) for x in self.attr_field.value.strip().split()]
             if len(values) != 6:
                 raise ValueError
-            character.data["attributes"] = {
+            character.attributes = {
                 "STR": values[0],
                 "DEX": values[1],
                 "END": values[2],
                 "INT": values[3],
                 "EDU": values[4],
                 "SOC": values[5],
-            }
+            }  # Use property setter
         except Exception:
             await interaction.response.send_message("❌ Please enter 6 integers separated by spaces (e.g. `8 7 6 5 4 3`).", ephemeral=True)
             return
@@ -208,7 +208,7 @@ class EditSkillsModal(ui.Modal, title="Edit Skills"):
                     skills_dict[k.strip()] = int(v.strip())
                 except ValueError:
                     continue
-        character.data["skills"] = skills_dict
+        character.skills = skills_dict  # Use property setter
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
         embed = sheet.format_full_sheet(character)
         view = SheetEditView(interaction.user.id, self.char_id)
@@ -229,7 +229,8 @@ class EditNotesModal(ui.Modal, title="Edit Notes"):
 
     async def on_submit(self, interaction: discord.Interaction):
         character = get_mgt2e_character(interaction.guild.id, self.char_id)
-        character.data["notes"] = self.notes_field.value
+        # Notes are now a list, so split lines and assign
+        character.notes = [line for line in self.notes_field.value.splitlines() if line.strip()]
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
         embed = sheet.format_full_sheet(character)
         view = SheetEditView(interaction.user.id, self.char_id)
@@ -254,10 +255,12 @@ class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
         character = get_mgt2e_character(interaction.guild.id, self.char_id)
         value = self.value_field.value.strip()
         try:
+            skills = character.skills  # Use property
             if value.lower() == "untrained":
-                character.data["skills"][self.skill] = -3
+                skills[self.skill] = -3
             else:
-                character.data["skills"][self.skill] = int(value)
+                skills[self.skill] = int(value)
+            character.skills = skills  # Save back using property setter
         except Exception:
             await interaction.response.send_message("❌ Please enter a number or 'untrained'.", ephemeral=True)
             return
