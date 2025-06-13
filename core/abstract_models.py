@@ -102,3 +102,60 @@ class BaseSheet(ABC):
     def format_npc_scene_entry(self, npc: Dict[str, Any], is_gm: bool) -> str:
         """Return a string for displaying an NPC in a scene summary."""
         pass
+
+class BaseInitiative(ABC):
+    """
+    Abstract base class for initiative.
+    System-specific initiative classes should inherit from this and implement all methods.
+    """
+    def __init__(self, data: Dict[str, Any]):
+        self.data = data
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "BaseInitiative":
+        """Deserialize an entity from a dict."""
+        return cls(data)
+
+    @property
+    def type(self) -> str:
+        return self.data.get("type")
+
+    @type.setter
+    def type(self, value: str):
+        self.data["type"] = value
+
+    @property
+    def remaining_in_round(self) -> list:
+        return self.data.get("remaining_in_round", [])
+
+    @remaining_in_round.setter
+    def remaining_in_round(self, value: list):
+        self.data["remaining_in_round"] = value
+
+    @property
+    def round_number(self) -> int:
+        # Pythonic: default to 1 if not set
+        return self.data.get("round_number", 1)
+
+    @round_number.setter
+    def round_number(self, value: int):
+        self.data["round_number"] = value
+
+class BaseInitiativeView(ABC, discord.ui.View):
+    """
+    Abstract base class for initiative views.
+    System-specific initiative views should inherit from this and implement all methods.
+    """
+    def __init__(self, guild_id, channel_id, initiative):
+        super().__init__(timeout=120)
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.initiative = initiative
+
+    @abstractmethod
+    async def update_view(self, interaction: discord.Interaction):
+        """
+        Update the initiative view (e.g., after a turn advances).
+        Must be implemented by subclasses.
+        """
+        pass

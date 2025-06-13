@@ -90,6 +90,24 @@ CREATE TABLE IF NOT EXISTS reminders (
 )
 """)
 
+cur.execute("""
+CREATE TABLE IF NOT EXISTS initiative (
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    initiative_state TEXT NOT NULL,
+    is_active BOOLEAN NOT NULL,
+    PRIMARY KEY (guild_id, channel_id)
+)
+""")
+
+cur.execute("""
+CREATE TABLE IF NOT EXISTS server_initiative_defaults (
+    guild_id TEXT PRIMARY KEY,
+    default_type TEXT
+)
+""")
+
 conn.commit()
 conn.close()
 print("Database updated.")

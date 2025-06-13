@@ -23,6 +23,12 @@ def set_gm(guild_id, user_id):
         conn.commit()
 
 
+def get_gm_ids(guild_id):
+    with get_db() as conn:
+        cur = conn.execute("SELECT user_id FROM gms WHERE guild_id = ?", (str(guild_id),))
+        return [row[0] for row in cur.fetchall()]
+
+
 def set_system(guild_id, system):
     with get_db() as conn:
         conn.execute(
@@ -104,6 +110,7 @@ def get_character(guild_id, char_id):
         system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC if is_npc else CharacterClass.SYSTEM_SPECIFIC_CHARACTER
         system_specific = json.loads(system_specific_data)
         character = {
+            "id": char_id,
             "name": name,
             "owner_id": owner_id,
             "is_npc": is_npc,
@@ -166,6 +173,31 @@ def get_all_characters(guild_id, system=None):
     return characters
 
 
+def get_non_gm_active_characters(guild_id):
+    """
+    Returns a list of active character objects for users who are not GMs in the given guild.
+    """
+    with get_db() as conn:
+        # Get all GM user_ids for this guild
+        cur = conn.execute(
+            "SELECT user_id FROM gms WHERE guild_id = ?",
+            (str(guild_id),)
+        )
+        gm_ids = set(str(row[0]) for row in cur.fetchall())
+
+        # Get all active characters where user_id is not a GM
+        cur = conn.execute(
+            "SELECT user_id, char_id FROM active_characters WHERE guild_id = ?",
+            (str(guild_id),)
+        )
+        non_gm_active = [
+            (str(row[0]), row[1]) for row in cur.fetchall() if str(row[0]) not in gm_ids
+        ]
+
+    # Return the character objects
+    return [get_character(guild_id, char_id) for user_id, char_id in non_gm_active if get_character(guild_id, char_id) is not None]
+
+
 def set_default_skills(guild_id, system, skills_dict):
     with get_db() as conn:
         conn.execute(
@@ -207,10 +239,18 @@ def clear_scenes(guild_id):
         conn.commit()
 
 
-def get_scene_npcs(guild_id):
+def get_scene_npc_ids(guild_id):
     with get_db() as conn:
         cur = conn.execute("SELECT npc_id FROM scene_npcs WHERE guild_id = ?", (str(guild_id),))
         return [row[0] for row in cur.fetchall()]
+    
+
+def get_scene_npcs(guild_id):
+    """
+    Returns a list of all NPC character objects currently in the scene for the given guild.
+    """
+    npc_ids = get_scene_npc_ids(guild_id)
+    return [get_character(guild_id, npc_id) for npc_id in npc_ids if get_character(guild_id, npc_id) is not None]
     
 
 def set_scene_notes(guild_id, notes):
@@ -287,3 +327,90 @@ def get_reminder_time(guild_id, user_id):
         )
         row = cur.fetchone()
         return float(row[0]) if row else None
+    
+def start_initiative(guild_id, channel_id, type, initiative_state):
+    """
+    Start or update initiative for a channel.
+    """
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO initiative (guild_id, channel_id, type, initiative_state, is_active) VALUES (?, ?, ?, ?, ?)",
+            (str(guild_id), str(channel_id), type, json.dumps(initiative_state), True)
+        )
+        conn.commit()
+
+def get_initiative(guild_id, channel_id):
+    """
+    Retrieve the initiative state for a channel.
+    """
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT type, initiative_state, is_active FROM initiative WHERE guild_id = ? AND channel_id = ?",
+            (str(guild_id), str(channel_id))
+        )
+        row = cur.fetchone()
+        if row:
+            type, initiative_state, is_active = row
+            return {
+                "type": type,
+                "initiative_state": json.loads(initiative_state),
+                "is_active": bool(is_active)
+            }
+        return None
+
+def update_initiative_state(guild_id, channel_id, initiative_state):
+    """
+    Update the initiative_state for a channel.
+    """
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE initiative SET initiative_state = ? WHERE guild_id = ? AND channel_id = ?",
+            (json.dumps(initiative_state), str(guild_id), str(channel_id))
+        )
+        conn.commit()
+
+def set_initiative_active(guild_id, channel_id, is_active):
+    """
+    Set whether initiative is active for a channel.
+    """
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE initiative SET is_active = ? WHERE guild_id = ? AND channel_id = ?",
+            (bool(is_active), str(guild_id), str(channel_id))
+        )
+        conn.commit()
+
+def end_initiative(guild_id, channel_id):
+    """
+    Remove initiative for a channel (ends initiative).
+    """
+    with get_db() as conn:
+        conn.execute(
+            "DELETE FROM initiative WHERE guild_id = ? AND channel_id = ?",
+            (str(guild_id), str(channel_id))
+        )
+        conn.commit()
+
+def set_default_initiative_type(guild_id, default_type):
+    """
+    Set the default initiative type for a server.
+    """
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO server_initiative_defaults (guild_id, default_type) VALUES (?, ?)",
+            (str(guild_id), default_type)
+        )
+        conn.commit()
+
+def get_default_initiative_type(guild_id):
+    """
+    Get the default initiative type for a server.
+    Returns the type as a string, or None if not set.
+    """
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT default_type FROM server_initiative_defaults WHERE guild_id = ?",
+            (str(guild_id),)
+        )
+        row = cur.fetchone()
+        return row[0] if row else None
