@@ -1,12 +1,15 @@
 from core import initiative_types, initiative_views
 from rpg_systems.fate import fate_sheet, fate_views, fate_character
 from rpg_systems.mgt2e import mgt2e_sheet, mgt2e_views, mgt2e_character
+from rpg_systems.generic import generic_sheet, generic_views, generic_character
 
 def get_specific_character(system: str):
     if system == "fate":
         return fate_character.FateCharacter
     elif system == "mgt2e":
         return mgt2e_character.MGT2ECharacter
+    elif system == "generic":
+        return generic_character.GenericCharacter
     else:
         raise ValueError(f"Unknown system: {system}")
 
@@ -15,6 +18,8 @@ def get_specific_sheet(system: str):
         return fate_sheet.FateSheet()
     elif system == "mgt2e":
         return mgt2e_sheet.MGT2ESheet()
+    elif system == "generic":
+        return generic_sheet.GenericSheet()
     else:
         raise ValueError(f"Unknown system: {system}")
 
@@ -23,6 +28,8 @@ def get_specific_sheet_view(system: str, editor_id: str, char_id: str):
         return fate_views.SheetEditView(editor_id=editor_id, char_id=char_id)
     elif system == "mgt2e":
         return mgt2e_views.SheetEditView(editor_id=editor_id, char_id=char_id)
+    elif system == "generic":
+        return generic_views.SheetEditView(editor_id=editor_id, char_id=char_id)
     else:
         raise ValueError(f"Unknown system: {system}")
 

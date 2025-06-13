@@ -73,7 +73,7 @@ def setup_commands(bot):
     @bot.command()
     @commands.has_permissions(administrator=True)
     async def setsystem(ctx, system: str):
-        valid_systems = ["fate", "mgt2e"]
+        valid_systems = ["generic", "fate", "mgt2e"]
         system = system.lower()
         if system not in valid_systems:
             await ctx.send(f"❌ Invalid system. Valid options: {', '.join(valid_systems)}")

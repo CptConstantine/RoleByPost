@@ -67,7 +67,7 @@ def set_character(guild_id, character: BaseCharacter, system=None):
     for key in system_fields:
         system_specific_data[key] = character.data.get(key)
 
-    notes = character.notes or ""
+    notes = character.notes or []
 
     with get_db() as conn:
         conn.execute("""
@@ -82,7 +82,7 @@ def set_character(guild_id, character: BaseCharacter, system=None):
             str(character.owner_id),
             bool(character.is_npc),
             json.dumps(system_specific_data),
-            notes
+            json.dumps(notes)
         ))
         conn.commit()
 
@@ -104,7 +104,7 @@ def get_character(guild_id, char_id):
             if not row:
                 return None
             system, name, owner_id, is_npc, system_specific_data = row
-            notes = ""
+            notes = []
 
         CharacterClass = system_factory.get_specific_character(system)
         system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC if is_npc else CharacterClass.SYSTEM_SPECIFIC_CHARACTER
@@ -114,7 +114,7 @@ def get_character(guild_id, char_id):
             "name": name,
             "owner_id": owner_id,
             "is_npc": is_npc,
-            "notes": notes or "",
+            "notes": json.loads(notes) or [],
         }
         for key in system_fields:
             character[key] = system_specific.get(key, system_fields[key])

@@ -35,6 +35,7 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 
 ## Supported Systems
 
+- **Generic**
 - **Fate Core**
 - **Mongoose Traveller 2e**
 
@@ -118,11 +119,16 @@ The following are the commands that are currently available.
 
 ## Features Planned
 
+### Top Priority
+
+- GM can ask for a specific roll with a command
+- Commands to make narration and dialogue more interesting
+- User can provide an OpenAI API key to gain access to commands that use AI (summarize recent posts, ask rules questions)
+
+### Secondary Priority
+
 - Support for other systems
 - System specific commands (ex. starships, travel, and maintenance cost calculations for Traveller; system specific damage calculations)
-- GM can ask for a specific roll with a command
-- User can provide an OpenAI API key to gain access to commands that use AI (summarize recent posts, ask rules questions)
-- Commands to make narration and dialogue more interesting
 
 ---
 
@@ -132,9 +138,7 @@ Pull requests and suggestions are welcome! Please open an issue or PR for bug fi
 
 ---
 
-## Getting Started
-
-### Prerequisites
+### Development Prerequisites
 
 - Developed on Python 3.12.10
 - A Discord bot token ([how to create one](https://discord.com/developers/applications))

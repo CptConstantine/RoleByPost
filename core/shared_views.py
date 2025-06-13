@@ -130,3 +130,4 @@ class EditSceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
         )
         view = SceneNotesEditView(self.guild_id, is_gm)
         await interaction.response.edit_message(embed=embed, view=view)
+

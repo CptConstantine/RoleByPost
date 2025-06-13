@@ -78,6 +78,7 @@ class BaseCharacter(BaseRpgObj):
     @name.setter
     def name(self, value: str):
         self.data["name"] = value
+        self.id = get_pc_id(self.data["name"]) if self.is_npc else get_npc_id(self.data["name"])
 
     @property
     def is_npc(self) -> bool:

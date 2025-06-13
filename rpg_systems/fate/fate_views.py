@@ -1,3 +1,4 @@
+from core.abstract_models import get_npc_id, get_pc_id
 from core.shared_views import PaginatedSelectView
 from discord import ui, SelectOption
 import discord
@@ -100,7 +101,7 @@ class EditNameModal(ui.Modal, title="Edit Character Name"):
             await interaction.response.send_message("❌ Name cannot be empty.", ephemeral=True)
             return
 
-        character.name = new_name  # Use property setter
+        character.name = new_name
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
 
         embed = sheet.format_full_sheet(character)

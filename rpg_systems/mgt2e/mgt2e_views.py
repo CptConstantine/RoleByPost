@@ -1,5 +1,6 @@
 from discord import ui, SelectOption
 import discord
+from core.abstract_models import get_npc_id, get_pc_id
 from data import repo
 from rpg_systems.mgt2e.mgt2e_sheet import MGT2ESheet
 from rpg_systems.mgt2e.mgt2e_character import MGT2ECharacter
@@ -145,7 +146,7 @@ class EditNameModal(ui.Modal, title="Edit Character Name"):
             await interaction.response.send_message("❌ Name cannot be empty.", ephemeral=True)
             return
 
-        character.name = new_name  # Use property setter
+        character.name = new_name
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
 
         embed = sheet.format_full_sheet(character)
