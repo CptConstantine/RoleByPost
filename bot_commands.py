@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from core import initiative_views, shared_views
+from core.initiative_types import InitiativeParticipant
 from data import repo
 from core.abstract_models import get_pc_id, get_npc_id
 import core.system_factory as system_factory
@@ -554,12 +555,12 @@ def setup(bot):
         pcs = repo.get_non_gm_active_characters(guild_id)
         npcs = repo.get_scene_npcs(guild_id)
         participants = [
-            {
-                "id": str(c.id),
-                "name": c.name,
-                "owner_id": str(c.owner_id),
-                "is_npc": bool(c.is_npc)
-            }
+            InitiativeParticipant(
+                id=str(c.id),
+                name=c.name,
+                owner_id=str(c.owner_id),
+                is_npc=bool(c.is_npc)
+            )
             for c in pcs + npcs
         ]
 
@@ -645,7 +646,7 @@ def setup(bot):
             return
 
         # Find matching participants by name (case-insensitive)
-        name_to_participant = {p["name"].lower(): p for p in initiative.participants}
+        name_to_participant = {p.name.lower(): p for p in initiative.participants}
         new_order = []
         for name in names:
             p = name_to_participant.get(name.lower())
@@ -654,14 +655,11 @@ def setup(bot):
                 return
             new_order.append(p)
 
-        # Update initiative order and reset turn
-        initiative.data["participants"] = new_order
-        initiative.data["current_index"] = 0
-        initiative.data["round_number"] = 1
-        initiative.data["active"] = False  # Require GM to press Start Initiative
+        # Save as dicts for DB
+        initiative.participants = new_order
 
         repo.update_initiative_state(interaction.guild.id, interaction.channel.id, initiative.to_dict())
         await interaction.response.send_message(
-            f"✅ Initiative order set:\n{'\n'.join([p['name'] for p in new_order])}\nPress Start Initiative to begin.",
+            f"✅ Initiative order set: {', '.join([p.name for p in new_order])}. Press Start Initiative to begin.",
             ephemeral=True
         )

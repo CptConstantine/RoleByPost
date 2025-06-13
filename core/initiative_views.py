@@ -10,13 +10,14 @@ class GenericInitiativeView(BaseInitiativeView):
     """
     View for generic initiative: End Turn button, shows current participant.
     """
-    def __init__(self, guild_id, channel_id, initiative):
+    def __init__(self, guild_id, channel_id, initiative: GenericInitiative):
         super().__init__(guild_id, channel_id, initiative)
         self.gm_ids = repo.get_gm_ids(guild_id)
         self.allowed_ids = list(self.gm_ids) # Only GM can start initiative
-        if not initiative.is_active:
+        if not initiative.is_started:
             self.add_item(StartInitiativeButton(self))
         else:
+            self.allowed_ids.append(initiative.current)  # Current participant can end their turn
             self.add_item(EndTurnButton(self))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -25,10 +26,15 @@ class GenericInitiativeView(BaseInitiativeView):
 
     async def update_view(self, interaction: discord.Interaction):
         new_view = GenericInitiativeView(self.guild_id, self.channel_id, self.initiative)
-        if not self.initiative.is_active:
-            await interaction.response.edit_message(
+        if not self.initiative.is_started:
+            await interaction.response.send_message(
                 content="GM: Press Start to begin initiative.",
                 view=new_view
+            )
+        elif not self.initiative.participants:
+            await interaction.response.send_message(
+                content="No participants in initiative.",
+                view=None
             )
         else:
             name = self.initiative.get_participant_name(self.initiative.current)
@@ -43,12 +49,13 @@ class StartInitiativeButton(ui.Button):
         self.parent_view = parent_view
 
     async def callback(self, interaction: discord.Interaction):
-        # Update the initiative state in the DB
-        initiative = self.parent_view.initiative
-        initiative.is_active = True
+        # Retrieve the initiative dict from the repo
+        initiative_data = repo.get_initiative(self.parent_view.guild_id, self.parent_view.channel_id)
+        initiative = GenericInitiative.from_dict(initiative_data["initiative_state"])
+        initiative.is_started = True
         initiative.current_index = 0
-        repo.update_initiative_state(self.parent_view.guild_id, self.parent_view.channel_id, initiative.to_dict())
         self.parent_view.initiative = initiative
+        repo.update_initiative_state(self.parent_view.guild_id, self.parent_view.channel_id, initiative.to_dict())
         await self.parent_view.update_view(interaction)
 
 class EndTurnButton(ui.Button):
@@ -77,15 +84,15 @@ class PopcornInitiativeView(BaseInitiativeView):
         if initiative.current is None:
             unique_participants = {}
             for p in initiative.participants:
-                unique_participants[p["id"]] = p
-            options = [SelectOption(label=p["name"], value=p["id"]) for p in unique_participants.values()]
+                unique_participants[p.id] = p
+            options = [SelectOption(label=p.name, value=p.id) for p in unique_participants.values()]
             self.add_item(FirstPickerSelect(options, self))
         else:
             options = []
             # If it's the end of the round, allow picking anyone (including yourself)
             if initiative.is_round_end():
                 for p in initiative.participants:
-                    options.append(SelectOption(label=p["name"], value=p["id"]))
+                    options.append(SelectOption(label=p.name, value=p.id))
             else:
                 for pid in initiative.remaining_in_round:
                     name = initiative.get_participant_name(pid)
@@ -126,7 +133,7 @@ class FirstPickerSelect(ui.Select):
         initiative = self.parent_view.initiative
         # Set the first turn
         initiative.current = first_id
-        initiative.remaining_in_round = [p["id"] for p in initiative.participants if p["id"] != first_id]
+        initiative.remaining_in_round = [p.id for p in initiative.participants if p.id != first_id]
         # Save updated initiative state to DB
         repo.update_initiative_state(self.parent_view.guild_id, self.parent_view.channel_id, initiative.to_dict())
         await self.parent_view.update_view(interaction)
