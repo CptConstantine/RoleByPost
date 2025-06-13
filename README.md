@@ -25,6 +25,12 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 - **Reminders**  
   - GMs can remind specific users or roles to post, with a custom message and delay (e.g., "in 2d" or "in 12h").
 
+- **Initiative Management**
+  - Supports multiple initiative types:
+    - **Generic:** GM sets the order, and turns proceed in that order. Start/End Turn buttons notify the next participant.
+    - **Popcorn:** Each participant picks who goes next; at the end of a round, the last person can pick anyone (including themselves) to start the next round.
+  - Buttons for starting and ending turns, and display the current round and participant.
+
 ---
 
 ## Supported Systems
@@ -95,13 +101,28 @@ The following are the commands that are currently available.
 - `!scene_clear`  
   Clear all NPCs from the scene.
 
+### Initiative
+
+- `/initiative_start [type] [scene]`  
+  Start initiative in the current channel. Type can be "generic" or "popcorn". Scene is optional; uses the current scene if none is provided.
+- `/initiative_set_order order="Name1, Name2, Name3"`  
+  (GM only) Set the initiative order by providing a comma-separated list of participant names.
+- `/initiative_end`  
+  End initiative in the current channel.
+- `/initiative_add [name]`  
+  Add a PC or NPC to the current initiative.
+- `/initiative_remove [name]`  
+  Remove a PC or NPC from the current initiative.
+
 ---
 
 ## Features Planned
 
 - Support for other systems
 - System specific commands (ex. starships, travel, and maintenance cost calculations for Traveller; system specific damage calculations)
+- GM can ask for a specific roll with a command
 - User can provide an OpenAI API key to gain access to commands that use AI (summarize recent posts, ask rules questions)
+- Commands to make narration and dialogue more interesting
 
 ---
 
