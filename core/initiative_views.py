@@ -4,8 +4,6 @@ from data import repo
 from core.abstract_models import BaseInitiativeView
 from core.initiative_types import GenericInitiative, PopcornInitiative
 
-# This bullshit skips a turn when starting
-
 class GenericInitiativeView(BaseInitiativeView):
     """
     View for generic initiative: End Turn button, shows current participant.

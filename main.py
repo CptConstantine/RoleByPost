@@ -3,9 +3,8 @@ import logging
 import dotenv
 import discord
 from discord.ext import commands
-
 from data import repo
-
+import bot_commands
 
 dotenv.load_dotenv()
 
@@ -14,16 +13,13 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-
 @bot.event
 async def setup_hook():
     await bot.tree.sync()
 
-
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}!')
-
 
 @bot.event
 async def on_guild_join(guild):
@@ -45,16 +41,13 @@ async def on_guild_join(guild):
                 )
                 break
 
-
 @bot.event
 async def on_message(message):
     if message.guild and not message.author.bot:
         repo.set_last_message_time(message.guild.id, message.author.id, message.created_at.timestamp())
     await bot.process_commands(message)
 
-
-import bot_commands
-bot_commands.setup(bot)
+bot_commands.setup_commands(bot)
 
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 bot.run(os.getenv("DISCORD_BOT_TOKEN"), log_handler=handler, log_level=logging.DEBUG)

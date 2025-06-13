@@ -59,7 +59,7 @@ async def npc_name_autocomplete(interaction: discord.Interaction, current: str):
     options = [c.name for c in npcs]
     return [app_commands.Choice(name=name, value=name) for name in options[:25]]
 
-def setup(bot):
+def setup_commands(bot):
     @bot.command()
     async def myguild(ctx):
         await ctx.send(f"This server's guild_id is {ctx.guild.id}")
