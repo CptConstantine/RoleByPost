@@ -1,22 +1,14 @@
-from core.abstract_models import get_npc_id, get_pc_id
-from core.shared_views import PaginatedSelectView
+from core.shared_views import PaginatedSelectView, EditNameModal, EditNotesModal, get_character
 from discord import ui, SelectOption
 import discord
 from data import repo
 from rpg_systems.fate.fate_sheet import FateSheet
 from rpg_systems.fate.fate_character import FateCharacter
 
-
 SYSTEM = "fate"
 sheet = FateSheet()
 
-
-def get_fate_character(guild_id, char_id):
-    character = repo.get_character(guild_id, char_id)
-    return character if character else None
-
-
-class SheetEditView(ui.View):
+class FateSheetEditView(ui.View):
     def __init__(self, editor_id: int, char_id: str):
         super().__init__(timeout=120)
         self.editor_id = editor_id
@@ -31,9 +23,15 @@ class SheetEditView(ui.View):
 
     @ui.button(label="Edit Name", style=discord.ButtonStyle.secondary, row=1)
     async def edit_name(self, interaction: discord.Interaction, button: ui.Button):
-        character = get_fate_character(interaction.guild.id, self.char_id)
-        current_name = character.name if character else ""
-        await interaction.response.send_modal(EditNameModal(self.char_id, current_name))
+        character = get_character(interaction.guild.id, self.char_id)
+        await interaction.response.send_modal(
+            EditNameModal(
+                self.char_id,
+                character.name if character else "",
+                SYSTEM,
+                lambda editor_id, char_id: (sheet.format_full_sheet(get_character(interaction.guild.id, char_id)), FateSheetEditView(editor_id, char_id))
+            )
+        )
 
     @ui.button(label="Edit Aspects", style=discord.ButtonStyle.secondary, row=2)
     async def edit_aspects(self, interaction: discord.Interaction, button: ui.Button):
@@ -41,7 +39,7 @@ class SheetEditView(ui.View):
 
     @ui.button(label="Edit Skills", style=discord.ButtonStyle.secondary, row=2)
     async def edit_skills(self, interaction: discord.Interaction, button: ui.Button):
-        character = get_fate_character(interaction.guild.id, self.char_id)
+        character = get_character(interaction.guild.id, self.char_id)
         skills = character.skills if character else {}
         skill_options = [SelectOption(label=k, value=k) for k in sorted(skills.keys())]
 
@@ -69,45 +67,16 @@ class SheetEditView(ui.View):
 
     @ui.button(label="Edit Notes", style=discord.ButtonStyle.secondary, row=4)
     async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
-        character = get_fate_character(interaction.guild.id, self.char_id)
-        # Only allow owner or GM
-        if (interaction.user.id != int(character.owner_id) and
-            not repo.is_gm(interaction.guild.id, interaction.user.id)):
-            await interaction.response.send_message("❌ Only the owner or a GM can edit notes.", ephemeral=True)
-            return
+        character = get_character(interaction.guild.id, self.char_id)
         notes = "\n".join(character.notes) if character and character.notes else ""
-        await interaction.response.send_modal(EditNotesModal(self.char_id, notes))
-
-
-class EditNameModal(ui.Modal, title="Edit Character Name"):
-    def __init__(self, char_id: str, current_name: str):
-        super().__init__()
-        self.char_id = char_id
-        self.name_input = ui.TextInput(
-            label="New Name",
-            default=current_name,
-            max_length=100
+        await interaction.response.send_modal(
+            EditNotesModal(
+                self.char_id,
+                notes,
+                SYSTEM,
+                lambda editor_id, char_id: (sheet.format_full_sheet(get_character(interaction.guild.id, char_id)), FateSheetEditView(editor_id, char_id))
+            )
         )
-        self.add_item(self.name_input)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        character = get_fate_character(interaction.guild.id, self.char_id)
-        if not character:
-            await interaction.response.send_message("❌ Character not found.", ephemeral=True)
-            return
-
-        new_name = self.name_input.value.strip()
-        if not new_name:
-            await interaction.response.send_message("❌ Name cannot be empty.", ephemeral=True)
-            return
-
-        character.name = new_name
-        repo.set_character(interaction.guild.id, character, system=SYSTEM)
-
-        embed = sheet.format_full_sheet(character)
-        view = SheetEditView(interaction.user.id, self.char_id)
-        await interaction.response.edit_message(content="✅ Name updated.", embed=embed, view=view)
-
 
 class EditAspectsView(ui.View):
     def __init__(self, guild_id: int, user_id: int, char_id: str):
@@ -125,7 +94,7 @@ class EditAspectsView(ui.View):
         self.render()
 
     def load_data(self):
-        self.char = get_fate_character(self.guild_id, self.char_id)
+        self.char = get_character(self.guild_id, self.char_id)
         if not self.char:
             self.aspects = []
             self.hidden_aspects = []
@@ -161,7 +130,7 @@ class EditAspectsView(ui.View):
                 await interaction.response.send_message("You can’t edit this character.", ephemeral=True)
                 return
 
-            self.char = get_fate_character(interaction.guild.id, self.char_id)
+            self.char = get_character(interaction.guild.id, self.char_id)
             self.aspects = self.char.aspects
             self.hidden_aspects = self.char.hidden_aspects
 
@@ -191,7 +160,7 @@ class EditAspectsView(ui.View):
                 await interaction.response.send_modal(AddAspectModal(self.char_id))
                 return
             elif cid == "done":
-                await interaction.response.edit_message(content="✅ Done editing aspects.", embed=sheet.format_full_sheet(self.char), view=SheetEditView(interaction.user.id, self.char_id))
+                await interaction.response.edit_message(content="✅ Done editing aspects.", embed=sheet.format_full_sheet(self.char), view=FateSheetEditView(interaction.user.id, self.char_id))
                 return
 
             repo.set_character(interaction.guild.id, self.char, system=SYSTEM)
@@ -208,7 +177,7 @@ class EditAspectModal(ui.Modal, title="Edit Aspect"):
         self.add_item(ui.TextInput(label="Aspect", default=current, max_length=100))
 
     async def on_submit(self, interaction: discord.Interaction):
-        character = get_fate_character(interaction.guild.id, self.char_id)
+        character = get_character(interaction.guild.id, self.char_id)
         aspects = character.aspects
         if self.index >= len(aspects):
             await interaction.response.send_message("❌ Aspect not found.", ephemeral=True)
@@ -225,7 +194,7 @@ class AddAspectModal(ui.Modal, title="Add Aspect"):
         self.add_item(ui.TextInput(label="New Aspect", max_length=100))
 
     async def on_submit(self, interaction: discord.Interaction):
-        character = get_fate_character(interaction.guild.id, self.char_id)
+        character = get_character(interaction.guild.id, self.char_id)
         aspects = character.aspects
         aspects.append(self.children[0].value.strip())
         character.aspects = aspects
@@ -241,13 +210,13 @@ class EditStressModal(ui.Modal, title="Edit Stress"):
         self.char_id = char_id
 
     async def on_submit(self, interaction: discord.Interaction):
-        character = get_fate_character(interaction.guild.id, self.char_id)
+        character = get_character(interaction.guild.id, self.char_id)
         stress = character.stress
         stress["physical"] = [bool(int(x)) for x in self.physical.value.split()]
         stress["mental"] = [bool(int(x)) for x in self.mental.value.split()]
         character.stress = stress
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
-        await interaction.response.edit_message(content="✅ Stress updated!", embed=sheet.format_full_sheet(character), view=SheetEditView(interaction.user.id, self.char_id))
+        await interaction.response.edit_message(content="✅ Stress updated!", embed=sheet.format_full_sheet(character), view=FateSheetEditView(interaction.user.id, self.char_id))
 
 class EditFatePointsModal(ui.Modal, title="Edit Fate Points"):
     fate_points = ui.TextInput(label="Fate Points", required=True)
@@ -257,14 +226,14 @@ class EditFatePointsModal(ui.Modal, title="Edit Fate Points"):
         self.char_id = char_id
 
     async def on_submit(self, interaction: discord.Interaction):
-        character = get_fate_character(interaction.guild.id, self.char_id)
+        character = get_character(interaction.guild.id, self.char_id)
         try:
             character.fate_points = int(self.fate_points.value)
         except ValueError:
             await interaction.response.send_message("❌ Invalid number.", ephemeral=True)
             return
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
-        await interaction.response.edit_message(content="✅ Fate Points updated.", embed=sheet.format_full_sheet(character), view=SheetEditView(interaction.user.id, self.char_id))
+        await interaction.response.edit_message(content="✅ Fate Points updated.", embed=sheet.format_full_sheet(character), view=FateSheetEditView(interaction.user.id, self.char_id))
 
 class EditConsequenceModal(ui.Modal, title="Edit Consequence"):
     def __init__(self, char_id: str, index: int, current: str):
@@ -274,7 +243,7 @@ class EditConsequenceModal(ui.Modal, title="Edit Consequence"):
         self.add_item(ui.TextInput(label="Consequence", default=current, max_length=100))
 
     async def on_submit(self, interaction: discord.Interaction):
-        character = get_fate_character(interaction.guild.id, self.char_id)
+        character = get_character(interaction.guild.id, self.char_id)
         consequences = character.consequences
         if self.index >= len(consequences):
             await interaction.response.send_message("❌ Consequence not found.", ephemeral=True)
@@ -291,7 +260,7 @@ class AddConsequenceModal(ui.Modal, title="Add Consequence"):
         self.add_item(ui.TextInput(label="New Consequence", max_length=100))
 
     async def on_submit(self, interaction: discord.Interaction):
-        character = get_fate_character(interaction.guild.id, self.char_id)
+        character = get_character(interaction.guild.id, self.char_id)
         consequences = character.consequences
         consequences.append(self.children[0].value.strip())
         character.consequences = consequences
@@ -306,7 +275,7 @@ class EditConsequencesView(ui.View):
         self.char_id = char_id
         self.page = 0
 
-        self.char = get_fate_character(self.guild_id, self.char_id)
+        self.char = get_character(self.guild_id, self.char_id)
         self.consequences = self.char.consequences if self.char else []
         self.max_page = max(0, len(self.consequences) - 1)
         self.render()
@@ -334,7 +303,7 @@ class EditConsequencesView(ui.View):
                 await interaction.response.send_message("You can’t edit this character.", ephemeral=True)
                 return
 
-            self.char = get_fate_character(interaction.guild.id, self.char_id)
+            self.char = get_character(interaction.guild.id, self.char_id)
             self.consequences = self.char.consequences if self.char else []
 
             if cid == "prev":
@@ -353,7 +322,7 @@ class EditConsequencesView(ui.View):
                 await interaction.response.send_modal(AddConsequenceModal(self.char_id))
                 return
             elif cid == "done":
-                await interaction.response.edit_message(content="✅ Done editing consequences.", embed=sheet.format_full_sheet(self.char), view=SheetEditView(interaction.user.id, self.char_id))
+                await interaction.response.edit_message(content="✅ Done editing consequences.", embed=sheet.format_full_sheet(self.char), view=FateSheetEditView(interaction.user.id, self.char_id))
                 return
 
             repo.set_character(interaction.guild.id, self.char, system=SYSTEM)
@@ -371,7 +340,7 @@ class RollButton(ui.Button):
         if interaction.user.id != self.editor_id:
             await interaction.response.send_message("You can’t roll for this character.", ephemeral=True)
             return
-        character = get_fate_character(interaction.guild.id, self.char_id)
+        character = get_character(interaction.guild.id, self.char_id)
         skills = character.skills if character else {}
         skill_options = [SelectOption(label=k, value=k) for k in sorted(skills.keys())]
 
@@ -384,28 +353,6 @@ class RollButton(ui.Button):
             view=PaginatedSelectView(skill_options, on_skill_selected, interaction.user.id, prompt="Select a skill to roll:"),
             ephemeral=True
         )
-
-class EditNotesModal(ui.Modal, title="Edit Notes"):
-    def __init__(self, char_id: str, notes: str):
-        super().__init__()
-        self.char_id = char_id
-        self.notes_field = ui.TextInput(
-            label="Notes",
-            style=discord.TextStyle.paragraph,
-            required=False,
-            default=notes,
-            max_length=2000
-        )
-        self.add_item(self.notes_field)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        character = get_fate_character(interaction.guild.id, self.char_id)
-        # Notes are now a list, so split lines and assign
-        character.notes = [line for line in self.notes_field.value.splitlines() if line.strip()]
-        repo.set_character(interaction.guild.id, character, system=SYSTEM)
-        embed = sheet.format_full_sheet(character)
-        view = SheetEditView(interaction.user.id, self.char_id)
-        await interaction.response.edit_message(content="✅ Notes updated.", embed=embed, view=view)
 
 class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
     def __init__(self, char_id: str, skill: str, current_value: int = 0):
@@ -424,7 +371,7 @@ class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
         self.add_item(self.value_field)
 
     async def on_submit(self, interaction: discord.Interaction):
-        character = get_fate_character(interaction.guild.id, self.char_id)
+        character = get_character(interaction.guild.id, self.char_id)
         value = self.value_field.value.strip()
         try:
             value_int = int(value)
@@ -438,5 +385,5 @@ class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
         character.skills = skills
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
         embed = sheet.format_full_sheet(character)
-        view = SheetEditView(interaction.user.id, self.char_id)
+        view = FateSheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(content=f"✅ {self.skill} updated.", embed=embed, view=view)

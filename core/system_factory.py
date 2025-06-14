@@ -25,11 +25,11 @@ def get_specific_sheet(system: str):
 
 def get_specific_sheet_view(system: str, editor_id: str, char_id: str):
     if system == "fate":
-        return fate_views.SheetEditView(editor_id=editor_id, char_id=char_id)
+        return fate_views.FateSheetEditView(editor_id=editor_id, char_id=char_id)
     elif system == "mgt2e":
-        return mgt2e_views.SheetEditView(editor_id=editor_id, char_id=char_id)
+        return mgt2e_views.MGT2ESheetEditView(editor_id=editor_id, char_id=char_id)
     elif system == "generic":
-        return generic_views.SheetEditView(editor_id=editor_id, char_id=char_id)
+        return generic_views.GenericSheetEditView(editor_id=editor_id, char_id=char_id)
     else:
         raise ValueError(f"Unknown system: {system}")
 

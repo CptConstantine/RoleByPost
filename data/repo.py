@@ -87,30 +87,47 @@ def set_character(guild_id, character: BaseCharacter, system=None):
         conn.commit()
 
 
-def get_character(guild_id, char_id):
+def get_character(guild_id, char_name):
     """
     Load a character from the database and return an instance of the system-specific Character class.
     """
     with get_db() as conn:
-        try:
-            cur = conn.execute("SELECT system, name, owner_id, is_npc, system_specific_data, notes FROM characters WHERE guild_id = ? AND id = ?", (str(guild_id), str(char_id)))
-            row = cur.fetchone()
-            if not row:
-                return None
-            system, name, owner_id, is_npc, system_specific_data, notes = row
-        except sqlite3.OperationalError:
-            cur = conn.execute("SELECT system, name, owner_id, is_npc, system_specific_data FROM characters WHERE guild_id = ? AND id = ?", (str(guild_id), str(char_id)))
-            row = cur.fetchone()
-            if not row:
-                return None
-            system, name, owner_id, is_npc, system_specific_data = row
-            notes = []
+        cur = conn.execute("SELECT id, system, name, owner_id, is_npc, system_specific_data, notes FROM characters WHERE guild_id = ? AND name = ?", (str(guild_id), str(char_name)))
+        row = cur.fetchone()
+        if not row:
+            return None
+        id, system, name, owner_id, is_npc, system_specific_data, notes = row
 
         CharacterClass = system_factory.get_specific_character(system)
         system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC if is_npc else CharacterClass.SYSTEM_SPECIFIC_CHARACTER
         system_specific = json.loads(system_specific_data)
         character = {
-            "id": char_id,
+            "id": id,
+            "name": name,
+            "owner_id": owner_id,
+            "is_npc": is_npc,
+            "notes": json.loads(notes) or [],
+        }
+        for key in system_fields:
+            character[key] = system_specific.get(key, system_fields[key])
+        return CharacterClass.from_dict(character)
+
+def get_character_by_id(guild_id, char_id):
+    """
+    Load a character from the database and return an instance of the system-specific Character class.
+    """
+    with get_db() as conn:
+        cur = conn.execute("SELECT id, system, name, owner_id, is_npc, system_specific_data, notes FROM characters WHERE guild_id = ? AND id = ?", (str(guild_id), str(char_id)))
+        row = cur.fetchone()
+        if not row:
+            return None
+        id, system, name, owner_id, is_npc, system_specific_data, notes = row
+
+        CharacterClass = system_factory.get_specific_character(system)
+        system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC if is_npc else CharacterClass.SYSTEM_SPECIFIC_CHARACTER
+        system_specific = json.loads(system_specific_data)
+        character = {
+            "id": id,
             "name": name,
             "owner_id": owner_id,
             "is_npc": is_npc,
@@ -281,14 +298,14 @@ def set_active_character(guild_id, user_id, char_id):
         conn.commit()
 
 
-def get_active_character_id(guild_id, user_id):
+def get_active_character(guild_id, user_id):
     with get_db() as conn:
         cur = conn.execute(
             "SELECT char_id FROM active_characters WHERE guild_id = ? AND user_id = ?",
             (str(guild_id), str(user_id))
         )
         row = cur.fetchone()
-        return row[0] if row else None
+        return get_character_by_id(guild_id, row[0]) if row else None
 
 
 def set_last_message_time(guild_id, user_id, timestamp):

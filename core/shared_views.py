@@ -1,8 +1,11 @@
 import discord
-from discord import ui
+from discord import Interaction, TextStyle, ui
 from core import system_factory
 from data import repo
 
+def get_character(guild_id, char_id):
+    character = repo.get_character_by_id(guild_id, char_id)
+    return character if character else None
 
 class PaginatedSelectView(ui.View):
     def __init__(self, options, select_callback, user_id, prompt="Select an option:", page=0, page_size=25):
@@ -131,3 +134,51 @@ class EditSceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
         view = SceneNotesEditView(self.guild_id, is_gm)
         await interaction.response.edit_message(embed=embed, view=view)
 
+class EditNameModal(ui.Modal, title="Edit Character Name"):
+    def __init__(self, char_id: str, current_name: str, system: str, make_view_embed):
+        super().__init__()
+        self.char_id = char_id
+        self.system = system
+        self.make_view_embed = make_view_embed
+        self.name_input = ui.TextInput(
+            label="New Name",
+            default=current_name,
+            max_length=100
+        )
+        self.add_item(self.name_input)
+
+    async def on_submit(self, interaction: Interaction):
+        character = get_character(interaction.guild.id, self.char_id)
+        if not character:
+            await interaction.response.send_message("❌ Character not found.", ephemeral=True)
+            return
+        new_name = self.name_input.value.strip()
+        if not new_name:
+            await interaction.response.send_message("❌ Name cannot be empty.", ephemeral=True)
+            return
+        character.name = new_name
+        repo.set_character(interaction.guild.id, character, system=self.system)
+        embed, view = self.make_view_embed(interaction.user.id, self.char_id)
+        await interaction.response.edit_message(content="✅ Name updated.", embed=embed, view=view)
+
+class EditNotesModal(ui.Modal, title="Edit Notes"):
+    def __init__(self, char_id: str, notes: str, system: str, make_view_embed):
+        super().__init__()
+        self.char_id = char_id
+        self.system = system
+        self.make_view_embed = make_view_embed
+        self.notes_field = ui.TextInput(
+            label="Notes",
+            style=TextStyle.paragraph,
+            required=False,
+            default=notes,
+            max_length=2000
+        )
+        self.add_item(self.notes_field)
+
+    async def on_submit(self, interaction: Interaction):
+        character = get_character(interaction.guild.id, self.char_id)
+        character.notes = [line for line in self.notes_field.value.splitlines() if line.strip()]
+        repo.set_character(interaction.guild.id, character, system=self.system)
+        embed, view = self.make_view_embed(interaction.user.id, self.char_id)
+        await interaction.response.edit_message(content="✅ Notes updated.", embed=embed, view=view)

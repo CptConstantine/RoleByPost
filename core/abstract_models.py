@@ -3,14 +3,6 @@ from typing import Any, Dict, List, Optional
 
 import discord
 
-def get_pc_id(name):
-    """Generate a player character ID from a name."""
-    return f"pc:{name.lower().replace(' ', '_')}"
-
-def get_npc_id(name):
-    """Generate an NPC ID from a name."""
-    return f"npc:{name.lower().replace(' ', '_')}"
-
 class NotesMixin:
     def add_note(self, note: str):
         if "notes" not in self.data or not isinstance(self.data["notes"], list):
@@ -78,7 +70,6 @@ class BaseCharacter(BaseRpgObj):
     @name.setter
     def name(self, value: str):
         self.data["name"] = value
-        self.id = get_pc_id(self.data["name"]) if self.is_npc else get_npc_id(self.data["name"])
 
     @property
     def is_npc(self) -> bool:

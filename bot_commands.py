@@ -1,10 +1,10 @@
+import uuid
 import discord
 from discord.ext import commands
 from discord import app_commands
 from core import initiative_views, shared_views
 from core.initiative_types import InitiativeParticipant
 from data import repo
-from core.abstract_models import get_pc_id, get_npc_id
 import core.system_factory as system_factory
 import json
 import re
@@ -54,7 +54,7 @@ async def npc_name_autocomplete(interaction: discord.Interaction, current: str):
     scene_npcs = set(repo.get_scene_npc_ids(interaction.guild.id))
     npcs = [
         c for c in all_chars
-        if c.is_npc and get_npc_id(c.name) not in scene_npcs and current.lower() in c.name.lower()
+        if c.is_npc and c.id not in scene_npcs and current.lower() in c.name.lower()
     ]
     options = [c.name for c in npcs]
     return [app_commands.Choice(name=name, value=name) for name in options[:25]]
@@ -137,8 +137,7 @@ def setup_commands(bot):
         await interaction.response.defer(ephemeral=True)
         system = repo.get_system(interaction.guild.id)
         sheet = system_factory.get_specific_sheet(system)
-        char_id = repo.get_active_character_id(interaction.guild.id, interaction.user.id)
-        character = repo.get_character(interaction.guild.id, char_id) if char_id else None
+        character = repo.get_active_character(interaction.guild.id, interaction.user.id)
         if not character:
             await interaction.followup.send("❌ No active character set or character not found.", ephemeral=True)
             return
@@ -151,8 +150,8 @@ def setup_commands(bot):
         await interaction.response.defer(ephemeral=True)
         system = repo.get_system(interaction.guild.id)
         CharacterClass = system_factory.get_specific_character(system)
-        char_id = get_pc_id(char_name)
-        existing = repo.get_character(interaction.guild.id, char_id)
+        char_id = str(uuid.uuid4())
+        existing = repo.get_character(interaction.guild.id, char_name)
         if existing:
             await interaction.followup.send(f"❌ A character named `{char_name}` already exists.", ephemeral=True)
             return
@@ -166,7 +165,7 @@ def setup_commands(bot):
         })
         character.apply_defaults(is_npc=False, guild_id=interaction.guild.id)
         repo.set_character(interaction.guild.id, character, system=system)
-        if not repo.get_active_character_id(interaction.guild.id, interaction.user.id):
+        if not repo.get_active_character(interaction.guild.id, interaction.user.id):
             repo.set_active_character(interaction.guild.id, interaction.user.id, char_id)
         await interaction.followup.send(f'📝 Created {system.upper()} character: **{char_name}**.', ephemeral=True)
 
@@ -179,8 +178,8 @@ def setup_commands(bot):
             return
         system = repo.get_system(interaction.guild.id)
         CharacterClass = system_factory.get_specific_character(system)
-        npc_id = get_npc_id(npc_name)
-        existing = repo.get_character(interaction.guild.id, npc_id)
+        npc_id = str(uuid.uuid4())
+        existing = repo.get_character(interaction.guild.id, npc_name)
         if existing:
             await interaction.followup.send(f"❌ An NPC named `{npc_name}` already exists.", ephemeral=True)
             return
@@ -200,24 +199,19 @@ def setup_commands(bot):
     async def sheet(ctx, char_name: str = None):
         system = repo.get_system(ctx.guild.id)
         sheet = system_factory.get_specific_sheet(system)
-        if char_name is None:
-            char_id = repo.get_active_character_id(ctx.guild.id, ctx.author.id)
-            if not char_id:
-                await ctx.send("❌ No active character set. Use /setactive to choose one.")
+
+        if not char_name:
+            character = repo.get_active_character(ctx.guild.id, ctx.author.id)
+            if not character:
+                await ctx.send("❌ No active character set. Use `/setactive` to choose one.")
                 return
-        else:
-            if repo.is_gm(ctx.guild.id, ctx.author.id):
-                npc_id = get_npc_id(char_name)
-                npc = repo.get_character(ctx.guild.id, npc_id)
-                if npc:
-                    char_id = npc_id
-                else:
-                    char_id = get_pc_id(char_name)
-            else:
-                char_id = get_pc_id(char_name)
-        character = repo.get_character(ctx.guild.id, char_id)
+
+        character = repo.get_character(ctx.guild.id, char_name)
         if not character:
             await ctx.send("❌ Character not found.")
+            return
+        elif character.is_npc and not repo.is_gm(ctx.guild.id, ctx.author.id):
+            await ctx.send("❌ Only the GM can view NPCs.")
             return
         embed = sheet.format_full_sheet(character)
         await ctx.send(embed=embed, ephemeral=True)
@@ -226,29 +220,21 @@ def setup_commands(bot):
     @app_commands.describe(char_name="Leave blank to view your character, or enter an NPC name.")
     async def sheet(interaction: discord.Interaction, char_name: str = None):
         is_ephemeral = True
-        if char_name:
-            npc_id = get_npc_id(char_name)
-            npc = repo.get_character(interaction.guild.id, npc_id)
-            if npc:
-                char_id = npc_id
-            else:
-                char_id = get_pc_id(char_name)
-        else:
-            char_id = repo.get_active_character_id(interaction.guild.id, interaction.user.id)
-            if not char_id:
-                await interaction.response.send_message("❌ No active character set. Use /setactive to choose one.", ephemeral=True)
+        if not char_name:
+            character = repo.get_active_character(interaction.guild.id, interaction.user.id)
+            if not character:
+                await interaction.response.send_message("❌ No active character set. Use `/setactive` to choose one.")
                 return
         system = repo.get_system(interaction.guild.id)
         sheet_obj = system_factory.get_specific_sheet(system)
-        sheet_view = system_factory.get_specific_sheet_view(system, interaction.user.id, char_id)
-        character = repo.get_character(interaction.guild.id, char_id)
+        character = repo.get_character(interaction.guild.id, char_name)
         if not character:
             await interaction.response.send_message("❌ Character not found.", ephemeral=True)
             return
-        if character.is_npc:
-            if not repo.is_gm(interaction.guild.id, interaction.user.id):
-                await interaction.response.send_message("❌ Only the GM can view NPCs.", ephemeral=True)
-                return
+        if character.is_npc and not repo.is_gm(interaction.guild.id, interaction.user.id):
+            await interaction.response.send_message("❌ Only the GM can view NPCs.", ephemeral=True)
+            return
+        sheet_view = system_factory.get_specific_sheet_view(system, interaction.user.id, character.id)
         embed = sheet_obj.format_full_sheet(character)
         await interaction.response.send_message(embed=embed, view=sheet_view, ephemeral=is_ephemeral)
 
@@ -259,16 +245,15 @@ def setup_commands(bot):
         if not repo.is_gm(interaction.guild.id, interaction.user.id):
             await interaction.response.send_message("❌ Only GMs can manage the scene.", ephemeral=True)
             return
-        npc_id = get_npc_id(npc_name)
-        npc = repo.get_character(interaction.guild.id, npc_id)
+        npc = repo.get_character(interaction.guild.id, npc_name)
         if not npc:
             await interaction.response.send_message("❌ NPC not found. Did you create it with `/createnpc`?", ephemeral=True)
             return
         scene_npcs = repo.get_scene_npc_ids(interaction.guild.id)
-        if npc_id in scene_npcs:
+        if npc.id in scene_npcs:
             await interaction.response.send_message("⚠️ That NPC is already in the scene.", ephemeral=True)
             return
-        repo.add_scene_npc(interaction.guild.id, npc_id)
+        repo.add_scene_npc(interaction.guild.id, npc.id)
         await interaction.response.send_message(f"✅ **{npc_name}** added to the scene.", ephemeral=True)
 
     @bot.command()
@@ -276,12 +261,15 @@ def setup_commands(bot):
         if not repo.is_gm(ctx.guild.id, ctx.author.id):
             await ctx.send("❌ Only GMs can manage the scene.")
             return
-        npc_id = get_npc_id(name)
         scene_npcs = repo.get_scene_npc_ids(ctx.guild.id)
-        if npc_id not in scene_npcs:
+        npc = repo.get_character(ctx.guild.id, name)
+        if not npc:
+            await ctx.send("❌ NPC not found.")
+            return
+        if npc.id not in scene_npcs:
             await ctx.send("❌ That NPC isn't in the scene.")
             return
-        repo.remove_scene_npc(ctx.guild.id, npc_id)
+        repo.remove_scene_npc(ctx.guild.id, npc.id)
         await ctx.send(f"🗑️ **{name}** removed from the scene.")
 
     @bot.command()
@@ -300,7 +288,7 @@ def setup_commands(bot):
         is_gm = repo.is_gm(ctx.guild.id, ctx.author.id)
         lines = []
         for npc_id in npc_ids:
-            npc = repo.get_character(ctx.guild.id, npc_id)
+            npc = repo.get_character_by_id(ctx.guild.id, npc_id)
             if npc:
                 lines.append(sheet.format_npc_scene_entry(npc, is_gm))
         notes = repo.get_scene_notes(ctx.guild.id)
@@ -391,20 +379,13 @@ def setup_commands(bot):
             if not character:
                 await interaction.followup.send("❌ You don't have a character to export.", ephemeral=True)
                 return
-            char_id = get_pc_id(character.name)
         else:
-            if repo.is_gm(interaction.guild.id, interaction.user.id):
-                npc_id = get_npc_id(char_name)
-                npc = repo.get_character(interaction.guild.id, npc_id)
-                if npc:
-                    character = npc
-                    char_id = npc_id
-                else:
-                    char_id = get_pc_id(char_name)
-                    character = repo.get_character(interaction.guild.id, char_id)
+            character = repo.get_character(interaction.guild.id, char_name) if char_name else None
+            if character and character.is_npc and not repo.is_gm(interaction.guild.id, interaction.user.id):
+                await interaction.followup.send("❌ You can only export your own character.", ephemeral=True)
+                return
             else:
-                char_id = get_pc_id(char_name)
-                character = repo.get_character(interaction.guild.id, char_id)
+                character = repo.get_character(interaction.guild.id, char_name)
                 if character and str(character.owner_id) != str(interaction.user.id):
                     await interaction.followup.send("❌ You can only export your own character.", ephemeral=True)
                     return
@@ -451,8 +432,7 @@ def setup_commands(bot):
         if not repo.is_gm(interaction.guild.id, interaction.user.id):
             await interaction.response.send_message("❌ Only GMs can transfer characters.", ephemeral=True)
             return
-        char_id = get_pc_id(char_name)
-        character = repo.get_character(interaction.guild.id, char_id)
+        character = repo.get_character(interaction.guild.id, char_name)
         if not character or character.is_npc:
             await interaction.response.send_message("❌ PC not found.", ephemeral=True)
             return
@@ -475,8 +455,7 @@ def setup_commands(bot):
         if not character:
             await interaction.response.send_message(f"❌ You don't have a character named `{char_name}`.", ephemeral=True)
             return
-        char_id = get_pc_id(char_name)
-        repo.set_active_character(interaction.guild.id, interaction.user.id, char_id)
+        repo.set_active_character(interaction.guild.id, interaction.user.id, character.id)
         await interaction.response.send_message(f"✅ `{char_name}` is now your active character.", ephemeral=True)
 
     @bot.tree.command(name="remind", description="GM: Remind a player or a role to post.")
