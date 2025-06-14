@@ -1,6 +1,8 @@
+import discord
 from core.models import BaseCharacter
 from typing import Any, Dict
 
+from core.utils import roll_formula
 from data import repo
 
 class MGT2ECharacter(BaseCharacter):
@@ -149,19 +151,63 @@ class MGT2ECharacter(BaseCharacter):
                 if guild_id:
                     skills = repo.get_default_skills(guild_id, "mgt2e")
                 default_skills = dict(skills) if skills else dict(self.DEFAULT_SKILLS)
-                if not self.skills:
-                    self.skills = default_skills
-                else:
-                    # Only add missing skills, don't overwrite existing ones
-                    updated_skills = dict(self.skills)
-                    for skill, val in default_skills.items():
-                        if skill not in updated_skills:
-                            updated_skills[skill] = val
-                    self.skills = updated_skills
+                # Only add missing skills, don't overwrite existing ones
+                updated_skills = dict(self.skills)
+                for skill, val in default_skills.items():
+                    if skill not in updated_skills:
+                        updated_skills[skill] = val
+                self.skills = updated_skills
             else:
                 # Use property setters for all other fields
                 if not hasattr(self, key) or getattr(self, key) in (None, [], {}, 0, False):
                     setattr(self, key, value)
+    
+    async def request_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
+        allowed_keys = {"skill", "attribute", "mods"}
+        if not isinstance(roll_parameters, dict) or set(roll_parameters.keys()) - allowed_keys:
+            await interaction.response.send_message(
+                "❌ Invalid roll parameters. Only skill, attribute, and mods are allowed for MGT2E rolls.",
+                ephemeral=True
+            )
+            return
+
+        skill = roll_parameters.get("skill")
+        attribute = roll_parameters.get("attribute")
+        mods = roll_parameters.get("mods")
+        total_mod = 0
+
+        # Validate mods
+        if mods:
+            if not isinstance(mods, str):
+                await interaction.response.send_message(
+                    "❌ Mods must be a string like 'mod1:+1,mod2:-3'.",
+                    ephemeral=True
+                )
+                return
+            try:
+                for mod in mods.split(","):
+                    if not mod.strip():
+                        continue
+                    k, v = mod.split(":")
+                    total_mod += int(v)
+            except Exception:
+                await interaction.response.send_message(
+                    "❌ Mods must be in the format 'mod1:+1,mod2:-3'.",
+                    ephemeral=True
+                )
+                return
+
+        skill_mod = self.get_skill_modifier(self.skills, skill) if skill else 0
+        attr_mod = self.get_attribute_modifier(self.attributes.get(attribute, 0)) if attribute else 0
+        total_mod += skill_mod + attr_mod
+        formula = f"2d6{f'+{total_mod}' if total_mod > 0 else (f'{total_mod}' if total_mod < 0 else '')}"
+        result, total = roll_formula(formula)
+        if total is not None and difficulty is not None:
+            if total >= difficulty:
+                result += f"\n✅ Success! (Needed {difficulty})"
+            else:
+                result += f"\n❌ Failure. (Needed {difficulty})"
+        await interaction.response.send_message(result, ephemeral=False)
 
     @staticmethod
     def parse_and_validate_skills(skills_str):

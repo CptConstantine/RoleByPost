@@ -43,7 +43,7 @@ class MGT2ESheetEditView(ui.View):
     async def edit_skills(self, interaction: discord.Interaction, button: ui.Button):
         character = get_character(interaction.guild.id, self.char_id)
         skills = character.skills if character else {}
-        categories = get_skill_categories(sheet.DEFAULT_SKILLS)
+        categories = get_skill_categories(MGT2ECharacter.DEFAULT_SKILLS)
         category_options = [SelectOption(label=cat, value=cat) for cat in sorted(categories.keys())]
 
         async def on_category_selected(view, interaction, category):
@@ -103,7 +103,7 @@ class RollButton(ui.Button):
             await interaction.response.send_message("You can’t roll for this character.", ephemeral=True)
             return
         character = get_character(interaction.guild.id, self.char_id)
-        skills = character.get_skills() if character else {}
+        skills = character.skills if character else {}
         categories = get_skill_categories(skills)
         category_options = [SelectOption(label=cat, value=cat) for cat in sorted(categories.keys())]
 
@@ -111,7 +111,7 @@ class RollButton(ui.Button):
             skills_in_cat = categories[category]
             skill_options = [SelectOption(label=skill, value=skill) for skill in sorted(skills_in_cat)]
             async def on_skill_selected(view2, interaction2, skill):
-                attributes = character.get_attributes() if character else {}
+                attributes = character.attributes if character else {}
                 attr_options = [SelectOption(label=k, value=k) for k in sorted(attributes.keys())]
                 async def on_attr_selected(view3, interaction3, attr):
                     result = sheet.roll(character, skill=skill, attribute=attr)

@@ -41,7 +41,7 @@ class FateSheetEditView(ui.View):
     @ui.button(label="Edit Skills", style=discord.ButtonStyle.secondary, row=2)
     async def edit_skills(self, interaction: discord.Interaction, button: ui.Button):
         character = get_character(interaction.guild.id, self.char_id)
-        skills = character.skills if character else {}
+        skills = character.skills if character.skills else {}
         skill_options = [SelectOption(label=k, value=k) for k in sorted(skills.keys())]
 
         async def on_skill_selected(view, interaction2, skill):

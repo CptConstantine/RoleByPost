@@ -1,6 +1,8 @@
+import discord
 from core.models import BaseCharacter
 from typing import Any, Dict, List
 
+from core.utils import roll_formula
 from data import repo
 
 class FateCharacter(BaseCharacter):
@@ -129,6 +131,35 @@ class FateCharacter(BaseCharacter):
                 # Use property setters for all other fields
                 if not hasattr(self, key) or getattr(self, key) in (None, [], {}, 0, False):
                     setattr(self, key, value)
+    
+    async def request_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
+        # Validation: Only allow a single skill
+        allowed_keys = {"skill"}
+        if not isinstance(roll_parameters, dict) or set(roll_parameters.keys()) - allowed_keys:
+            await interaction.response.send_message(
+                "❌ Invalid roll parameters. Only a \"skill\" is allowed for Fate rolls.",
+                ephemeral=True
+            )
+            return
+
+        skill = roll_parameters.get("skill")
+        modifier = 0
+        if skill and skill in self.skills:
+            modifier = self.skills[skill]
+        else:
+            await interaction.response.send_message(
+                f"❌ Invalid skill: {skill}. Tell your GM to pick a valid skill.",
+                ephemeral=True
+            )
+            return
+        formula = f"4df{f'+{modifier}' if modifier > 0 else (f'{modifier}' if modifier < 0 else '')}"
+        result, total = roll_formula(formula)
+        if total is not None and difficulty is not None:
+            if total >= difficulty:
+                result += f"\n✅ Success! (Needed {difficulty})"
+            else:
+                result += f"\n❌ Failure. (Needed {difficulty})"
+        await interaction.response.send_message(result, ephemeral=False)
 
     @staticmethod
     def parse_and_validate_skills(skills_str):

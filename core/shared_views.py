@@ -1,7 +1,7 @@
 import discord
 from discord import Interaction, TextStyle, ui
 from core import factories
-from core.utils import get_character
+from core.utils import get_character, roll_formula
 from data import repo
 
 class PaginatedSelectView(ui.View):
@@ -179,3 +179,59 @@ class EditNotesModal(ui.Modal, title="Edit Notes"):
         repo.set_character(interaction.guild.id, character, system=self.system)
         embed, view = self.make_view_embed(interaction.user.id, self.char_id)
         await interaction.response.edit_message(content="✅ Notes updated.", embed=embed, view=view)
+
+class RequestRollView(ui.View):
+    def __init__(self, chars, system, roll_parameters: str = None, difficulty: int = None):
+        super().__init__(timeout=300)
+        for char in chars:
+            self.add_item(RequestRollButton(char.id, system, roll_parameters, difficulty))
+
+class RequestRollButton(ui.Button):
+    def __init__(self, char_id, system, roll_parameters: str = None, difficulty: int = None):
+        super().__init__(label="Roll", style=discord.ButtonStyle.primary)
+        self.char_id = char_id
+        self.roll_parameters = roll_parameters
+        self.difficulty = difficulty
+        self.system = system
+
+    async def callback(self, interaction: discord.Interaction):
+        character = repo.get_character_by_id(interaction.guild.id, self.char_id)
+        if not character:
+            await interaction.response.send_message("❌ Character not found.", ephemeral=True)
+            return
+        # Parse roll_parameters into kwargs
+        kwargs = {}
+        if self.roll_parameters:
+            for param in self.roll_parameters.split(","):
+                if ":" in param:
+                    k, v = param.split(":", 1)
+                    kwargs[k.strip()] = v.strip()
+        await character.request_roll(interaction, roll_parameters=kwargs, difficulty=self.difficulty)
+
+class RollFormulaModal(ui.Modal, title="Enter Roll Formula"):
+    def __init__(self, difficulty: int = None):
+        super().__init__()
+        self.difficulty = difficulty
+        self.formula = ui.TextInput(
+            label="Roll Formula",
+            placeholder="e.g. 1d20+3",
+            required=True,
+            max_length=100
+        )
+        self.add_item(self.formula)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        formula = self.formula.value.strip()
+        result, total = roll_formula(formula)
+        if "❌" in result:
+            await interaction.response.send_message(
+                "❌ Invalid roll formula. Please use a format like '1d20+3'.",
+                ephemeral=True
+            )
+            return
+        if total is not None and self.difficulty is not None:
+            if total >= self.difficulty:
+                result += f"\n✅ Success! (Needed {self.difficulty})"
+            else:
+                result += f"\n❌ Failure. (Needed {self.difficulty})"
+        await interaction.response.send_message(result, ephemeral=False)

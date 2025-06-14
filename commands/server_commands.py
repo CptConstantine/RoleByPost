@@ -1,6 +1,8 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from core.shared_views import RequestRollView
+from core.utils import roll_formula
 from data import repo
 import core.factories as factories
 import re
@@ -171,39 +173,8 @@ def setup_server_commands(bot: commands.Bot):
 
     @bot.command()
     async def roll(ctx, *, arg):
-        arg = arg.replace(" ", "").lower()
-        fudge_pattern = r'(\d*)d[fF]([+-]\d+)?'
-        fudge_match = re.fullmatch(fudge_pattern, arg)
-        if fudge_match:
-            num_dice = int(fudge_match.group(1)) if fudge_match.group(1) else 4
-            modifier = int(fudge_match.group(2)) if fudge_match.group(2) else 0
-            rolls = [random.choice([-1, 0, 1]) for _ in range(num_dice)]
-            symbols = ['+' if r == 1 else '-' if r == -1 else '0' for r in rolls]
-            total = sum(rolls) + modifier
-            response = f'🎲 Fudge Rolls: `{" ".join(symbols)}`'
-            if modifier:
-                response += f' {"+" if modifier > 0 else ""}{modifier}'
-            response += f'\n🧮 Total: {total}'
-            await ctx.send(response)
-            return
-        pattern = r'(\d*)d(\d+)([+-]\d+)?'
-        match = re.fullmatch(pattern, arg)
-        if match:
-            num_dice = int(match.group(1)) if match.group(1) else 1
-            die_size = int(match.group(2))
-            modifier = int(match.group(3)) if match.group(3) else 0
-            if num_dice > 100 or die_size > 1000:
-                await ctx.send("😵 That's a lot of dice. Try fewer.")
-                return
-            rolls = [random.randint(1, die_size) for _ in range(num_dice)]
-            total = sum(rolls) + modifier
-            response = f'🎲 Rolled: {rolls}'
-            if modifier:
-                response += f' {"+" if modifier > 0 else ""}{modifier}'
-            response += f'\n🧮 Total: {total}'
-            await ctx.send(response)
-            return
-        await ctx.send("❌ Invalid format. Use like `2d6+3` or `4df+1`.")
+        result, _ = roll_formula(arg)
+        await ctx.send(result)
 
     @bot.tree.command(
         name="roll",
@@ -231,3 +202,41 @@ def setup_server_commands(bot: commands.Bot):
             return
         result = sheet.roll(character, skill=skill, attribute=attribute)
         await interaction.followup.send(result, ephemeral=True)
+
+    @bot.tree.command(name="roll_request", description="GM: Prompt selected characters to roll with a button.")
+    @app_commands.describe(
+        chars_to_roll="Comma-separated character names to request",
+        roll_parameters="Roll parameters, e.g. skill:Athletics,attribute:END"
+    )
+    async def roll_request(
+        interaction: discord.Interaction,
+        chars_to_roll: str,
+        roll_parameters: str = None,
+        difficulty: int = None
+    ):
+        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+            await interaction.response.send_message("❌ Only GMs can use this command.", ephemeral=True)
+            return
+
+        system = repo.get_system(interaction.guild.id)
+        all_chars = repo.get_all_characters(interaction.guild.id, system=system)
+        char_names = [name.strip() for name in chars_to_roll.split(",") if name.strip()]
+        chars = [c for c in all_chars if c.name in char_names]
+        if not chars:
+            await interaction.response.send_message("❌ No matching characters found.", ephemeral=True)
+            return
+
+        # Mention users
+        mentions = []
+        for char in chars:
+            if not char.is_npc:
+                member = interaction.guild.get_member(int(char.owner_id))
+                if member:
+                    mentions.append(member.mention)
+        mention_str = " ".join(mentions) if mentions else ""
+
+        view = RequestRollView(chars, system, roll_parameters=roll_parameters, difficulty=difficulty)
+        await interaction.response.send_message(
+            content=f"{mention_str}\nGM requests a roll: `{roll_parameters}`",
+            view=view
+        )

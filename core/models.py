@@ -83,6 +83,14 @@ class BaseCharacter(BaseRpgObj):
     def apply_defaults(self, is_npc=False, guild_id=None):
         """Apply system-specific default fields to a character dict."""
         pass
+    
+    @abstractmethod
+    async def request_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
+        """
+        Abstract method to handle a roll request for this character.
+        Should return a discord.ui.View or send a message with the result.
+        """
+        pass
 
 class BaseSheet(ABC):
     @abstractmethod

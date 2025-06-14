@@ -27,12 +27,12 @@ def setup_character_commands(bot):
         await interaction.response.defer(ephemeral=True)
         system = repo.get_system(interaction.guild.id)
         CharacterClass = factories.get_specific_character(system)
-        char_id = str(uuid.uuid4())
         existing = repo.get_character(interaction.guild.id, char_name)
         if existing:
             await interaction.followup.send(f"❌ A character named `{char_name}` already exists.", ephemeral=True)
             return
         # Create a new Character instance and apply defaults using the Character method
+        char_id = str(uuid.uuid4())
         character = CharacterClass({
             "id": char_id,
             "name": char_name,
@@ -55,12 +55,12 @@ def setup_character_commands(bot):
             return
         system = repo.get_system(interaction.guild.id)
         CharacterClass = factories.get_specific_character(system)
-        npc_id = str(uuid.uuid4())
         existing = repo.get_character(interaction.guild.id, npc_name)
         if existing:
             await interaction.followup.send(f"❌ An NPC named `{npc_name}` already exists.", ephemeral=True)
             return
         # Create a new Character instance and apply defaults using the Character method
+        npc_id = str(uuid.uuid4())
         character = CharacterClass({
             "id": npc_id,
             "name": npc_name,
