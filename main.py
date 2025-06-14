@@ -4,10 +4,7 @@ import dotenv
 import discord
 from discord.ext import commands
 from data import repo
-import character_commands
-import initiative_commands
-import scene_commands
-import server_commands
+from commands import character_commands, initiative_commands, scene_commands, server_commands
 
 dotenv.load_dotenv()
 
@@ -50,10 +47,14 @@ async def on_message(message):
         repo.set_last_message_time(message.guild.id, message.author.id, message.created_at.timestamp())
     await bot.process_commands(message)
 
+# Commands all systems have access to
 server_commands.setup_server_commands(bot)
 character_commands.setup_character_commands(bot)
 scene_commands.setup_scene_commands(bot)
 initiative_commands.setup_initiative_commands(bot)
+
+# System-specific commands
+
 
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 bot.run(os.getenv("DISCORD_BOT_TOKEN"), log_handler=handler, log_level=logging.DEBUG)

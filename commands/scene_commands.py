@@ -3,7 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 from core import shared_views
 from data import repo
-import core.system_factory as system_factory
+import core.factories as factories
 
 async def npc_name_autocomplete(interaction: discord.Interaction, current: str):
     all_chars = repo.get_all_characters(interaction.guild.id)
@@ -61,7 +61,7 @@ def setup_scene_commands(bot: commands.Bot):
     @bot.command()
     async def scene(ctx):
         system = repo.get_system(ctx.guild.id)
-        sheet = system_factory.get_specific_sheet(system)
+        sheet = factories.get_specific_sheet(system)
         npc_ids = repo.get_scene_npc_ids(ctx.guild.id)
         is_gm = repo.is_gm(ctx.guild.id, ctx.author.id)
         lines = []

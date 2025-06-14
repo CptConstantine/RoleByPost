@@ -2,7 +2,7 @@ import uuid
 import discord
 from discord import app_commands
 from data import repo
-import core.system_factory as system_factory
+import core.factories as factories
 import json
 
 async def pc_name_autocomplete(interaction: discord.Interaction, current: str):
@@ -26,7 +26,7 @@ def setup_character_commands(bot):
     async def createchar(interaction: discord.Interaction, char_name: str):
         await interaction.response.defer(ephemeral=True)
         system = repo.get_system(interaction.guild.id)
-        CharacterClass = system_factory.get_specific_character(system)
+        CharacterClass = factories.get_specific_character(system)
         char_id = str(uuid.uuid4())
         existing = repo.get_character(interaction.guild.id, char_name)
         if existing:
@@ -54,7 +54,7 @@ def setup_character_commands(bot):
             await interaction.followup.send("❌ Only GMs can create NPCs.", ephemeral=True)
             return
         system = repo.get_system(interaction.guild.id)
-        CharacterClass = system_factory.get_specific_character(system)
+        CharacterClass = factories.get_specific_character(system)
         npc_id = str(uuid.uuid4())
         existing = repo.get_character(interaction.guild.id, npc_name)
         if existing:
@@ -91,7 +91,7 @@ def setup_character_commands(bot):
             return
         
         system = repo.get_system(ctx.guild.id)
-        sheet = system_factory.get_specific_sheet(system)
+        sheet = factories.get_specific_sheet(system)
         embed = sheet.format_full_sheet(character)
         await ctx.send(embed=embed, ephemeral=True)
 
@@ -115,8 +115,8 @@ def setup_character_commands(bot):
             return
         
         system = repo.get_system(interaction.guild.id)
-        sheet_obj = system_factory.get_specific_sheet(system)
-        sheet_view = system_factory.get_specific_sheet_view(system, interaction.user.id, character.id)
+        sheet_obj = factories.get_specific_sheet(system)
+        sheet_view = factories.get_specific_sheet_view(system, interaction.user.id, character.id)
         embed = sheet_obj.format_full_sheet(character)
         await interaction.response.send_message(embed=embed, view=sheet_view, ephemeral=True)
 
@@ -168,7 +168,7 @@ def setup_character_commands(bot):
             await interaction.followup.send("❌ Could not decode or parse the file. Make sure it's a valid JSON export from this bot.", ephemeral=True)
             return
         system = repo.get_system(interaction.guild.id)
-        CharacterClass = system_factory.get_specific_character(system)
+        CharacterClass = factories.get_specific_character(system)
         character = CharacterClass.from_dict(data)
         character.apply_defaults(is_npc=character.is_npc, guild_id=interaction.guild.id)
         repo.set_character(interaction.guild.id, character, system=system)

@@ -1,11 +1,7 @@
 import discord
 from discord import Interaction, TextStyle, ui
-from core import system_factory
+from core import factories
 from data import repo
-
-def get_character(guild_id, char_id):
-    character = repo.get_character_by_id(guild_id, char_id)
-    return character if character else None
 
 class PaginatedSelectView(ui.View):
     def __init__(self, options, select_callback, user_id, prompt="Select an option:", page=0, page_size=25):
@@ -110,7 +106,7 @@ class EditSceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
         repo.set_scene_notes(self.guild_id, self.notes.value)
         # Rebuild the scene embed and view
         system = repo.get_system(self.guild_id)
-        sheet = system_factory.get_specific_sheet(system)
+        sheet = factories.get_specific_sheet(system)
         npc_ids = repo.get_scene_npc_ids(self.guild_id)
         is_gm = repo.is_gm(self.guild_id, interaction.user.id)
         lines = []

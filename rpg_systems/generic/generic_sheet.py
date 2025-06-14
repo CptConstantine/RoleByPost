@@ -1,5 +1,5 @@
 import discord
-from core.abstract_models import BaseSheet
+from core.models import BaseSheet
 from rpg_systems.generic.generic_character import GenericCharacter
 
 class GenericSheet(BaseSheet):

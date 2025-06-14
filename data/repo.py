@@ -1,7 +1,7 @@
 import sqlite3
 import json
-from core.abstract_models import BaseCharacter
-import core.system_factory as system_factory
+from core.models import BaseCharacter
+import core.factories as factories
 
 
 DB_FILE = 'data/bot.db'
@@ -55,7 +55,7 @@ def set_character(guild_id, character: BaseCharacter, system=None):
     """
     if system is None:
         system = get_system(guild_id)
-    CharacterClass = system_factory.get_specific_character(system)
+    CharacterClass = factories.get_specific_character(system)
 
     # Use the system's defined fields
     if character.is_npc:
@@ -98,7 +98,7 @@ def get_character(guild_id, char_name):
             return None
         id, system, name, owner_id, is_npc, system_specific_data, notes = row
 
-        CharacterClass = system_factory.get_specific_character(system)
+        CharacterClass = factories.get_specific_character(system)
         system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC if is_npc else CharacterClass.SYSTEM_SPECIFIC_CHARACTER
         system_specific = json.loads(system_specific_data)
         character = {
@@ -123,7 +123,7 @@ def get_character_by_id(guild_id, char_id):
             return None
         id, system, name, owner_id, is_npc, system_specific_data, notes = row
 
-        CharacterClass = system_factory.get_specific_character(system)
+        CharacterClass = factories.get_specific_character(system)
         system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC if is_npc else CharacterClass.SYSTEM_SPECIFIC_CHARACTER
         system_specific = json.loads(system_specific_data)
         character = {
@@ -145,40 +145,27 @@ def get_all_characters(guild_id, system=None):
     """
     characters = []
     with get_db() as conn:
-        try:
-            if system:
-                cur = conn.execute(
-                    "SELECT system, name, owner_id, is_npc, system_specific_data, notes FROM characters WHERE guild_id = ? AND system = ?",
-                    (str(guild_id), system)
-                )
-            else:
-                cur = conn.execute(
-                    "SELECT system, name, owner_id, is_npc, system_specific_data, notes FROM characters WHERE guild_id = ?",
-                    (str(guild_id),)
-                )
-            rows = cur.fetchall()
-        except sqlite3.OperationalError:
-            if system:
-                cur = conn.execute(
-                    "SELECT system, name, owner_id, is_npc, system_specific_data FROM characters WHERE guild_id = ? AND system = ?",
-                    (str(guild_id), system)
-                )
-            else:
-                cur = conn.execute(
-                    "SELECT system, name, owner_id, is_npc, system_specific_data FROM characters WHERE guild_id = ?",
-                    (str(guild_id),)
-                )
-            rows = cur.fetchall()
-            rows = [row + ("",) for row in rows]
+        if system:
+            cur = conn.execute(
+                "SELECT id, system, name, owner_id, is_npc, system_specific_data, notes FROM characters WHERE guild_id = ? AND system = ?",
+                (str(guild_id), system)
+            )
+        else:
+            cur = conn.execute(
+                "SELECT id, system, name, owner_id, is_npc, system_specific_data, notes FROM characters WHERE guild_id = ?",
+                (str(guild_id),)
+            )
+        rows = cur.fetchall()
 
         if not rows:
             return []
         for row in rows:
-            system_val, name, owner_id, is_npc, system_specific_data, notes = row
-            CharacterClass = system_factory.get_specific_character(system_val)
+            id, system_val, name, owner_id, is_npc, system_specific_data, notes = row
+            CharacterClass = factories.get_specific_character(system_val)
             system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC if is_npc else CharacterClass.SYSTEM_SPECIFIC_CHARACTER
             system_specific = json.loads(system_specific_data)
             character = {
+                "id": id,
                 "name": name,
                 "owner_id": owner_id,
                 "is_npc": is_npc,

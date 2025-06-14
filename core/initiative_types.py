@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 from dataclasses import dataclass, asdict
-from core.abstract_models import BaseInitiative
+from core.models import BaseInitiative
 
 @dataclass
 class InitiativeParticipant:

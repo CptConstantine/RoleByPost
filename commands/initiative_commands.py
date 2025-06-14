@@ -3,7 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 from core.initiative_types import InitiativeParticipant
 from data import repo
-import core.system_factory as system_factory
+import core.factories as factories
 
 def setup_initiative_commands(bot: commands.Bot):
     
@@ -25,7 +25,7 @@ def setup_initiative_commands(bot: commands.Bot):
                 await interaction.followup.send("❌ No default initiative type set. Please set it with `/set_default_initiative`.", ephemeral=True)
                 return
 
-        InitiativeClass = system_factory.get_specific_initiative(type)
+        InitiativeClass = factories.get_specific_initiative(type)
 
         # Gather participants: PCs and scene NPCs
         pcs = repo.get_non_gm_active_characters(guild_id)
@@ -49,7 +49,7 @@ def setup_initiative_commands(bot: commands.Bot):
         repo.start_initiative(guild_id, channel_id, type, initiative.to_dict())
 
         # Use the system-agnostic view factory
-        view = system_factory.get_specific_initiative_view(guild_id, channel_id, initiative)
+        view = factories.get_specific_initiative_view(guild_id, channel_id, initiative)
         await interaction.followup.send("🚦 Initiative started!", view=view, ephemeral=False)
 
     @bot.tree.command(name="initiative_end", description="End initiative in this channel.")
@@ -64,7 +64,7 @@ def setup_initiative_commands(bot: commands.Bot):
         if not initiative_data or not initiative_data["is_active"]:
             await interaction.response.send_message("❌ No active initiative.", ephemeral=True)
             return
-        InitiativeClass = system_factory.get_specific_initiative(initiative_data["type"])
+        InitiativeClass = factories.get_specific_initiative(initiative_data["type"])
         initiative = InitiativeClass.from_dict(initiative_data["initiative_state"])
         all_chars = repo.get_all_characters(interaction.guild.id)
         char = next((c for c in all_chars if c.name.lower() == name.lower()), None)
@@ -83,7 +83,7 @@ def setup_initiative_commands(bot: commands.Bot):
         if not initiative_data or not initiative_data["is_active"]:
             await interaction.response.send_message("❌ No active initiative.", ephemeral=True)
             return
-        InitiativeClass = system_factory.get_specific_initiative(initiative_data["type"])
+        InitiativeClass = factories.get_specific_initiative(initiative_data["type"])
         initiative = InitiativeClass.from_dict(initiative_data["initiative_state"])
         before = len(initiative.participants)
         initiative.participants = [p for p in initiative.participants if p["name"].lower() != name.lower()]
@@ -112,7 +112,7 @@ def setup_initiative_commands(bot: commands.Bot):
             await interaction.response.send_message("❌ No active initiative in this channel.", ephemeral=True)
             return
 
-        InitiativeClass = system_factory.get_specific_initiative(initiative_data["type"])
+        InitiativeClass = factories.get_specific_initiative(initiative_data["type"])
         initiative = InitiativeClass.from_dict(initiative_data["initiative_state"])
 
         # Parse the order string

@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from data import repo
-import core.system_factory as system_factory
+import core.factories as factories
 import re
 import random
 import asyncio
@@ -58,7 +58,7 @@ def setup_server_commands(bot: commands.Bot):
             await ctx.send("❌ Only GMs can set default skills.")
             return
         system = repo.get_system(ctx.guild.id)
-        sheet = system_factory.get_specific_sheet(system)
+        sheet = factories.get_specific_sheet(system)
         if not hasattr(sheet, "parse_and_validate_skills"):
             await ctx.send("❌ This system does not support setting default skills.")
             return
@@ -103,7 +103,7 @@ def setup_server_commands(bot: commands.Bot):
             await interaction.followup.send("❌ No skills found in the file.", ephemeral=True)
             return
         system = repo.get_system(interaction.guild.id)
-        sheet = system_factory.get_specific_sheet(system)
+        sheet = factories.get_specific_sheet(system)
         if hasattr(sheet, "parse_and_validate_skills"):
             skills_str = ", ".join(f"{k}:{v}" for k, v in skills_dict.items())
             skills_dict = sheet.parse_and_validate_skills(skills_str)
@@ -224,7 +224,7 @@ def setup_server_commands(bot: commands.Bot):
     ):
         await interaction.response.defer(ephemeral=True)
         system = repo.get_system(interaction.guild.id)
-        sheet = system_factory.get_specific_sheet(system)
+        sheet = factories.get_specific_sheet(system)
         character = repo.get_active_character(interaction.guild.id, interaction.user.id)
         if not character:
             await interaction.followup.send("❌ No active character set or character not found.", ephemeral=True)

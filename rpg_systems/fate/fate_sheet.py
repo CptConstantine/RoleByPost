@@ -1,6 +1,6 @@
 import random
 import discord
-from core.abstract_models import BaseSheet
+from core.models import BaseSheet
 from rpg_systems.fate.fate_character import FateCharacter
 from data import repo
 

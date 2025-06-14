@@ -1,4 +1,4 @@
-from core.abstract_models import BaseCharacter
+from core.models import BaseCharacter
 from typing import Any, Dict, List
 
 from data import repo

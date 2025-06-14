@@ -1,7 +1,7 @@
 import discord
 from discord import ui, SelectOption
 from data import repo
-from core.abstract_models import BaseInitiativeView
+from core.models import BaseInitiativeView
 from core.initiative_types import GenericInitiative, PopcornInitiative
 
 class GenericInitiativeView(BaseInitiativeView):

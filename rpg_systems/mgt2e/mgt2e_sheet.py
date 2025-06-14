@@ -1,5 +1,5 @@
 import discord
-from core.abstract_models import BaseSheet
+from core.models import BaseSheet
 from data import repo
 from rpg_systems.mgt2e.mgt2e_character import MGT2ECharacter
 
