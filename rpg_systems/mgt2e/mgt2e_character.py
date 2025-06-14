@@ -163,40 +163,42 @@ class MGT2ECharacter(BaseCharacter):
                     setattr(self, key, value)
     
     async def request_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
-        allowed_keys = {"skill", "attribute", "mods"}
-        if not isinstance(roll_parameters, dict) or set(roll_parameters.keys()) - allowed_keys:
+        # 1. Either skill or attribute must be present
+        if not isinstance(roll_parameters, dict) or not (
+            "skill" in roll_parameters or "attribute" in roll_parameters
+        ):
             await interaction.response.send_message(
-                "❌ Invalid roll parameters. Only skill, attribute, and mods are allowed for MGT2E rolls.",
+                "❌ Invalid roll parameters. You must provide at least a skill or attribute for MGT2E rolls.",
                 ephemeral=True
             )
             return
 
-        skill = roll_parameters.get("skill")
-        attribute = roll_parameters.get("attribute")
-        mods = roll_parameters.get("mods")
+        # 2. All other keys must have values that are numbers or modifiers like +1, -8, 0, etc.
+        allowed_keys = {"skill", "attribute"}
         total_mod = 0
 
-        # Validate mods
-        if mods:
-            if not isinstance(mods, str):
-                await interaction.response.send_message(
-                    "❌ Mods must be a string like 'mod1:+1,mod2:-3'.",
-                    ephemeral=True
-                )
-                return
+        for k, v in roll_parameters.items():
+            if k in allowed_keys:
+                continue
+            # Acceptable values: +1, -8, 0, 5, etc.
             try:
-                for mod in mods.split(","):
-                    if not mod.strip():
-                        continue
-                    k, v = mod.split(":")
-                    total_mod += int(v)
-            except Exception:
-                await interaction.response.send_message(
-                    "❌ Mods must be in the format 'mod1:+1,mod2:-3'.",
-                    ephemeral=True
-                )
-                return
+                mod = int(v)
+            except ValueError:
+                try:
+                    if isinstance(v, str) and (v.startswith("+") or v.startswith("-")):
+                        mod = int(v)
+                    else:
+                        raise ValueError
+                except Exception:
+                    await interaction.response.send_message(
+                        f"❌ Modifier for '{k}' must be a number or a signed integer (e.g., +1, -8, 0).",
+                        ephemeral=True
+                    )
+                    return
+            total_mod += mod
 
+        skill = roll_parameters.get("skill")
+        attribute = roll_parameters.get("attribute")
         skill_mod = self.get_skill_modifier(self.skills, skill) if skill else 0
         attr_mod = self.get_attribute_modifier(self.attributes.get(attribute, 0)) if attribute else 0
         total_mod += skill_mod + attr_mod
@@ -204,9 +206,9 @@ class MGT2ECharacter(BaseCharacter):
         result, total = roll_formula(formula)
         if total is not None and difficulty is not None:
             if total >= difficulty:
-                result += f"\n✅ Success! (Needed {difficulty})"
+                result += f"\n✅ Success! (Needed {difficulty}) Effect: {total - difficulty}"
             else:
-                result += f"\n❌ Failure. (Needed {difficulty})"
+                result += f"\n❌ Failure. (Needed {difficulty}) Effect: {total - difficulty}"
         await interaction.response.send_message(result, ephemeral=False)
 
     @staticmethod

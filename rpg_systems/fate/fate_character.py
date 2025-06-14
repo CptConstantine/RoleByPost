@@ -142,21 +142,49 @@ class FateCharacter(BaseCharacter):
             )
             return
 
+        allowed_keys = {"skill"}
+        for k, v in roll_parameters.items():
+            if k in allowed_keys:
+                continue
+            # Acceptable values: +1, -8, 0, 5, etc.
+            try:
+                mod = int(v)
+            except ValueError:
+                try:
+                    if isinstance(v, str) and (v.startswith("+") or v.startswith("-")):
+                        mod = int(v)
+                    else:
+                        raise ValueError
+                except Exception:
+                    await interaction.response.send_message(
+                        f"❌ Modifier for '{k}' must be a number or a signed integer (e.g., +1, -8, 0).",
+                        ephemeral=True
+                    )
+                    return
+            total_mod += mod
+
         skill = roll_parameters.get("skill")
-        modifier = 0
         if skill and skill in self.skills:
             modifier = self.skills[skill]
-        else:
+        elif skill:
             await interaction.response.send_message(
                 f"❌ Invalid skill: {skill}. Tell your GM to pick a valid skill.",
                 ephemeral=True
             )
             return
-        formula = f"4df{f'+{modifier}' if modifier > 0 else (f'{modifier}' if modifier < 0 else '')}"
+        else:
+            modifier = 0
+
+        # Fate doesn't use attribute, but allow for future compatibility
+        formula = f"4df{f'+{modifier + total_mod}' if (modifier + total_mod) > 0 else (f'{modifier + total_mod}' if (modifier + total_mod) < 0 else '')}"
         result, total = roll_formula(formula)
         if total is not None and difficulty is not None:
-            if total >= difficulty:
-                result += f"\n✅ Success! (Needed {difficulty})"
+            if total > difficulty + 2:
+                result += f"\n✅ Success *with style*! (Needed {difficulty})"
+            elif total > difficulty:
+                result += f"\n✅ Success. (Needed {difficulty})"
+            elif total == difficulty:
+                result += f"\n⚠️ Tie. (Needed {difficulty})"
             else:
                 result += f"\n❌ Failure. (Needed {difficulty})"
         await interaction.response.send_message(result, ephemeral=False)

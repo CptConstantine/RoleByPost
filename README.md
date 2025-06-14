@@ -60,6 +60,9 @@ The following are the commands that are currently available.
 
 - `/roll [skill] [attribute]`  
   Roll dice for your active character (PC).
+
+- `/roll_request [char1,char2,etc.] [roll_parameters] [difficulty]`
+  (GM only) Request players to roll the given check. roll_parameters in the format skill:<skill>,attribute:<attribute>,mod1:+1,mod2:-3,etc.
   
 - `/createchar [name]`  
   Create a new character.
@@ -106,12 +109,16 @@ The following are the commands that are currently available.
 
 - `/initiative_start [type] [scene]`  
   Start initiative in the current channel. Type can be "generic" or "popcorn". Scene is optional; uses the current scene if none is provided.
-- `/initiative_set_order order="Name1, Name2, Name3"`  
+
+- `/initiative_set_order [Name1, Name2, Name3, etc.]`  
   (GM only) Set the initiative order by providing a comma-separated list of participant names.
+
 - `/initiative_end`  
   End initiative in the current channel.
+
 - `/initiative_add [name]`  
   Add a PC or NPC to the current initiative.
+
 - `/initiative_remove [name]`  
   Remove a PC or NPC from the current initiative.
 
@@ -121,7 +128,9 @@ The following are the commands that are currently available.
 
 ### Top Priority
 
-- GM can ask for a specific roll with a command
+- Upgrades to the /roll_request command to allow players to modify the roll after it's requested
+  - System specific upgrades as well, like a button to invoke an aspect (Fate) to modify the result
+- Optionally set automatic reminders when someone is mentioned
 - Commands to make narration and dialogue more interesting
 - User can provide an OpenAI API key to gain access to commands that use AI (summarize recent posts, ask rules questions)
 

@@ -41,7 +41,7 @@ class MGT2ESheet(BaseSheet):
                     count += 1
                 chunk += line + "\n"
             if chunk:
-                embed.add_field(name=f"Skills {count}", value=chunk.strip(), inline=False)
+                embed.add_field(name=f"Skills", value=chunk.strip(), inline=False)
         else:
             embed.add_field(name="Skills", value="None", inline=False)
 
