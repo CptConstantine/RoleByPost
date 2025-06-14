@@ -4,7 +4,10 @@ import dotenv
 import discord
 from discord.ext import commands
 from data import repo
-import bot_commands
+import character_commands
+import initiative_commands
+import scene_commands
+import server_commands
 
 dotenv.load_dotenv()
 
@@ -47,7 +50,10 @@ async def on_message(message):
         repo.set_last_message_time(message.guild.id, message.author.id, message.created_at.timestamp())
     await bot.process_commands(message)
 
-bot_commands.setup_commands(bot)
+server_commands.setup_server_commands(bot)
+character_commands.setup_character_commands(bot)
+scene_commands.setup_scene_commands(bot)
+initiative_commands.setup_initiative_commands(bot)
 
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 bot.run(os.getenv("DISCORD_BOT_TOKEN"), log_handler=handler, log_level=logging.DEBUG)
