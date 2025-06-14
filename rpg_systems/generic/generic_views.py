@@ -1,6 +1,7 @@
 import discord
 from discord import ui
-from core.shared_views import EditNameModal, EditNotesModal, get_character
+from core.shared_views import EditNameModal, EditNotesModal
+from core.utils import get_character
 from data import repo
 from rpg_systems.generic.generic_sheet import GenericSheet
 from rpg_systems.generic.generic_character import GenericCharacter

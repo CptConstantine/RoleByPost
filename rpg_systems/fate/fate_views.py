@@ -1,4 +1,5 @@
-from core.shared_views import PaginatedSelectView, EditNameModal, EditNotesModal, get_character
+from core.shared_views import PaginatedSelectView, EditNameModal, EditNotesModal
+from core.utils import get_character
 from discord import ui, SelectOption
 import discord
 from data import repo

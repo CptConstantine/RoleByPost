@@ -1,6 +1,7 @@
 import discord
 from discord import Interaction, TextStyle, ui
 from core import factories
+from core.utils import get_character
 from data import repo
 
 class PaginatedSelectView(ui.View):

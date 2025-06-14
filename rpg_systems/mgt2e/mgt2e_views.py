@@ -4,7 +4,8 @@ from data import repo
 from rpg_systems.mgt2e.mgt2e_sheet import MGT2ESheet
 from rpg_systems.mgt2e.mgt2e_character import MGT2ECharacter
 from collections import defaultdict
-from core.shared_views import EditNameModal, EditNotesModal, PaginatedSelectView, get_character
+from core.shared_views import EditNameModal, EditNotesModal, PaginatedSelectView
+from core.utils import get_character
 
 SYSTEM = "mgt2e"
 sheet = MGT2ESheet()
