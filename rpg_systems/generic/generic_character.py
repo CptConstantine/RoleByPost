@@ -1,10 +1,10 @@
 from typing import Any, Dict
 import discord
 from discord import ui
-from core.models import BaseCharacter, BaseSheet, RollFormula
-from core.shared_views import EditNameModal, EditNotesModal, RollFormulaView
+from core.models import BaseCharacter, BaseSheet, RollModifiers
+from core.shared_views import EditNameModal, EditNotesModal, FinalizeRollButton, RollModifiersView
 from core.utils import get_character, roll_formula
-from core.rolling import RollFormula
+from core.rolling import RollModifiers
 
 SYSTEM = "generic"
 
@@ -24,15 +24,15 @@ class GenericCharacter(BaseCharacter):
         pass
 
     async def request_roll(self, interaction: discord.Interaction, roll_parameters: dict = None, difficulty: int = None):
-        roll_formula_obj = GenericRollFormula(roll_parameters_dict=roll_parameters)
-        view = GenericRollFormulaView(roll_formula_obj, self, interaction, difficulty)
+        roll_formula_obj = GenericRollModifiers(roll_parameters_dict=roll_parameters)
+        view = GenericRollModifiersView(roll_formula_obj, self, interaction, difficulty)
         await interaction.response.send_message(
             content="Adjust your roll formula as needed, then finalize to roll.",
             view=view,
             ephemeral=True
         )
 
-    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollFormula, difficulty: int = None):
+    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
         # Build the formula string from the RollFormula object
         # Example: "1d20+3+2-1"
         formula_parts = []
@@ -55,7 +55,7 @@ class GenericCharacter(BaseCharacter):
                 result += f"\n❌ Failure. (Needed {difficulty})"
         await interaction.response.send_message(result, ephemeral=False)
 
-class GenericRollFormula(RollFormula):
+class GenericRollModifiers(RollModifiers):
     """
     A roll formula specifically for the generic RPG system.
     It can handle any roll parameters as needed.
@@ -120,26 +120,7 @@ class GenericSheetEditView(ui.View):
             )
         )
 
-class GenericRollFormulaView(RollFormulaView):
-    def __init__(self, roll_formula_obj: RollFormula, character, original_interaction, difficulty: int = None):
+class GenericRollModifiersView(RollModifiersView):
+    def __init__(self, roll_formula_obj: RollModifiers, character, original_interaction, difficulty: int = None):
         super().__init__(roll_formula_obj, character, original_interaction, difficulty)
         self.add_item(FinalizeRollButton(self))
-
-class FinalizeRollButton(discord.ui.Button):
-    def __init__(self, parent_view: RollFormulaView):
-        super().__init__(label="Finalize Roll", style=discord.ButtonStyle.success)
-        self.parent_view = parent_view
-
-    async def callback(self, interaction: discord.Interaction):
-        # Update the roll_formula_obj with the latest values from the inputs
-        for key, input_box in self.parent_view.modifier_inputs.items():
-            value = input_box.value
-            if value is not None and value != "":
-                self.parent_view.roll_formula_obj[key] = value
-        # Call the character's finalize_roll method
-        await self.parent_view.character.send_roll_message(
-            interaction,
-            self.parent_view.roll_formula_obj,
-            self.parent_view.difficulty
-        )
-        self.parent_view.stop()

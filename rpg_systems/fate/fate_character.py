@@ -3,9 +3,9 @@ from typing import Any, Dict, List
 import discord
 from discord import ui, SelectOption
 from core.models import BaseCharacter, BaseSheet
-from core.rolling import RollFormula
-from core.shared_views import PaginatedSelectView, EditNameModal, EditNotesModal, RollFormulaView
-from core.utils import get_character
+from core.rolling import RollModifiers
+from core.shared_views import FinalizeRollButton, PaginatedSelectView, EditNameModal, EditNotesModal, RollModifiersView
+from core.utils import get_character, roll_formula
 from data import repo
 
 SYSTEM = "fate"
@@ -138,13 +138,38 @@ class FateCharacter(BaseCharacter):
                     setattr(self, key, value)
     
     async def request_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
-        roll_formula_obj = FateRollFormula(roll_parameters_dict=roll_parameters)
-        view = FateRollFormulaView(roll_formula_obj, self, interaction, difficulty)
+        roll_formula_obj = FateRollModifiers(roll_parameters_dict=roll_parameters)
+        view = FateRollModifiersView(roll_formula_obj, self, interaction, difficulty)
         await interaction.response.send_message(
             content="Adjust your roll formula as needed, then finalize to roll.",
             view=view,
             ephemeral=True
         )
+        
+    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
+        """
+        Rolls 4df with modifiers from the RollFormula object.
+        """
+        # Build the formula string from the RollFormula object
+        # Example: "2d6+3-1"
+        formula_parts = ["4df"]
+        for key, value in roll_formula_obj.get_modifiers(self).items():
+            try:
+                mod = int(value)
+                if mod >= 0:
+                    formula_parts.append(f"+{mod}")
+                else:
+                    formula_parts.append(f"{mod}")
+            except Exception:
+                continue
+        formula = "".join(formula_parts)
+        result, total = roll_formula(formula)
+        if total is not None and difficulty is not None:
+            if total >= difficulty:
+                result += f"\n✅ Success! (Needed {difficulty}) Shifts: {total - difficulty}"
+            else:
+                result += f"\n❌ Failure. (Needed {difficulty}) Shifts: {total - difficulty}"
+        await interaction.response.send_message(result, ephemeral=False)
 
     @staticmethod
     def parse_and_validate_skills(skills_str):
@@ -164,7 +189,7 @@ class FateCharacter(BaseCharacter):
         # Add Fate-specific validation here if needed (e.g., pyramid structure)
         return skills_dict
 
-class FateRollFormula(RollFormula):
+class FateRollModifiers(RollModifiers):
     """
     A roll formula specifically for the generic RPG system.
     It can handle any roll parameters as needed.
@@ -644,54 +669,54 @@ class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
         view = FateSheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(content=f"✅ {self.skill} updated.", embed=embed, view=view)
 
-class FateRollFormulaView(RollFormulaView):
-    """
-    A view for editing and finalizing Fate roll formulas.
-    This view allows users to adjust the roll formula and finalize it for rolling.
-    Provides a dropdown to select a different skill than the one from the roll_formula_obj.
-    """
-    def __init__(self, roll_formula_obj: FateRollFormula, character, original_interaction, difficulty: int = None):
+class FateRollModifiersView(RollModifiersView):
+    def __init__(self, roll_formula_obj: RollModifiers, character, original_interaction, difficulty: int = None):
         super().__init__(roll_formula_obj, character, original_interaction, difficulty)
+        self.add_item(FinalizeRollButton(self))
 
-        # Remove any existing skill input from the base view
-        if "skill" in self.modifier_inputs:
-            self.remove_item(self.modifier_inputs["skill"])
-            del self.modifier_inputs["skill"]
+# class FateRollFormulaView(RollFormulaView):
+#     """
+#     A view for editing and finalizing Fate roll formulas.
+#     This view allows users to adjust the roll formula and finalize it for rolling.
+#     Provides a dropdown to select a different skill than the one from the roll_formula_obj.
+#     """
+#     def __init__(self, roll_formula_obj: FateRollFormula, character, original_interaction, difficulty: int = None):
+#         super().__init__(roll_formula_obj, character, original_interaction, difficulty)
+#         # Prepare skill options from the character's skills
+#         skills = getattr(character, "skills", {})
+#         skill_options = [
+#             discord.SelectOption(label=skill, value=skill)
+#             for skill in sorted(skills.keys())
+#         ]
+#         # Default to the skill in the roll_formula_obj if present, else first skill
+#         default_skill = roll_formula_obj.skill if hasattr(roll_formula_obj, "properties") else None
+#         if not default_skill and skill_options:
+#             default_skill = skill_options[0].value
 
-        # Prepare skill options from the character's skills
-        skills = getattr(character, "skills", {})
-        skill_options = [
-            discord.SelectOption(label=skill, value=skill)
-            for skill in sorted(skills.keys())
-        ]
-        # Default to the skill in the roll_formula_obj if present, else first skill
-        default_skill = roll_formula_obj.skill if hasattr(roll_formula_obj, "properties") else None
-        if not default_skill and skill_options:
-            default_skill = skill_options[0].value
+#         self.skill_select = discord.ui.Select(
+#             placeholder=default_skill if default_skill else "Select a skill",
+#             options=skill_options,
+#             min_values=0,
+#             max_values=1
+#         )
+#         self.add_item(self.skill_select)
+#         self.add_item(FateFinalizeRollButton(self))
 
-        self.skill_select = discord.ui.Select(
-            placeholder=default_skill if default_skill else "Select a skill",
-            options=skill_options,
-            min_values=0,
-            max_values=1
-        )
-        self.add_item(self.skill_select)
+# class FateFinalizeRollButton(FinalizeRollButton):
+#     def __init__(self, parent_view: "FateRollFormulaView"):
+#         super().__init__(label="Finalize Roll", style=discord.ButtonStyle.success)
+#         self.parent_view = parent_view
 
-    @discord.ui.button(label="Finalize Roll", style=discord.ButtonStyle.success)
-    async def finalize_roll_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Update the roll_formula_obj with the selected skill and any other modifiers
-        selected_skill = self.skill_select.values[0] if self.skill_select.values else None
-        if selected_skill:
-            self.roll_formula_obj["skill"] = selected_skill
+#     async def callback(self, interaction: discord.Interaction):
+#         super().callback(interaction)
+#         # Update the roll_formula_obj with the selected skill and any other modifiers
+#         selected_skill = self.parent_view.skill_select.values[0] if self.parent_view.skill_select.values else None
+#         if selected_skill:
+#             self.parent_view.roll_formula_obj["skill"] = selected_skill
 
-        for key, input_box in self.modifier_inputs.items():
-            value = input_box.value
-            if value is not None and value != "":
-                self.roll_formula_obj[key] = value
-
-        await self.character.finalize_roll(
-            interaction,
-            self.roll_formula_obj,
-            self.difficulty
-        )
-        self.stop()
+#         await self.parent_view.character.send_roll_message(
+#             interaction,
+#             self.parent_view.roll_formula_obj,
+#             self.parent_view.difficulty
+#         )
+#         self.parent_view.stop()

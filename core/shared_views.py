@@ -1,7 +1,7 @@
 import discord
 from discord import Interaction, TextStyle, ui
 from core import factories
-from core.rolling import RollFormula
+from core.rolling import RollModifiers
 from core.models import BaseCharacter
 from core.utils import get_character, roll_formula
 from data import repo
@@ -210,54 +210,114 @@ class RequestRollButton(ui.Button):
                     kwargs[k.strip()] = v.strip()
         await character.request_roll(interaction, roll_parameters=kwargs, difficulty=self.difficulty)
 
-class RollFormulaView(ui.View):
+class RollModifiersView(ui.View):
     """
     Base class for system-specific RollFormulaViews.
     Provides shared variables and structure for roll input views.
+    Each modifier/property is shown as a button; clicking it opens a modal to edit its value.
     """
-    def __init__(self, roll_formula_obj: RollFormula, character: BaseCharacter, original_interaction, difficulty: int = None):
+    def __init__(self, roll_formula_obj: RollModifiers, character: BaseCharacter, original_interaction, difficulty: int = None):
         super().__init__(timeout=300)
         self.roll_formula_obj = roll_formula_obj  # The RollFormula object being edited
         self.character = character                # The character making the roll
         self.original_interaction = original_interaction  # The original Discord interaction
         self.difficulty = difficulty  
-        
-        self.modifier_inputs = {}
 
-        # Create a text input for each key in the roll formula
+        self.modifier_buttons = {}
+
+        # Create a button for each key in the roll formula
         for key, value in self.roll_formula_obj.to_dict().items():
-            input_box = discord.ui.TextInput(
-                label=f"{key}",
-                default=str(value),
-                required=False,
-                max_length=20
-            )
-            self.modifier_inputs[key] = input_box
-            self.add_item(input_box)
+            button = EditModifierButton(key, str(value), self)
+            self.modifier_buttons[key] = button
+            self.add_item(button)
 
-        # Add a blank modifier input for adding new modifiers
+        # Add a button to add new modifiers
         self.add_item(AddModifierButton(self))
 
-    def add_modifier_input(self, label="modifier"):
-        input_box = discord.ui.TextInput(
-            label=label,
-            required=True,
-            default="0",
-            max_length=20
-        )
-        self.modifier_inputs[label] = input_box
-        self.add_item(input_box)            # Optional difficulty for the roll
+    def add_modifier_button(self, label="modifier", value="0"):
+        button = EditModifierButton(label, value, self)
+        self.modifier_buttons[label] = button
+        self.add_item(button)
 
-class AddModifierButton(discord.ui.Button):
-    def __init__(self, parent_view: RollFormulaView):
-        super().__init__(label="Add Modifier", style=discord.ButtonStyle.secondary)
+    async def update_modifier(self, interaction: discord.Interaction, key: str, value: str):
+        # Update the RollFormula object and button label
+        self.roll_formula_obj[key] = value
+        button = self.modifier_buttons[key]
+        button.label = f"{key}: {value}"
+        await interaction.response.edit_message(view=self)
+
+class EditModifierButton(discord.ui.Button):
+    def __init__(self, key: str, value: str, parent_view: RollModifiersView):
+        super().__init__(label=f"{key}: {value}", row=1, style=discord.ButtonStyle.secondary)
+        self.key = key
+        self.value = value
         self.parent_view = parent_view
 
     async def callback(self, interaction: discord.Interaction):
-        # Add a new modifier input with a unique label
-        idx = 1
-        while f"modifier{idx}" in self.parent_view.modifier_inputs:
-            idx += 1
-        label = f"modifier{idx}"
-        self.parent_view.add_modifier_input(label=label)
+        await interaction.response.send_modal(EditModifierModal(self.key, self.value, self.parent_view, interaction))
+
+class EditModifierModal(discord.ui.Modal, title="Edit Modifier"):
+    def __init__(self, key: str, value: str, parent_view: RollModifiersView, original_interaction: discord.Interaction):
+        super().__init__()
+        self.key = key
+        self.parent_view = parent_view
+        self.original_interaction = original_interaction
+        self.value_input = discord.ui.TextInput(
+            label=f"Value for {key}",
+            default=value,
+            required=True,
+            max_length=20
+        )
+        self.add_item(self.value_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await self.parent_view.update_modifier(interaction, self.key, self.value_input.value)
+
+class AddModifierButton(discord.ui.Button):
+    def __init__(self, parent_view: RollModifiersView):
+        super().__init__(label="Add Modifier", row=0, style=discord.ButtonStyle.primary)
+        self.parent_view = parent_view
+
+    async def callback(self, interaction: discord.Interaction):
+        # Open a modal to ask for new modifier key and value
+        await interaction.response.send_modal(AddModifierModal(self.parent_view, interaction))
+
+class AddModifierModal(discord.ui.Modal, title="Add Modifier"):
+    def __init__(self, parent_view: RollModifiersView, original_interaction: discord.Interaction):
+        super().__init__()
+        self.parent_view = parent_view
+        self.original_interaction = original_interaction
+        self.key_input = discord.ui.TextInput(
+            label="Modifier Name",
+            placeholder="e.g. bonus, penalty, situational",
+            required=True,
+            max_length=30
+        )
+        self.value_input = discord.ui.TextInput(
+            label="Modifier Value",
+            placeholder="e.g. +2, -1, 0",
+            required=True,
+            max_length=10
+        )
+        self.add_item(self.key_input)
+        self.add_item(self.value_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        key = self.key_input.value.strip()
+        value = self.value_input.value.strip()
+        self.parent_view.roll_formula_obj[key] = value
+        self.parent_view.add_modifier_button(label=key, value=value)
         await interaction.response.edit_message(view=self.parent_view)
+
+class FinalizeRollButton(discord.ui.Button):
+    def __init__(self, parent_view: RollModifiersView):
+        super().__init__(label="Roll", style=discord.ButtonStyle.success)
+        self.parent_view = parent_view
+
+    async def callback(self, interaction: discord.Interaction):
+        await self.parent_view.character.send_roll_message(
+            interaction,
+            self.parent_view.roll_formula_obj,
+            self.parent_view.difficulty
+        )
+        self.parent_view.stop()

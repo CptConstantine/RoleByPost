@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 import discord
-from core.rolling import RollFormula
+from core.rolling import RollModifiers
 
 class NotesMixin:
     def add_note(self, note: str):
@@ -161,7 +161,7 @@ class BaseCharacter(BaseRpgObj):
         pass
 
     @abstractmethod
-    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollFormula, difficulty: int = None):
+    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
         """
         Abstract method to handle a roll request for this character.
         Should return a discord.ui.View or send a message with the result.

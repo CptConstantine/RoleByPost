@@ -3,8 +3,8 @@ from typing import Any, Dict
 import discord
 from discord import SelectOption, ui
 from core.models import BaseCharacter, BaseSheet
-from core.rolling import RollFormula
-from core.shared_views import EditNameModal, EditNotesModal, PaginatedSelectView, RollFormulaView
+from core.rolling import RollModifiers
+from core.shared_views import EditNameModal, EditNotesModal, FinalizeRollButton, PaginatedSelectView, RollModifiersView
 from core.utils import get_character, roll_formula
 from data import repo
 
@@ -61,7 +61,7 @@ class MGT2ECharacter(BaseCharacter):
         "Heavy Weapons (Portable)": -3,
         "Heavy Weapons (Vehicle)": -3,
         "Investigate": -3,
-        "Jack of All Trades": -3,
+        "Jack of All Trades": 0,
         "Language (Galanglic)": -3,
         "Language (Vilany)": -3,
         "Language (Zdetl)": -3,
@@ -168,15 +168,15 @@ class MGT2ECharacter(BaseCharacter):
                     setattr(self, key, value)
     
     async def request_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
-        roll_formula_obj = MGT2ERollFormula(roll_parameters_dict=roll_parameters)
-        view = MGT2ERollFormulaView(roll_formula_obj, self, interaction, difficulty)
+        roll_formula_obj = MGT2ERollModifiers(roll_parameters_dict=roll_parameters)
+        view = MGT2ERollModifiersView(roll_formula_obj, self, interaction, difficulty)
         await interaction.response.send_message(
             content="Adjust your roll formula as needed, then finalize to roll.",
             view=view,
             ephemeral=True
         )
 
-    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollFormula, difficulty: int = None):
+    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
         """
         Rolls 2d6 with modifiers from the RollFormula object.
         """
@@ -184,7 +184,14 @@ class MGT2ECharacter(BaseCharacter):
         # Example: "2d6+3-1"
         formula_parts = ["2d6"]
         for key, value in roll_formula_obj.get_modifiers(self).items():
-            formula_parts.append(f"{value:+d}")
+            try:
+                mod = int(value)
+                if mod >= 0:
+                    formula_parts.append(f"+{mod}")
+                else:
+                    formula_parts.append(f"{mod}")
+            except Exception:
+                continue
         formula = "".join(formula_parts)
         result, total = roll_formula(formula)
         if total is not None and difficulty is not None:
@@ -251,7 +258,10 @@ class MGT2ECharacter(BaseCharacter):
         if self.is_skill_trained(skills, skill_name):
             return skills.get(skill_name, 0)
         else:
-            return -3
+            untrained = -3
+            if skills.get("Jack of All Trades", None) is not None:
+                untrained = untrained + skills["Jack of All Trades"]
+            return untrained
 
     def get_attribute_modifier(self, attr_val) -> int:
         if attr_val <= 0:
@@ -269,7 +279,7 @@ class MGT2ECharacter(BaseCharacter):
         else:
             return 3
 
-class MGT2ERollFormula(RollFormula):
+class MGT2ERollModifiers(RollModifiers):
     """
     A roll formula specifically for the MGT2E RPG system.
     It can handle any roll parameters as needed.
@@ -610,79 +620,7 @@ class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
         view = MGT2ESheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(content=f"✅ {self.skill} updated.", embed=embed, view=view)
 
-class MGT2ERollFormulaView(RollFormulaView):
-    """
-    A view for editing and finalizing MGT2E roll formulas.
-    This view allows users to adjust the roll formula and finalize it for rolling.
-    Provides dropdowns to select a different skill or attribute than the ones from the roll_formula_obj.
-    """
-    def __init__(self, roll_formula_obj: MGT2ERollFormula, character, original_interaction, difficulty: int = None):
+class MGT2ERollModifiersView(RollModifiersView):
+    def __init__(self, roll_formula_obj: RollModifiers, character, original_interaction, difficulty: int = None):
         super().__init__(roll_formula_obj, character, original_interaction, difficulty)
-
-        # Remove any existing skill input from the base view
-        if "skill" in self.modifier_inputs:
-            self.remove_item(self.modifier_inputs["skill"])
-            del self.modifier_inputs["skill"]
-
-        # Remove any existing attribute input from the base view
-        if "attribute" in self.modifier_inputs:
-            self.remove_item(self.modifier_inputs["attribute"])
-            del self.modifier_inputs["attribute"]
-
-        # Prepare skill options from the character's skills
-        skills = getattr(character, "skills", {})
-        skill_options = [
-            discord.SelectOption(label=skill, value=skill)
-            for skill in sorted(skills.keys())
-        ]
-        # Default to the skill in the roll_formula_obj if present
-        default_skill = roll_formula_obj.skill if hasattr(roll_formula_obj, "properties") else None
-        self.skill_select = discord.ui.Select(
-            placeholder=default_skill if default_skill else "None",
-            options=skill_options,
-            min_values=0,
-            max_values=1
-        )
-        self.add_item(self.skill_select)
-
-        # Prepare attribute options from the character's attributes
-        attributes = getattr(character, "attributes", {})
-        attr_options = [
-            discord.SelectOption(label=attr, value=attr)
-            for attr in sorted(attributes.keys())
-        ]
-        # Default to the attribute in the roll_formula_obj if present, else first attribute
-        default_attr = roll_formula_obj.attribute if hasattr(roll_formula_obj, "attribute") else None
-        if not default_attr and attr_options:
-            default_attr = attr_options[0].value
-
-        self.attribute_select = discord.ui.Select(
-            placeholder=default_attr if default_attr else "None",
-            options=attr_options,
-            min_values=0,
-            max_values=1
-        )
-        self.add_item(self.attribute_select)
-
-    @discord.ui.button(label="Finalize Roll", style=discord.ButtonStyle.success)
-    async def finalize_roll_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Update the roll_formula_obj with the selected skill and attribute and any other modifiers
-        selected_skill = self.skill_select.values[0] if self.skill_select.values else None
-        if selected_skill:
-            self.roll_formula_obj["skill"] = selected_skill
-
-        selected_attr = self.attribute_select.values[0] if self.attribute_select.values else None
-        if selected_attr:
-            self.roll_formula_obj["attribute"] = selected_attr
-
-        for key, input_box in self.modifier_inputs.items():
-            value = input_box.value
-            if value is not None and value != "":
-                self.roll_formula_obj[key] = value
-
-        await self.character.finalize_roll(
-            interaction,
-            self.roll_formula_obj,
-            self.difficulty
-        )
-        self.stop()
+        self.add_item(FinalizeRollButton(self))
