@@ -1,6 +1,8 @@
 import discord
 from discord import Interaction, TextStyle, ui
 from core import factories
+from core.rolling import RollFormula
+from core.models import BaseCharacter
 from core.utils import get_character, roll_formula
 from data import repo
 
@@ -208,30 +210,54 @@ class RequestRollButton(ui.Button):
                     kwargs[k.strip()] = v.strip()
         await character.request_roll(interaction, roll_parameters=kwargs, difficulty=self.difficulty)
 
-class RollFormulaModal(ui.Modal, title="Enter Roll Formula"):
-    def __init__(self, difficulty: int = None):
-        super().__init__()
-        self.difficulty = difficulty
-        self.formula = ui.TextInput(
-            label="Roll Formula",
-            placeholder="e.g. 1d20+3",
-            required=True,
-            max_length=100
-        )
-        self.add_item(self.formula)
+class RollFormulaView(ui.View):
+    """
+    Base class for system-specific RollFormulaViews.
+    Provides shared variables and structure for roll input views.
+    """
+    def __init__(self, roll_formula_obj: RollFormula, character: BaseCharacter, original_interaction, difficulty: int = None):
+        super().__init__(timeout=300)
+        self.roll_formula_obj = roll_formula_obj  # The RollFormula object being edited
+        self.character = character                # The character making the roll
+        self.original_interaction = original_interaction  # The original Discord interaction
+        self.difficulty = difficulty  
+        
+        self.modifier_inputs = {}
 
-    async def on_submit(self, interaction: discord.Interaction):
-        formula = self.formula.value.strip()
-        result, total = roll_formula(formula)
-        if "❌" in result:
-            await interaction.response.send_message(
-                "❌ Invalid roll formula. Please use a format like '1d20+3'.",
-                ephemeral=True
+        # Create a text input for each key in the roll formula
+        for key, value in self.roll_formula_obj.to_dict().items():
+            input_box = discord.ui.TextInput(
+                label=f"{key}",
+                default=str(value),
+                required=False,
+                max_length=20
             )
-            return
-        if total is not None and self.difficulty is not None:
-            if total >= self.difficulty:
-                result += f"\n✅ Success! (Needed {self.difficulty})"
-            else:
-                result += f"\n❌ Failure. (Needed {self.difficulty})"
-        await interaction.response.send_message(result, ephemeral=False)
+            self.modifier_inputs[key] = input_box
+            self.add_item(input_box)
+
+        # Add a blank modifier input for adding new modifiers
+        self.add_item(AddModifierButton(self))
+
+    def add_modifier_input(self, label="modifier"):
+        input_box = discord.ui.TextInput(
+            label=label,
+            required=True,
+            default="0",
+            max_length=20
+        )
+        self.modifier_inputs[label] = input_box
+        self.add_item(input_box)            # Optional difficulty for the roll
+
+class AddModifierButton(discord.ui.Button):
+    def __init__(self, parent_view: RollFormulaView):
+        super().__init__(label="Add Modifier", style=discord.ButtonStyle.secondary)
+        self.parent_view = parent_view
+
+    async def callback(self, interaction: discord.Interaction):
+        # Add a new modifier input with a unique label
+        idx = 1
+        while f"modifier{idx}" in self.parent_view.modifier_inputs:
+            idx += 1
+        label = f"modifier{idx}"
+        self.parent_view.add_modifier_input(label=label)
+        await interaction.response.edit_message(view=self.parent_view)

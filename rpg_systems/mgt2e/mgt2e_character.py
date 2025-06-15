@@ -1,8 +1,11 @@
-import discord
-from core.models import BaseCharacter
+from collections import defaultdict
 from typing import Any, Dict
-
-from core.utils import roll_formula
+import discord
+from discord import SelectOption, ui
+from core.models import BaseCharacter, BaseSheet
+from core.rolling import RollFormula
+from core.shared_views import EditNameModal, EditNotesModal, PaginatedSelectView, RollFormulaView
+from core.utils import get_character, roll_formula
 from data import repo
 
 class MGT2ECharacter(BaseCharacter):
@@ -163,46 +166,24 @@ class MGT2ECharacter(BaseCharacter):
                     setattr(self, key, value)
     
     async def request_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
-        # 1. Either skill or attribute must be present
-        if not isinstance(roll_parameters, dict) or not (
-            "skill" in roll_parameters or "attribute" in roll_parameters
-        ):
-            await interaction.response.send_message(
-                "❌ Invalid roll parameters. You must provide at least a skill or attribute for MGT2E rolls.",
-                ephemeral=True
-            )
-            return
+        roll_formula_obj = MGT2ERollFormula(roll_parameters_dict=roll_parameters)
+        view = MGT2ERollFormulaView(roll_formula_obj, self, interaction, difficulty)
+        await interaction.response.send_message(
+            content="Adjust your roll formula as needed, then finalize to roll.",
+            view=view,
+            ephemeral=True
+        )
 
-        # 2. All other keys must have values that are numbers or modifiers like +1, -8, 0, etc.
-        allowed_keys = {"skill", "attribute"}
-        total_mod = 0
-
-        for k, v in roll_parameters.items():
-            if k in allowed_keys:
-                continue
-            # Acceptable values: +1, -8, 0, 5, etc.
-            try:
-                mod = int(v)
-            except ValueError:
-                try:
-                    if isinstance(v, str) and (v.startswith("+") or v.startswith("-")):
-                        mod = int(v)
-                    else:
-                        raise ValueError
-                except Exception:
-                    await interaction.response.send_message(
-                        f"❌ Modifier for '{k}' must be a number or a signed integer (e.g., +1, -8, 0).",
-                        ephemeral=True
-                    )
-                    return
-            total_mod += mod
-
-        skill = roll_parameters.get("skill")
-        attribute = roll_parameters.get("attribute")
-        skill_mod = self.get_skill_modifier(self.skills, skill) if skill else 0
-        attr_mod = self.get_attribute_modifier(self.attributes.get(attribute, 0)) if attribute else 0
-        total_mod += skill_mod + attr_mod
-        formula = f"2d6{f'+{total_mod}' if total_mod > 0 else (f'{total_mod}' if total_mod < 0 else '')}"
+    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollFormula, difficulty: int = None):
+        """
+        Rolls 2d6 with modifiers from the RollFormula object.
+        """
+        # Build the formula string from the RollFormula object
+        # Example: "2d6+3-1"
+        formula_parts = ["2d6"]
+        for key, value in roll_formula_obj.get_modifiers(self).items():
+            formula_parts.append(f"{value:+d}")
+        formula = "".join(formula_parts)
         result, total = roll_formula(formula)
         if total is not None and difficulty is not None:
             if total >= difficulty:
@@ -285,3 +266,424 @@ class MGT2ECharacter(BaseCharacter):
             return 2
         else:
             return 3
+
+class MGT2ERollFormula(RollFormula):
+    """
+    A roll formula specifically for the MGT2E RPG system.
+    It can handle any roll parameters as needed.
+    """
+    def __init__(self, roll_parameters_dict: dict = None):
+        super().__init__(roll_parameters_dict)
+        self.skill = roll_parameters_dict.get("skill") if roll_parameters_dict else None
+        self.attribute = roll_parameters_dict.get("attribute") if roll_parameters_dict else None
+
+    def get_modifiers(self, character: MGT2ECharacter) -> Dict[str, int]:
+        modifiers = super().get_modifiers(character).items()
+        if self.skill:
+            skill_value = character.skills.get(self.skill, 0)
+            modifiers = list(modifiers) + [(self.skill, skill_value)]
+        if self.attribute:
+            attribute_value = character.attributes.get(self.attribute, 0)
+            modifiers = list(modifiers) + [(self.attribute, character.get_attribute_modifier(attribute_value))]
+        return dict(modifiers)
+        
+class MGT2ESheet(BaseSheet):
+    def format_full_sheet(self, character: MGT2ECharacter) -> discord.Embed:
+        # Use the .name property instead of get_name()
+        embed = discord.Embed(
+            title=f"{character.name or 'Traveller'}",
+            color=discord.Color.dark_teal()
+        )
+
+        # --- Attributes ---
+        attributes = character.attributes  # Use property
+        if attributes:
+            attr_lines = [
+                f"**STR**: {attributes.get('STR', 0)}   **DEX**: {attributes.get('DEX', 0)}   **END**: {attributes.get('END', 0)}",
+                f"**INT**: {attributes.get('INT', 0)}   **EDU**: {attributes.get('EDU', 0)}   **SOC**: {attributes.get('SOC', 0)}"
+            ]
+            embed.add_field(name="Attributes", value="\n".join(attr_lines), inline=False)
+        else:
+            embed.add_field(name="Attributes", value="None", inline=False)
+
+        # --- Skills ---
+        skills = character.skills  # Use property
+        trained_skills = character.get_trained_skills(skills)
+        if trained_skills:
+            sorted_skills = sorted(trained_skills.items(), key=lambda x: (x[0]))
+            skill_lines = []
+            for k, v in sorted_skills:
+                skill_lines.append(f"**{k}**: {v}")
+            chunk = ""
+            count = 1
+            for line in skill_lines:
+                if len(chunk) + len(line) + 1 > 1024:
+                    if count == 1:
+                        embed.add_field(name=f"Skills", value=chunk.strip(), inline=False)
+                    chunk = ""
+                    count += 1
+                chunk += line + "\n"
+            if chunk:
+                embed.add_field(name=f"Skills", value=chunk.strip(), inline=False)
+        else:
+            embed.add_field(name="Skills", value="None", inline=False)
+
+        # --- Notes ---
+        notes = character.notes  # Use property, which is a list
+        notes_display = "\n".join(notes) if notes else "_No notes_"
+        embed.add_field(name="Notes", value=notes_display, inline=False)
+
+        return embed
+
+    def format_npc_scene_entry(self, npc: MGT2ECharacter, is_gm: bool):
+        # Use .name and .notes properties
+        lines = [f"**{npc.name or 'NPC'}**"]
+        if is_gm and npc.notes:
+            notes_display = "\n".join(npc.notes)
+            lines.append(f"**Notes:** *{notes_display}*")
+        return "\n".join(lines)
+
+    def roll(self, character: MGT2ECharacter, *, skill=None, attribute=None, formula=None):
+        import random, re
+
+        if formula:
+            arg = formula.replace(" ", "").lower()
+            fudge_pattern = r'(\d*)d[fF]([+-]\d+)?'
+            fudge_match = re.fullmatch(fudge_pattern, arg)
+            if fudge_match:
+                num_dice = int(fudge_match.group(1)) if fudge_match.group(1) else 4
+                modifier = int(fudge_match.group(2)) if fudge_match.group(2) else 0
+                rolls = [random.choice([-1, 0, 1]) for _ in range(num_dice)]
+                symbols = ['+' if r == 1 else '-' if r == -1 else '0' for r in rolls]
+                total = sum(rolls) + modifier
+                response = f'🎲 Fudge Rolls: `{" ".join(symbols)}`'
+                if modifier:
+                    response += f' {"+" if modifier > 0 else ""}{modifier}'
+                response += f'\n🧮 Total: {total}'
+                return response
+            pattern = r'(\d*)d(\d+)([+-]\d+)?'
+            match = re.fullmatch(pattern, arg)
+            if match:
+                num_dice = int(match.group(1)) if match.group(1) else 1
+                die_size = int(match.group(2))
+                modifier = int(match.group(3)) if match.group(3) else 0
+                if num_dice > 100 or die_size > 1000:
+                    return "😵 That's a lot of dice. Try fewer."
+                rolls = [random.randint(1, die_size) for _ in range(num_dice)]
+                total = sum(rolls) + modifier
+                response = f'🎲 Rolled: {rolls}'
+                if modifier:
+                    response += f' {"+" if modifier > 0 else ""}{modifier}'
+                response += f'\n🧮 Total: {total}'
+                return response
+            return "❌ Invalid formula. Use like `2d6+3` or `4df+1`."
+
+        if not skill or not attribute:
+            return "❌ Please specify both a skill and an attribute."
+        skills = character.skills  # Use property
+        skill_mod = character.get_skill_modifier(skills, skill)
+        attr_val = character.attributes.get(attribute.upper(), 0)  # Use property
+        attr_mod = character.get_attribute_modifier(attr_val)
+        rolls = [random.randint(1, 6) for _ in range(2)]
+        total = sum(rolls) + skill_mod + attr_mod
+        response = (
+            f'🎲 2d6: {rolls} + **{skill}** ({skill_mod}) + **{attribute.upper()}** mod ({attr_mod})\n'
+            f'🧮 Total: {total}'
+        )
+        return response
+    
+SYSTEM = "mgt2e"
+sheet = MGT2ESheet()
+
+def get_skill_categories(skills_dict):
+    categories = defaultdict(list)
+    for skill in skills_dict:
+        if "(" in skill and ")" in skill:
+            group = skill.split("(", 1)[0].strip()
+            categories[group].append(skill)
+        else:
+            categories[skill].append(skill)
+    return categories
+
+class MGT2ESheetEditView(ui.View):
+    def __init__(self, editor_id: int, char_id: str):
+        super().__init__(timeout=120)
+        self.editor_id = editor_id
+        self.char_id = char_id
+        self.add_item(RollButton(char_id, editor_id))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.editor_id:
+            await interaction.response.send_message("You can’t edit this character.", ephemeral=True)
+            return False
+        return True
+
+    @ui.button(label="Edit Attributes", style=discord.ButtonStyle.secondary, row=1)
+    async def edit_attributes(self, interaction: discord.Interaction, button: ui.Button):
+        character = get_character(interaction.guild.id, self.char_id)
+        attrs = character.attributes if character else {}
+        await interaction.response.send_modal(EditAttributesModal(self.char_id, attrs))
+
+    @ui.button(label="Edit Skills", style=discord.ButtonStyle.secondary, row=1)
+    async def edit_skills(self, interaction: discord.Interaction, button: ui.Button):
+        character = get_character(interaction.guild.id, self.char_id)
+        skills = character.skills if character else {}
+        categories = get_skill_categories(MGT2ECharacter.DEFAULT_SKILLS)
+        category_options = [SelectOption(label=cat, value=cat) for cat in sorted(categories.keys())]
+
+        async def on_category_selected(view, interaction, category):
+            skills_in_cat = categories[category]
+            skill_options = [SelectOption(label=skill, value=skill) for skill in sorted(skills_in_cat)]
+            async def on_skill_selected(view2, interaction2, skill):
+                await interaction2.response.send_modal(EditSkillValueModal(self.char_id, skill))
+            await interaction.response.edit_message(
+                content=f"Select a skill in {category}:",
+                view=PaginatedSelectView(skill_options, on_skill_selected, interaction.user.id, prompt=f"Select a skill in {category}:")
+            )
+
+        await interaction.response.send_message(
+            "Select a skill category:",
+            view=PaginatedSelectView(category_options, on_category_selected, interaction.user.id, prompt="Select a skill category:"),
+            ephemeral=True
+        )
+
+    @ui.button(label="Edit Name", style=discord.ButtonStyle.secondary, row=1)
+    async def edit_name(self, interaction: discord.Interaction, button: ui.Button):
+        character = get_character(interaction.guild.id, self.char_id)
+        await interaction.response.send_modal(
+            EditNameModal(
+                self.char_id,
+                character.name if character else "",
+                SYSTEM,
+                lambda editor_id, char_id: (sheet.format_full_sheet(get_character(interaction.guild.id, char_id)), MGT2ESheetEditView(editor_id, char_id))
+            )
+        )
+
+    @ui.button(label="Edit Notes", style=discord.ButtonStyle.secondary, row=4)
+    async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
+        character = get_character(interaction.guild.id, self.char_id)
+        # Only allow owner or GM
+        if (interaction.user.id != int(character.owner_id) and
+            not repo.is_gm(interaction.guild.id, interaction.user.id)):
+            await interaction.response.send_message("❌ Only the owner or a GM can edit notes.", ephemeral=True)
+            return
+        notes = "\n".join(character.notes) if character and character.notes else ""
+        await interaction.response.send_modal(
+            EditNotesModal(
+                self.char_id,
+                notes,
+                SYSTEM,
+                lambda editor_id, char_id: (sheet.format_full_sheet(get_character(interaction.guild.id, char_id)), MGT2ESheetEditView(editor_id, char_id))
+            )
+        )
+
+class RollButton(ui.Button):
+    def __init__(self, char_id, editor_id):
+        super().__init__(label="Roll", style=discord.ButtonStyle.primary, row=0)
+        self.char_id = char_id
+        self.editor_id = editor_id
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.editor_id:
+            await interaction.response.send_message("You can’t roll for this character.", ephemeral=True)
+            return
+        character = get_character(interaction.guild.id, self.char_id)
+        skills = character.skills if character else {}
+        categories = get_skill_categories(skills)
+        category_options = [SelectOption(label=cat, value=cat) for cat in sorted(categories.keys())]
+
+        async def on_category_selected(view, interaction, category):
+            skills_in_cat = categories[category]
+            skill_options = [SelectOption(label=skill, value=skill) for skill in sorted(skills_in_cat)]
+            async def on_skill_selected(view2, interaction2, skill):
+                attributes = character.attributes if character else {}
+                attr_options = [SelectOption(label=k, value=k) for k in sorted(attributes.keys())]
+                async def on_attr_selected(view3, interaction3, attr):
+                    result = sheet.roll(character, skill=skill, attribute=attr)
+                    await interaction3.response.send_message(result, ephemeral=True)
+                await interaction2.response.edit_message(
+                    content=f"Select an attribute to roll with {skill}:",
+                    view=PaginatedSelectView(attr_options, on_attr_selected, interaction.user.id, prompt=f"Select an attribute to roll with {skill}:")
+                )
+            await interaction.response.edit_message(
+                content=f"Select a skill in {category} to roll:",
+                view=PaginatedSelectView(skill_options, on_skill_selected, interaction.user.id, prompt=f"Select a skill in {category} to roll:")
+            )
+
+        await interaction.response.send_message(
+            "Select a skill category to roll:",
+            view=PaginatedSelectView(category_options, on_category_selected, interaction.user.id, prompt="Select a skill category to roll:"),
+            ephemeral=True
+        )
+
+class EditAttributesModal(ui.Modal, title="Edit Attributes"):
+    def __init__(self, char_id: str, attrs: dict):
+        super().__init__()
+        self.char_id = char_id
+        default = f"{attrs.get('STR', 0)} {attrs.get('DEX', 0)} {attrs.get('END', 0)} {attrs.get('INT', 0)} {attrs.get('EDU', 0)} {attrs.get('SOC', 0)}"
+        self.attr_field = ui.TextInput(
+            label="STR DEX END INT EDU SOC (space-separated)",
+            required=True,
+            default=default,
+            max_length=50
+        )
+        self.add_item(self.attr_field)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        character = get_character(interaction.guild.id, self.char_id)
+        try:
+            values = [int(x) for x in self.attr_field.value.strip().split()]
+            if len(values) != 6:
+                raise ValueError
+            character.attributes = {
+                "STR": values[0],
+                "DEX": values[1],
+                "END": values[2],
+                "INT": values[3],
+                "EDU": values[4],
+                "SOC": values[5],
+            }  # Use property setter
+        except Exception:
+            await interaction.response.send_message("❌ Please enter 6 integers separated by spaces (e.g. `8 7 6 5 4 3`).", ephemeral=True)
+            return
+        repo.set_character(interaction.guild.id, character, system=SYSTEM)
+        embed = sheet.format_full_sheet(character)
+        view = MGT2ESheetEditView(interaction.user.id, self.char_id)
+        await interaction.response.edit_message(content="✅ Attributes updated.", embed=embed, view=view)
+
+class EditSkillsModal(ui.Modal, title="Edit Skills"):
+    def __init__(self, char_id: str, skills: dict):
+        super().__init__()
+        self.char_id = char_id
+        self.skills_field = ui.TextInput(
+            label="Skills (format: Skill1:2,Skill2:1)",
+            required=False,
+            default=", ".join(f"{k}:{v}" for k, v in skills.items())
+        )
+        self.add_item(self.skills_field)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        character = get_character(interaction.guild.id, self.char_id)
+        skills_dict = {}
+        for entry in self.skills_field.value.split(","):
+            if ":" in entry:
+                k, v = entry.split(":", 1)
+                try:
+                    skills_dict[k.strip()] = int(v.strip())
+                except ValueError:
+                    continue
+        character.skills = skills_dict  # Use property setter
+        repo.set_character(interaction.guild.id, character, system=SYSTEM)
+        embed = sheet.format_full_sheet(character)
+        view = MGT2ESheetEditView(interaction.user.id, self.char_id)
+        await interaction.response.edit_message(content="✅ Skills updated!", embed=embed, view=view)
+
+class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
+    def __init__(self, char_id: str, skill: str):
+        super().__init__()
+        self.char_id = char_id
+        self.skill = skill
+        label = f"{skill} value (0 - 5 or 'untrained')"
+        if len(label) > 45:
+            label = label[:42] + "..."
+        self.value_field = ui.TextInput(
+            label=label,
+            required=True,
+            max_length=10
+        )
+        self.add_item(self.value_field)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        character = get_character(interaction.guild.id, self.char_id)
+        value = self.value_field.value.strip()
+        try:
+            skills = character.skills  # Use property
+            if value.lower() == "untrained":
+                skills[self.skill] = -3
+            else:
+                skills[self.skill] = int(value)
+            character.skills = skills  # Save back using property setter
+        except Exception:
+            await interaction.response.send_message("❌ Please enter a number or 'untrained'.", ephemeral=True)
+            return
+        repo.set_character(interaction.guild.id, character, system=SYSTEM)
+        embed = sheet.format_full_sheet(character)
+        view = MGT2ESheetEditView(interaction.user.id, self.char_id)
+        await interaction.response.edit_message(content=f"✅ {self.skill} updated.", embed=embed, view=view)
+
+class MGT2ERollFormulaView(RollFormulaView):
+    """
+    A view for editing and finalizing MGT2E roll formulas.
+    This view allows users to adjust the roll formula and finalize it for rolling.
+    Provides dropdowns to select a different skill or attribute than the ones from the roll_formula_obj.
+    """
+    def __init__(self, roll_formula_obj: MGT2ERollFormula, character, original_interaction, difficulty: int = None):
+        super().__init__(roll_formula_obj, character, original_interaction, difficulty)
+
+        # Remove any existing skill input from the base view
+        if "skill" in self.modifier_inputs:
+            self.remove_item(self.modifier_inputs["skill"])
+            del self.modifier_inputs["skill"]
+
+        # Remove any existing attribute input from the base view
+        if "attribute" in self.modifier_inputs:
+            self.remove_item(self.modifier_inputs["attribute"])
+            del self.modifier_inputs["attribute"]
+
+        # Prepare skill options from the character's skills
+        skills = getattr(character, "skills", {})
+        skill_options = [
+            discord.SelectOption(label=skill, value=skill)
+            for skill in sorted(skills.keys())
+        ]
+        # Default to the skill in the roll_formula_obj if present
+        default_skill = roll_formula_obj.skill if hasattr(roll_formula_obj, "properties") else None
+        self.skill_select = discord.ui.Select(
+            placeholder=default_skill if default_skill else "None",
+            options=skill_options,
+            min_values=0,
+            max_values=1
+        )
+        self.add_item(self.skill_select)
+
+        # Prepare attribute options from the character's attributes
+        attributes = getattr(character, "attributes", {})
+        attr_options = [
+            discord.SelectOption(label=attr, value=attr)
+            for attr in sorted(attributes.keys())
+        ]
+        # Default to the attribute in the roll_formula_obj if present, else first attribute
+        default_attr = roll_formula_obj.attribute if hasattr(roll_formula_obj, "attribute") else None
+        if not default_attr and attr_options:
+            default_attr = attr_options[0].value
+
+        self.attribute_select = discord.ui.Select(
+            placeholder=default_attr if default_attr else "None",
+            options=attr_options,
+            min_values=0,
+            max_values=1
+        )
+        self.add_item(self.attribute_select)
+
+    @discord.ui.button(label="Finalize Roll", style=discord.ButtonStyle.success)
+    async def finalize_roll_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Update the roll_formula_obj with the selected skill and attribute and any other modifiers
+        selected_skill = self.skill_select.values[0] if self.skill_select.values else None
+        if selected_skill:
+            self.roll_formula_obj["skill"] = selected_skill
+
+        selected_attr = self.attribute_select.values[0] if self.attribute_select.values else None
+        if selected_attr:
+            self.roll_formula_obj["attribute"] = selected_attr
+
+        for key, input_box in self.modifier_inputs.items():
+            value = input_box.value
+            if value is not None and value != "":
+                self.roll_formula_obj[key] = value
+
+        await self.character.finalize_roll(
+            interaction,
+            self.roll_formula_obj,
+            self.difficulty
+        )
+        self.stop()

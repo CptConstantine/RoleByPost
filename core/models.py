@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
-
 import discord
+from core.rolling import RollFormula
 
 class NotesMixin:
     def add_note(self, note: str):
@@ -47,50 +47,6 @@ class BaseRpgObj(ABC, NotesMixin):
     @notes.setter
     def notes(self, value: list):
         self.data["notes"] = value
-
-class BaseCharacter(BaseRpgObj):
-    """
-    Abstract base class for a character (PC or NPC).
-    System-specific character classes should inherit from this and implement all methods.
-    """
-    SYSTEM_SPECIFIC_CHARACTER = {}
-    SYSTEM_SPECIFIC_NPC = {}
-
-    def __init__(self, data: Dict[str, Any]):
-        super().__init__(data)
-        if not hasattr(self, 'SYSTEM_SPECIFIC_CHARACTER'):
-            raise NotImplementedError("SYSTEM_SPECIFIC_CHARACTER must be defined in the subclass.")
-        if not hasattr(self, 'SYSTEM_SPECIFIC_NPC'):
-            raise NotImplementedError("SYSTEM_SPECIFIC_NPC must be defined in the subclass.")
-
-    @property
-    def name(self) -> str:
-        return self.data.get("name")
-
-    @name.setter
-    def name(self, value: str):
-        self.data["name"] = value
-
-    @property
-    def is_npc(self) -> bool:
-        return self.data.get("is_npc", False)
-
-    @is_npc.setter
-    def is_npc(self, value: bool):
-        self.data["is_npc"] = value
-
-    @abstractmethod
-    def apply_defaults(self, is_npc=False, guild_id=None):
-        """Apply system-specific default fields to a character dict."""
-        pass
-    
-    @abstractmethod
-    async def request_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
-        """
-        Abstract method to handle a roll request for this character.
-        Should return a discord.ui.View or send a message with the result.
-        """
-        pass
 
 class BaseSheet(ABC):
     @abstractmethod
@@ -157,5 +113,57 @@ class BaseInitiativeView(ABC, discord.ui.View):
         """
         Update the initiative view (e.g., after a turn advances).
         Must be implemented by subclasses.
+        """
+        pass
+
+class BaseCharacter(BaseRpgObj):
+    """
+    Abstract base class for a character (PC or NPC).
+    System-specific character classes should inherit from this and implement all methods.
+    """
+    SYSTEM_SPECIFIC_CHARACTER = {}
+    SYSTEM_SPECIFIC_NPC = {}
+
+    def __init__(self, data: Dict[str, Any]):
+        super().__init__(data)
+        if not hasattr(self, 'SYSTEM_SPECIFIC_CHARACTER'):
+            raise NotImplementedError("SYSTEM_SPECIFIC_CHARACTER must be defined in the subclass.")
+        if not hasattr(self, 'SYSTEM_SPECIFIC_NPC'):
+            raise NotImplementedError("SYSTEM_SPECIFIC_NPC must be defined in the subclass.")
+
+    @property
+    def name(self) -> str:
+        return self.data.get("name")
+
+    @name.setter
+    def name(self, value: str):
+        self.data["name"] = value
+
+    @property
+    def is_npc(self) -> bool:
+        return self.data.get("is_npc", False)
+
+    @is_npc.setter
+    def is_npc(self, value: bool):
+        self.data["is_npc"] = value
+
+    @abstractmethod
+    def apply_defaults(self, is_npc=False, guild_id=None):
+        """Apply system-specific default fields to a character dict."""
+        pass
+    
+    @abstractmethod
+    async def request_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
+        """
+        Abstract method to handle a roll request for this character.
+        Should return a discord.ui.View or send a message with the result.
+        """
+        pass
+
+    @abstractmethod
+    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollFormula, difficulty: int = None):
+        """
+        Abstract method to handle a roll request for this character.
+        Should return a discord.ui.View or send a message with the result.
         """
         pass
