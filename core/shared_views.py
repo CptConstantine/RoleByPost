@@ -1,8 +1,7 @@
 import discord
 from discord import Interaction, TextStyle, ui
 from core import factories
-from core.rolling import RollModifiers
-from core.models import BaseCharacter
+from core.models import BaseCharacter, RollModifiers
 from core.utils import get_character, roll_formula
 from data import repo
 
@@ -183,32 +182,25 @@ class EditNotesModal(ui.Modal, title="Edit Notes"):
         await interaction.response.edit_message(content="✅ Notes updated.", embed=embed, view=view)
 
 class RequestRollView(ui.View):
-    def __init__(self, chars, system, roll_parameters: str = None, difficulty: int = None):
+    def __init__(self, roll_formula: RollModifiers = None, difficulty: int = None):
         super().__init__(timeout=300)
-        for char in chars:
-            self.add_item(RequestRollButton(char.id, system, roll_parameters, difficulty))
-
-class RequestRollButton(ui.Button):
-    def __init__(self, char_id, system, roll_parameters: str = None, difficulty: int = None):
-        super().__init__(label="Roll", style=discord.ButtonStyle.primary)
-        self.char_id = char_id
-        self.roll_parameters = roll_parameters
+        self.roll_formula_obj = roll_formula
         self.difficulty = difficulty
-        self.system = system
+        self.add_item(EditRequestedRollButton(roll_formula, difficulty))
+        self.add_item(FinalizeRollButton(roll_formula, difficulty))
+
+class EditRequestedRollButton(ui.Button):
+    def __init__(self, roll_formula: RollModifiers = None, difficulty: int = None):
+        super().__init__(label="Modify Roll", style=discord.ButtonStyle.primary)
+        self.roll_formula_obj = roll_formula
+        self.difficulty = difficulty
 
     async def callback(self, interaction: discord.Interaction):
-        character = repo.get_character_by_id(interaction.guild.id, self.char_id)
+        character = repo.get_active_character(interaction.guild.id, interaction.user.id)
         if not character:
-            await interaction.response.send_message("❌ Character not found.", ephemeral=True)
+            await interaction.response.send_message("❌ Active character not found. Use /setactive to set your active character.", ephemeral=True)
             return
-        # Parse roll_parameters into kwargs
-        kwargs = {}
-        if self.roll_parameters:
-            for param in self.roll_parameters.split(","):
-                if ":" in param:
-                    k, v = param.split(":", 1)
-                    kwargs[k.strip()] = v.strip()
-        await character.request_roll(interaction, roll_parameters=kwargs, difficulty=self.difficulty)
+        await character.edit_requested_roll(interaction, self.roll_formula_obj, difficulty=self.difficulty)
 
 class RollModifiersView(ui.View):
     """
@@ -216,11 +208,10 @@ class RollModifiersView(ui.View):
     Provides shared variables and structure for roll input views.
     Each modifier/property is shown as a button; clicking it opens a modal to edit its value.
     """
-    def __init__(self, roll_formula_obj: RollModifiers, character: BaseCharacter, original_interaction, difficulty: int = None):
+    def __init__(self, roll_formula_obj: RollModifiers, character: BaseCharacter, difficulty: int = None):
         super().__init__(timeout=300)
         self.roll_formula_obj = roll_formula_obj  # The RollFormula object being edited
         self.character = character                # The character making the roll
-        self.original_interaction = original_interaction  # The original Discord interaction
         self.difficulty = difficulty  
 
         self.modifier_buttons = {}
@@ -310,14 +301,15 @@ class AddModifierModal(discord.ui.Modal, title="Add Modifier"):
         await interaction.response.edit_message(view=self.parent_view)
 
 class FinalizeRollButton(discord.ui.Button):
-    def __init__(self, parent_view: RollModifiersView):
+    def __init__(self, roll_formula_obj: RollModifiers = None, difficulty: int = None):
         super().__init__(label="Roll", style=discord.ButtonStyle.success)
-        self.parent_view = parent_view
+        self.roll_formula_obj = roll_formula_obj
+        self.difficulty = difficulty
 
     async def callback(self, interaction: discord.Interaction):
-        await self.parent_view.character.send_roll_message(
+        character = repo.get_active_character(interaction.guild.id, interaction.user.id)
+        await character.send_roll_message(
             interaction,
-            self.parent_view.roll_formula_obj,
-            self.parent_view.difficulty
+            self.roll_formula_obj,
+            self.difficulty
         )
-        self.parent_view.stop()

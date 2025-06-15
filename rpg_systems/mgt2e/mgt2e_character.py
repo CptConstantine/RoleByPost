@@ -2,8 +2,7 @@ from collections import defaultdict
 from typing import Any, Dict
 import discord
 from discord import SelectOption, ui
-from core.models import BaseCharacter, BaseSheet
-from core.rolling import RollModifiers
+from core.models import BaseCharacter, BaseSheet, RollModifiers
 from core.shared_views import EditNameModal, EditNotesModal, FinalizeRollButton, PaginatedSelectView, RollModifiersView
 from core.utils import get_character, roll_formula
 from data import repo
@@ -167,9 +166,8 @@ class MGT2ECharacter(BaseCharacter):
                 if not hasattr(self, key) or getattr(self, key) in (None, [], {}, 0, False):
                     setattr(self, key, value)
     
-    async def request_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
-        roll_formula_obj = MGT2ERollModifiers(roll_parameters_dict=roll_parameters)
-        view = MGT2ERollModifiersView(roll_formula_obj, self, interaction, difficulty)
+    async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
+        view = MGT2ERollModifiersView(roll_formula_obj, difficulty)
         await interaction.response.send_message(
             content="Adjust your roll formula as needed, then finalize to roll.",
             view=view,
@@ -621,6 +619,6 @@ class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
         await interaction.response.edit_message(content=f"✅ {self.skill} updated.", embed=embed, view=view)
 
 class MGT2ERollModifiersView(RollModifiersView):
-    def __init__(self, roll_formula_obj: RollModifiers, character, original_interaction, difficulty: int = None):
-        super().__init__(roll_formula_obj, character, original_interaction, difficulty)
-        self.add_item(FinalizeRollButton(self))
+    def __init__(self, roll_formula_obj: RollModifiers, difficulty: int = None):
+        super().__init__(roll_formula_obj, difficulty)
+        self.add_item(FinalizeRollButton(roll_formula_obj, difficulty))

@@ -230,13 +230,28 @@ def setup_server_commands(bot: commands.Bot):
         mentions = []
         for char in chars:
             if not char.is_npc:
-                member = interaction.guild.get_member(int(char.owner_id))
-                if member:
-                    mentions.append(member.mention)
+                try:
+                    member = await interaction.guild.fetch_member(int(char.owner_id))
+                    if member and member not in mentions:
+                        mentions.append(member.mention)
+                except discord.NotFound:
+                    continue  # Member not found in guild
+                except discord.HTTPException:
+                    continue  # Network or API error
         mention_str = " ".join(mentions) if mentions else ""
 
-        view = RequestRollView(chars, system, roll_parameters=roll_parameters, difficulty=difficulty)
+        # Parse roll_parameters into roll_parameters_dict
+        roll_parameters_dict = {}
+        if roll_parameters:
+            for param in roll_parameters.split(","):
+                if ":" in param:
+                    k, v = param.split(":", 1)
+                    roll_parameters_dict[k.strip()] = v.strip()
+        
+        roll_formula_obj = factories.get_specific_roll_formula(system, roll_parameters_dict)
+
+        view = RequestRollView(roll_formula=roll_formula_obj, difficulty=difficulty)
         await interaction.response.send_message(
-            content=f"{mention_str}\nGM requests a roll: `{roll_parameters}`",
+            content=f"{mention_str}\n{interaction.user.display_name} requests a roll: `{roll_parameters}`",
             view=view
         )

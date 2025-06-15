@@ -48,3 +48,13 @@ def get_specific_initiative_view(guild_id: str, channel_id: str, initiative):
         return initiative_views.GenericInitiativeView(guild_id=guild_id, channel_id=channel_id, initiative=initiative)
     else:
         raise ValueError(f"Unknown initiative type: {initiative.type}")
+    
+def get_specific_roll_formula(system: str, roll_parameters_dict: dict = None):
+    if system == "fate":
+        return fate_character.FateRollModifiers(roll_parameters_dict)
+    elif system == "mgt2e":
+        return mgt2e_character.MGT2ERollModifiers(roll_parameters_dict)
+    elif system == "generic":
+        return generic_character.GenericRollModifiers(roll_parameters_dict)
+    else:
+        raise ValueError(f"Unknown system: {system}")

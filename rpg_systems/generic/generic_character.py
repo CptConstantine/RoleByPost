@@ -4,7 +4,6 @@ from discord import ui
 from core.models import BaseCharacter, BaseSheet, RollModifiers
 from core.shared_views import EditNameModal, EditNotesModal, FinalizeRollButton, RollModifiersView
 from core.utils import get_character, roll_formula
-from core.rolling import RollModifiers
 
 SYSTEM = "generic"
 
@@ -23,9 +22,8 @@ class GenericCharacter(BaseCharacter):
         # No system-specific fields for generic
         pass
 
-    async def request_roll(self, interaction: discord.Interaction, roll_parameters: dict = None, difficulty: int = None):
-        roll_formula_obj = GenericRollModifiers(roll_parameters_dict=roll_parameters)
-        view = GenericRollModifiersView(roll_formula_obj, self, interaction, difficulty)
+    async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
+        view = GenericRollModifiersView(roll_formula_obj, difficulty)
         await interaction.response.send_message(
             content="Adjust your roll formula as needed, then finalize to roll.",
             view=view,
@@ -86,8 +84,6 @@ class GenericSheetEditView(ui.View):
         super().__init__(timeout=120)
         self.editor_id = editor_id
         self.char_id = char_id
-        #self.add_item(EditNameButton(self))
-        #self.add_item(EditNotesButton(self))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.editor_id:
@@ -121,6 +117,6 @@ class GenericSheetEditView(ui.View):
         )
 
 class GenericRollModifiersView(RollModifiersView):
-    def __init__(self, roll_formula_obj: RollModifiers, character, original_interaction, difficulty: int = None):
-        super().__init__(roll_formula_obj, character, original_interaction, difficulty)
-        self.add_item(FinalizeRollButton(self))
+    def __init__(self, roll_formula_obj: RollModifiers, difficulty: int = None):
+        super().__init__(roll_formula_obj, difficulty)
+        self.add_item(FinalizeRollButton(roll_formula_obj, difficulty))

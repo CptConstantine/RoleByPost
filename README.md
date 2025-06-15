@@ -128,7 +128,7 @@ The following are the commands that are currently available.
 
 ### Top Priority
 
-- Upgrades to the /roll_request command to allow players to modify the roll after it's requested
+- Upgrades to the /roll_request command to allow players to modify the skill and/or attribute
   - System specific upgrades as well, like a button to invoke an aspect (Fate) to modify the result
 - Optionally set automatic reminders when someone is mentioned
 - Commands to make narration and dialogue more interesting

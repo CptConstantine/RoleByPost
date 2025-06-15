@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import discord
-from core.rolling import RollModifiers
 
 class NotesMixin:
     def add_note(self, note: str):
@@ -116,6 +115,40 @@ class BaseInitiativeView(ABC, discord.ui.View):
         """
         pass
 
+class RollModifiers(ABC):
+    """
+    A flexible container for roll parameters (e.g., skill, attribute, modifiers).
+    Non-modifier properties (like skill, attribute) are stored in a separate dictionary.
+    Modifiers are stored in self.modifiers.
+    """
+    def __init__(self, roll_parameters_dict: dict = None):
+        self.modifiers = {}  # Store direct numeric modifiers (e.g., mod1, mod2)
+        if roll_parameters_dict:
+            for key, modifier in roll_parameters_dict.items():
+                try:
+                    value = int(modifier)
+                    self.modifiers[key] = value
+                except (ValueError, TypeError):
+                    continue
+
+    def __getitem__(self, key):
+        return self.modifiers.get(key)
+
+    def __setitem__(self, key, value):
+        self.modifiers[key] = value
+
+    def to_dict(self):
+        return dict(self.modifiers)
+
+    def get_modifiers(self, character: "BaseCharacter") -> Dict[str, int]:
+        """
+        Returns a dictionary of all modifiers
+        """
+        return dict(self.modifiers)
+
+    def __repr__(self):
+        return f"RollModifiers(modifiers={self.modifiers})"
+
 class BaseCharacter(BaseRpgObj):
     """
     Abstract base class for a character (PC or NPC).
@@ -153,7 +186,7 @@ class BaseCharacter(BaseRpgObj):
         pass
     
     @abstractmethod
-    async def request_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
+    async def edit_requested_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
         """
         Abstract method to handle a roll request for this character.
         Should return a discord.ui.View or send a message with the result.

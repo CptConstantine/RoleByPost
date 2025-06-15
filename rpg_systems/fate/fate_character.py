@@ -2,8 +2,7 @@ import random
 from typing import Any, Dict, List
 import discord
 from discord import ui, SelectOption
-from core.models import BaseCharacter, BaseSheet
-from core.rolling import RollModifiers
+from core.models import BaseCharacter, BaseSheet, RollModifiers
 from core.shared_views import FinalizeRollButton, PaginatedSelectView, EditNameModal, EditNotesModal, RollModifiersView
 from core.utils import get_character, roll_formula
 from data import repo
@@ -137,9 +136,8 @@ class FateCharacter(BaseCharacter):
                 if not hasattr(self, key) or getattr(self, key) in (None, [], {}, 0, False):
                     setattr(self, key, value)
     
-    async def request_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
-        roll_formula_obj = FateRollModifiers(roll_parameters_dict=roll_parameters)
-        view = FateRollModifiersView(roll_formula_obj, self, interaction, difficulty)
+    async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
+        view = FateRollModifiersView(roll_formula_obj, difficulty)
         await interaction.response.send_message(
             content="Adjust your roll formula as needed, then finalize to roll.",
             view=view,
@@ -670,53 +668,6 @@ class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
         await interaction.response.edit_message(content=f"✅ {self.skill} updated.", embed=embed, view=view)
 
 class FateRollModifiersView(RollModifiersView):
-    def __init__(self, roll_formula_obj: RollModifiers, character, original_interaction, difficulty: int = None):
-        super().__init__(roll_formula_obj, character, original_interaction, difficulty)
-        self.add_item(FinalizeRollButton(self))
-
-# class FateRollFormulaView(RollFormulaView):
-#     """
-#     A view for editing and finalizing Fate roll formulas.
-#     This view allows users to adjust the roll formula and finalize it for rolling.
-#     Provides a dropdown to select a different skill than the one from the roll_formula_obj.
-#     """
-#     def __init__(self, roll_formula_obj: FateRollFormula, character, original_interaction, difficulty: int = None):
-#         super().__init__(roll_formula_obj, character, original_interaction, difficulty)
-#         # Prepare skill options from the character's skills
-#         skills = getattr(character, "skills", {})
-#         skill_options = [
-#             discord.SelectOption(label=skill, value=skill)
-#             for skill in sorted(skills.keys())
-#         ]
-#         # Default to the skill in the roll_formula_obj if present, else first skill
-#         default_skill = roll_formula_obj.skill if hasattr(roll_formula_obj, "properties") else None
-#         if not default_skill and skill_options:
-#             default_skill = skill_options[0].value
-
-#         self.skill_select = discord.ui.Select(
-#             placeholder=default_skill if default_skill else "Select a skill",
-#             options=skill_options,
-#             min_values=0,
-#             max_values=1
-#         )
-#         self.add_item(self.skill_select)
-#         self.add_item(FateFinalizeRollButton(self))
-
-# class FateFinalizeRollButton(FinalizeRollButton):
-#     def __init__(self, parent_view: "FateRollFormulaView"):
-#         super().__init__(label="Finalize Roll", style=discord.ButtonStyle.success)
-#         self.parent_view = parent_view
-
-#     async def callback(self, interaction: discord.Interaction):
-#         super().callback(interaction)
-#         # Update the roll_formula_obj with the selected skill and any other modifiers
-#         selected_skill = self.parent_view.skill_select.values[0] if self.parent_view.skill_select.values else None
-#         if selected_skill:
-#             self.parent_view.roll_formula_obj["skill"] = selected_skill
-
-#         await self.parent_view.character.send_roll_message(
-#             interaction,
-#             self.parent_view.roll_formula_obj,
-#             self.parent_view.difficulty
-#         )
-#         self.parent_view.stop()
+    def __init__(self, roll_formula_obj: RollModifiers, difficulty: int = None):
+        super().__init__(roll_formula_obj, difficulty)
+        self.add_item(FinalizeRollButton(roll_formula_obj, difficulty))
