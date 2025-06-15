@@ -54,7 +54,7 @@ The following are the commands that are currently available.
   Set the RPG system for your server. You must be an Admin in the server.
   
 - `!setdefaultskillsfile [.txt file]` or `!setdefaultskills [skill1:0, skill2:0, skill3:1, etc.]`
-  (GM only) Set default skills via command or file upload. Skills are validated per system.
+  (GM only) Set default skills via command or file upload. Skills are validated per system (if the system has skills).
 
 ### Characters
 
@@ -128,8 +128,8 @@ The following are the commands that are currently available.
 
 ### Top Priority
 
-- Upgrades to the /roll_request command to allow players to modify the skill and/or attribute
-  - System specific upgrades as well, like a button to invoke an aspect (Fate) to modify the result
+- Improvements to /roll command to be more flexible
+- System specific upgrades to the /roll_request command to allow players to modify the skill and/or attribute
 - Optionally set automatic reminders when someone is mentioned
 - Commands to make narration and dialogue more interesting
 - User can provide an OpenAI API key to gain access to commands that use AI (summarize recent posts, ask rules questions)
