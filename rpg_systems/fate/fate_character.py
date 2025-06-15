@@ -263,8 +263,6 @@ class FateSheet(BaseSheet):
         total = sum(rolls) + skill_val
         response = f'🎲 4dF: `{" ".join(symbols)}` + **{skill}** ({skill_val})\n🧮 Total: {total}'
         return response
-    
-sheet = FateSheet()
 
 class FateSheetEditView(ui.View):
     def __init__(self, editor_id: int, char_id: str):
@@ -287,7 +285,7 @@ class FateSheetEditView(ui.View):
                 self.char_id,
                 character.name if character else "",
                 SYSTEM,
-                lambda editor_id, char_id: (sheet.format_full_sheet(get_character(interaction.guild.id, char_id)), FateSheetEditView(editor_id, char_id))
+                lambda editor_id, char_id: (FateSheet().format_full_sheet(get_character(interaction.guild.id, char_id)), FateSheetEditView(editor_id, char_id))
             )
         )
 
@@ -332,7 +330,7 @@ class FateSheetEditView(ui.View):
                 self.char_id,
                 notes,
                 SYSTEM,
-                lambda editor_id, char_id: (sheet.format_full_sheet(get_character(interaction.guild.id, char_id)), FateSheetEditView(editor_id, char_id))
+                lambda editor_id, char_id: (FateSheet().format_full_sheet(get_character(interaction.guild.id, char_id)), FateSheetEditView(editor_id, char_id))
             )
         )
 
@@ -418,13 +416,13 @@ class EditAspectsView(ui.View):
                 await interaction.response.send_modal(AddAspectModal(self.char_id))
                 return
             elif cid == "done":
-                await interaction.response.edit_message(content="✅ Done editing aspects.", embed=sheet.format_full_sheet(self.char), view=FateSheetEditView(interaction.user.id, self.char_id))
+                await interaction.response.edit_message(content="✅ Done editing aspects.", embed=FateSheet().format_full_sheet(self.char), view=FateSheetEditView(interaction.user.id, self.char_id))
                 return
 
             repo.set_character(interaction.guild.id, self.char, system=SYSTEM)
             self.load_data()
             self.render()
-            await interaction.response.edit_message(embed=sheet.format_full_sheet(self.char), view=self)
+            await interaction.response.edit_message(embed=FateSheet().format_full_sheet(self.char), view=self)
         return callback
 
 class EditAspectModal(ui.Modal, title="Edit Aspect"):
@@ -443,7 +441,7 @@ class EditAspectModal(ui.Modal, title="Edit Aspect"):
         aspects[self.index] = self.children[0].value.strip()
         character.aspects = aspects
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
-        await interaction.response.edit_message(content="✅ Aspect updated.", embed=sheet.format_full_sheet(character), view=EditAspectsView(interaction.guild.id, interaction.user.id, self.char_id))
+        await interaction.response.edit_message(content="✅ Aspect updated.", embed=FateSheet().format_full_sheet(character), view=EditAspectsView(interaction.guild.id, interaction.user.id, self.char_id))
 
 class AddAspectModal(ui.Modal, title="Add Aspect"):
     def __init__(self, char_id: str):
@@ -457,7 +455,7 @@ class AddAspectModal(ui.Modal, title="Add Aspect"):
         aspects.append(self.children[0].value.strip())
         character.aspects = aspects
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
-        await interaction.response.edit_message(content="✅ Aspect added.", embed=sheet.format_full_sheet(character), view=EditAspectsView(interaction.guild.id, interaction.user.id, self.char_id))
+        await interaction.response.edit_message(content="✅ Aspect added.", embed=FateSheet().format_full_sheet(character), view=EditAspectsView(interaction.guild.id, interaction.user.id, self.char_id))
 
 class EditStressModal(ui.Modal, title="Edit Stress"):
     physical = ui.TextInput(label="Physical Stress (e.g. 1 1 0)", required=False)
@@ -474,7 +472,7 @@ class EditStressModal(ui.Modal, title="Edit Stress"):
         stress["mental"] = [bool(int(x)) for x in self.mental.value.split()]
         character.stress = stress
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
-        await interaction.response.edit_message(content="✅ Stress updated!", embed=sheet.format_full_sheet(character), view=FateSheetEditView(interaction.user.id, self.char_id))
+        await interaction.response.edit_message(content="✅ Stress updated!", embed=FateSheet().format_full_sheet(character), view=FateSheetEditView(interaction.user.id, self.char_id))
 
 class EditFatePointsModal(ui.Modal, title="Edit Fate Points"):
     fate_points = ui.TextInput(label="Fate Points", required=True)
@@ -491,7 +489,7 @@ class EditFatePointsModal(ui.Modal, title="Edit Fate Points"):
             await interaction.response.send_message("❌ Invalid number.", ephemeral=True)
             return
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
-        await interaction.response.edit_message(content="✅ Fate Points updated.", embed=sheet.format_full_sheet(character), view=FateSheetEditView(interaction.user.id, self.char_id))
+        await interaction.response.edit_message(content="✅ Fate Points updated.", embed=FateSheet().format_full_sheet(character), view=FateSheetEditView(interaction.user.id, self.char_id))
 
 class EditConsequenceModal(ui.Modal, title="Edit Consequence"):
     def __init__(self, char_id: str, index: int, current: str):
@@ -580,7 +578,7 @@ class EditConsequencesView(ui.View):
                 await interaction.response.send_modal(AddConsequenceModal(self.char_id))
                 return
             elif cid == "done":
-                await interaction.response.edit_message(content="✅ Done editing consequences.", embed=sheet.format_full_sheet(self.char), view=FateSheetEditView(interaction.user.id, self.char_id))
+                await interaction.response.edit_message(content="✅ Done editing consequences.", embed=FateSheet().format_full_sheet(self.char), view=FateSheetEditView(interaction.user.id, self.char_id))
                 return
 
             repo.set_character(interaction.guild.id, self.char, system=SYSTEM)
@@ -603,7 +601,7 @@ class RollButton(ui.Button):
         skill_options = [SelectOption(label=k, value=k) for k in sorted(skills.keys())]
 
         async def on_skill_selected(view, interaction2, skill):
-            result = sheet.roll(character, skill=skill)
+            result = FateSheet().roll(character, skill=skill)
             await interaction2.response.send_message(result, ephemeral=True)
 
         await interaction.response.send_message(
@@ -642,7 +640,7 @@ class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
         skills[self.skill] = value_int
         character.skills = skills
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
-        embed = sheet.format_full_sheet(character)
+        embed = FateSheet().format_full_sheet(character)
         view = FateSheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(content=f"✅ {self.skill} updated.", embed=embed, view=view)
 

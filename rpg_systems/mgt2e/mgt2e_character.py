@@ -8,6 +8,8 @@ from core.shared_views import EditNameModal, EditNotesModal, PaginatedSelectView
 from core.utils import get_character, roll_formula
 from data import repo
 
+SYSTEM = "mgt2e"
+
 class MGT2ECharacter(BaseCharacter):
     DEFAULT_SKILLS = {
         "Admin": -3,
@@ -391,9 +393,6 @@ class MGT2ESheet(BaseSheet):
             f'🧮 Total: {total}'
         )
         return response
-    
-SYSTEM = "mgt2e"
-sheet = MGT2ESheet()
 
 def get_skill_categories(skills_dict):
     categories = defaultdict(list)
@@ -455,7 +454,7 @@ class MGT2ESheetEditView(ui.View):
                 self.char_id,
                 character.name if character else "",
                 SYSTEM,
-                lambda editor_id, char_id: (sheet.format_full_sheet(get_character(interaction.guild.id, char_id)), MGT2ESheetEditView(editor_id, char_id))
+                lambda editor_id, char_id: (MGT2ESheet().format_full_sheet(get_character(interaction.guild.id, char_id)), MGT2ESheetEditView(editor_id, char_id))
             )
         )
 
@@ -473,7 +472,7 @@ class MGT2ESheetEditView(ui.View):
                 self.char_id,
                 notes,
                 SYSTEM,
-                lambda editor_id, char_id: (sheet.format_full_sheet(get_character(interaction.guild.id, char_id)), MGT2ESheetEditView(editor_id, char_id))
+                lambda editor_id, char_id: (MGT2ESheet().format_full_sheet(get_character(interaction.guild.id, char_id)), MGT2ESheetEditView(editor_id, char_id))
             )
         )
 
@@ -499,7 +498,7 @@ class RollButton(ui.Button):
                 attributes = character.attributes if character else {}
                 attr_options = [SelectOption(label=k, value=k) for k in sorted(attributes.keys())]
                 async def on_attr_selected(view3, interaction3, attr):
-                    result = sheet.roll(character, skill=skill, attribute=attr)
+                    result = MGT2ESheet().roll(character, skill=skill, attribute=attr)
                     await interaction3.response.send_message(result, ephemeral=True)
                 await interaction2.response.edit_message(
                     content=f"Select an attribute to roll with {skill}:",
@@ -547,7 +546,7 @@ class EditAttributesModal(ui.Modal, title="Edit Attributes"):
             await interaction.response.send_message("❌ Please enter 6 integers separated by spaces (e.g. `8 7 6 5 4 3`).", ephemeral=True)
             return
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
-        embed = sheet.format_full_sheet(character)
+        embed = MGT2ESheet().format_full_sheet(character)
         view = MGT2ESheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(content="✅ Attributes updated.", embed=embed, view=view)
 
@@ -574,7 +573,7 @@ class EditSkillsModal(ui.Modal, title="Edit Skills"):
                     continue
         character.skills = skills_dict  # Use property setter
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
-        embed = sheet.format_full_sheet(character)
+        embed = MGT2ESheet().format_full_sheet(character)
         view = MGT2ESheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(content="✅ Skills updated!", embed=embed, view=view)
 
@@ -607,7 +606,7 @@ class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
             await interaction.response.send_message("❌ Please enter a number or 'untrained'.", ephemeral=True)
             return
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
-        embed = sheet.format_full_sheet(character)
+        embed = MGT2ESheet().format_full_sheet(character)
         view = MGT2ESheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(content=f"✅ {self.skill} updated.", embed=embed, view=view)
 

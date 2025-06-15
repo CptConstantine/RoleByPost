@@ -81,8 +81,6 @@ class GenericSheet(BaseSheet):
             lines.append(f"**Notes:** *{notes_display}*")
         return "\n".join(lines)
 
-sheet = GenericSheet()
-
 class GenericSheetEditView(ui.View):
     def __init__(self, editor_id: int, char_id: str):
         super().__init__(timeout=120)
@@ -105,7 +103,7 @@ class GenericSheetEditView(ui.View):
                 self.char_id,
                 character.name if character else "",
                 SYSTEM,
-                lambda editor_id, char_id: (sheet.format_full_sheet(get_character(interaction.guild.id, char_id)), GenericSheetEditView(editor_id, char_id))
+                lambda editor_id, char_id: (GenericSheet().format_full_sheet(get_character(interaction.guild.id, char_id)), GenericSheetEditView(editor_id, char_id))
             )
         )
 
@@ -118,7 +116,7 @@ class GenericSheetEditView(ui.View):
                 self.char_id,
                 notes,
                 SYSTEM,
-                lambda editor_id, char_id: (sheet.format_full_sheet(get_character(interaction.guild.id, char_id)), GenericSheetEditView(editor_id, char_id))
+                lambda editor_id, char_id: (GenericSheet().format_full_sheet(get_character(interaction.guild.id, char_id)), GenericSheetEditView(editor_id, char_id))
             )
         )
 
