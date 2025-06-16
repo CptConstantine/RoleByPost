@@ -17,37 +17,63 @@ def roll_parameters_to_dict(roll_parameters: str) -> dict:
                 roll_parameters_dict[k.strip()] = v.strip()
     return roll_parameters_dict
 
+# Helper to roll a dice formula string (e.g., "1d6+2")
+def roll_dice_formula(formula: str):
+    formula = formula.replace(" ", "").lower()
+    pattern = r'(\d*)d(\d+)((?:[+-]\d+)*)'
+    match = re.fullmatch(pattern, formula)
+    if match:
+        num_dice = int(match.group(1)) if match.group(1) else 1
+        die_size = int(match.group(2))
+        modifiers_str = match.group(3) or ""
+        modifiers_list = [int(m) for m in re.findall(r'[+-]\d+', modifiers_str)]
+        modifier = sum(modifiers_list)
+        rolls = [random.randint(1, die_size) for _ in range(num_dice)]
+        subtotal = sum(rolls) + modifier
+        return subtotal, f"{formula} [{subtotal}]"
+    # Try to parse as a simple integer
+    try:
+        return int(formula), str(formula)
+    except Exception:
+        return 0, formula
+
 def roll_formula(character: BaseCharacter, base_roll: str, modifiers: RollModifiers):
     """
     Parses and rolls a dice formula like '2d6+3-2', '1d20+5-1', '1d100', etc.
+    Modifiers can now also be dice formulas (e.g., Athletics: 1d6, mod1: 1d12+9).
     Returns a tuple: (result_string, total)
     The result string breaks out the formula into its elements, e.g.:
-    4df (+ - - 0) + Athletics (2) + mod1 (2)
+    4df (+ - - 0) + Athletics (2) + mod1 (10)
     """
     modifier_descriptions = []
     total_mod = 0
+    rolled_mods = {}
 
-    # Gather all modifiers and their sources
+    # Gather all modifiers and their sources, supporting dice formulas
     for key, value in modifiers.get_modifiers(character).items():
-        try:
-            mod = int(value)
+        if isinstance(value, str) and re.match(r'^\d*d\d+', value.replace(" ", "")):
+            mod, desc = roll_dice_formula(value)
+            rolled_mods[key] = mod  # Store the rolled value for later use
             total_mod += mod
-            sign = "+" if mod >= 0 else ""
-            modifier_descriptions.append(f"{key} ({sign}{mod})")
-        except Exception:
-            continue
+            # Extract the total from the roll_dice_formula result (mod)
+            modifier_descriptions.append(f"{key} ({desc})")
+        else:
+            try:
+                mod = int(value)
+                rolled_mods[key] = mod
+                total_mod += mod
+                sign = "+" if mod >= 0 else ""
+                modifier_descriptions.append(f"{key} ({sign}{mod})")
+            except Exception:
+                continue
 
-    # Build the full formula string for rolling
+    # Build the full formula string for rolling, using the already rolled modifiers
     formula = base_roll
-    for key, value in modifiers.get_modifiers(character).items():
-        try:
-            mod = int(value)
-            if mod >= 0:
-                formula += f"+{mod}"
-            else:
-                formula += f"{mod}"
-        except Exception:
-            continue
+    for key, mod in rolled_mods.items():
+        if mod >= 0:
+            formula += f"+{mod}"
+        else:
+            formula += f"{mod}"
 
     formula = formula.replace(" ", "").lower()
     fudge_pattern = r'(\d*)d[fF]((?:[+-]\d+)*)'
@@ -81,7 +107,7 @@ def roll_formula(character: BaseCharacter, base_roll: str, modifiers: RollModifi
         rolls = [random.randint(1, die_size) for _ in range(num_dice)]
         total = sum(rolls) + modifier
         # Compose the detailed formula string
-        formula_str = f"{base_roll} ({', '.join(str(r) for r in rolls)})"
+        formula_str = f"{base_roll} [{', '.join(str(r) for r in rolls)}]"
         if modifier_descriptions:
             formula_str += " + " + " + ".join(modifier_descriptions)
         response = f'🎲 {formula_str}\n🧮 Total: {total}'

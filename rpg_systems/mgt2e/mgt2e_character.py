@@ -279,7 +279,7 @@ class MGT2ERollModifiers(RollModifiers):
         self.skill = roll_parameters_dict.get("skill") if roll_parameters_dict else None
         self.attribute = roll_parameters_dict.get("attribute") if roll_parameters_dict else None
 
-    def get_modifiers(self, character: MGT2ECharacter) -> Dict[str, int]:
+    def get_modifiers(self, character: MGT2ECharacter) -> Dict[str, str]:
         modifiers = super().get_modifiers(character).items()
         if self.skill:
             skill_value = character.skills.get(self.skill, 0)

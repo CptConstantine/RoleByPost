@@ -125,11 +125,7 @@ class RollModifiers(ABC):
         self.modifiers = {}  # Store direct numeric modifiers (e.g., mod1, mod2)
         if roll_parameters_dict:
             for key, modifier in roll_parameters_dict.items():
-                try:
-                    value = int(modifier)
-                    self.modifiers[key] = value
-                except (ValueError, TypeError):
-                    continue
+                self.modifiers[key] = modifier
 
     def __getitem__(self, key):
         return self.modifiers.get(key)
@@ -140,7 +136,7 @@ class RollModifiers(ABC):
     def to_dict(self):
         return dict(self.modifiers)
 
-    def get_modifiers(self, character: "BaseCharacter") -> Dict[str, int]:
+    def get_modifiers(self, character: "BaseCharacter") -> Dict[str, str]:
         """
         Returns a dictionary of all modifiers
         """
