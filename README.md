@@ -58,7 +58,7 @@ The following are the commands that are currently available.
 
 ### Characters
 
-- `/roll [skill] [attribute]`  
+- `/roll [roll_parameters] [difficulty]`  
   Roll dice for your active character (PC).
 
 - `/roll_request [char1,char2,etc.] [roll_parameters] [difficulty]`
@@ -128,7 +128,7 @@ The following are the commands that are currently available.
 
 ### Top Priority
 
-- Improvements to /roll command to be more flexible
+- Use sub-commands to make slash commands better organized
 - System specific upgrades to the /roll_request command to allow players to modify the skill and/or attribute
 - Optionally set automatic reminders when someone is mentioned
 - Commands to make narration and dialogue more interesting
