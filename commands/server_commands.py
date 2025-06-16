@@ -1,14 +1,13 @@
+import re
+import asyncio
+import datetime
 import discord
 from discord.ext import commands
 from discord import app_commands
 from core.shared_views import RequestRollView
-from core.utils import roll_formula
-from data import repo
+from core.utils import roll_formula, roll_parameters_to_dict
 import core.factories as factories
-import re
-import random
-import asyncio
-import datetime
+from data import repo
 
 async def skill_autocomplete(interaction: discord.Interaction, current: str):
     try:
@@ -171,39 +170,26 @@ def setup_server_commands(bot: commands.Bot):
             except Exception:
                 pass  # Can't DM user
 
-    @bot.command()
-    async def roll(ctx, *, arg):
-        result, _ = roll_formula(arg)
-        await ctx.send(result)
-
     @bot.tree.command(
         name="roll",
-        description="Roll dice for your system (Players only)."
+        description="Roll dice for your system."
     )
     @app_commands.describe(
-        skill="Skill name (optional)",
-        attribute="Attribute name (optional)"
+        roll_parameters="Roll parameters, e.g. skill:Athletics,attribute:Strength,mod1:2,mod2:-1",
+        difficulty="Optional difficulty number to compare against (e.g. 15)"
     )
-    @app_commands.autocomplete(
-        skill=skill_autocomplete,
-        attribute=attribute_autocomplete
-    )
-    async def roll(
-        interaction: discord.Interaction,
-        skill: str = None,
-        attribute: str = None
-    ):
-        await interaction.response.defer(ephemeral=True)
-        system = repo.get_system(interaction.guild.id)
-        sheet = factories.get_specific_sheet(system)
+    async def roll(interaction: discord.Interaction, roll_parameters: str = None, difficulty: int = None):
         character = repo.get_active_character(interaction.guild.id, interaction.user.id)
         if not character:
             await interaction.followup.send("❌ No active character set or character not found.", ephemeral=True)
             return
-        result = sheet.roll(character, skill=skill, attribute=attribute)
-        await interaction.followup.send(result, ephemeral=True)
+        
+        system = repo.get_system(interaction.guild.id)
+        roll_parameters_dict = roll_parameters_to_dict(roll_parameters)
+        roll_formula_obj = factories.get_specific_roll_formula(system, roll_parameters_dict)
+        await character.send_roll_message(interaction, roll_formula_obj, difficulty)
 
-    @bot.tree.command(name="roll_request", description="GM: Prompt selected characters to roll with a button.")
+    @bot.tree.command(name="roll_request", description="Prompt selected characters to roll with a button.")
     @app_commands.describe(
         chars_to_roll="Comma-separated character names to request",
         roll_parameters="Roll parameters, e.g. skill:Athletics,attribute:END"
@@ -240,14 +226,8 @@ def setup_server_commands(bot: commands.Bot):
                     continue  # Network or API error
         mention_str = " ".join(mentions) if mentions else ""
 
-        # Parse roll_parameters into roll_parameters_dict
-        roll_parameters_dict = {}
-        if roll_parameters:
-            for param in roll_parameters.split(","):
-                if ":" in param:
-                    k, v = param.split(":", 1)
-                    roll_parameters_dict[k.strip()] = v.strip()
-        
+        # Parse roll_parameters
+        roll_parameters_dict = roll_parameters_to_dict(roll_parameters)
         roll_formula_obj = factories.get_specific_roll_formula(system, roll_parameters_dict)
 
         view = RequestRollView(roll_formula=roll_formula_obj, difficulty=difficulty)

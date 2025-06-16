@@ -31,26 +31,19 @@ class GenericCharacter(BaseCharacter):
         )
 
     async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
-        # Build the formula string from the RollFormula object
-        # Example: "1d20+3+2-1"
-        formula_parts = []
-        formula_parts.append("1d20") # Change this to allow user to enter it
-        for k, v in roll_formula_obj.get_modifiers(self).items():
-            try:
-                mod = int(v)
-                if mod >= 0:
-                    formula_parts.append(f"+{mod}")
-                else:
-                    formula_parts.append(f"{mod}")
-            except Exception:
-                continue
-        formula = "".join(formula_parts)
-        result, total = roll_formula(formula) # Send the formula string to be rolled
-        if total is not None and difficulty is not None:
+        """
+        Prints the roll result
+        """
+        result, total = roll_formula(self, "1d20", roll_formula_obj)
+
+        difficulty_str = ""
+        if difficulty:
+            difficulty_str = f" (Needed {difficulty})"
             if total >= difficulty:
-                result += f"\n✅ Success! (Needed {difficulty})"
+                result += f"\n✅ Success.{difficulty_str}"
             else:
-                result += f"\n❌ Failure. (Needed {difficulty})"
+                result += f"\n❌ Failure.{difficulty_str}"
+        
         await interaction.response.send_message(result, ephemeral=False)
 
 class GenericRollModifiers(RollModifiers):

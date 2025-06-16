@@ -146,27 +146,22 @@ class FateCharacter(BaseCharacter):
         
     async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
         """
-        Rolls 4df with modifiers from the RollFormula object.
+        Prints the roll result
         """
-        # Build the formula string from the RollFormula object
-        # Example: "2d6+3-1"
-        formula_parts = ["4df"]
-        for key, value in roll_formula_obj.get_modifiers(self).items():
-            try:
-                mod = int(value)
-                if mod >= 0:
-                    formula_parts.append(f"+{mod}")
-                else:
-                    formula_parts.append(f"{mod}")
-            except Exception:
-                continue
-        formula = "".join(formula_parts)
-        result, total = roll_formula(formula)
-        if total is not None and difficulty is not None:
-            if total >= difficulty:
-                result += f"\n✅ Success! (Needed {difficulty}) Shifts: {total - difficulty}"
+        result, total = roll_formula(self, "4df", roll_formula_obj)
+
+        difficulty_shifts_str = ""
+        if difficulty:
+            shifts = total - difficulty
+            difficulty_shifts_str = f" (Needed {difficulty}) Shifts: {shifts}"
+            if total >= difficulty + 2:
+                result += f"\n✅ Success *with style*!{difficulty_shifts_str}"
+            elif total > difficulty:
+                result += f"\n✅ Success.{difficulty_shifts_str}"
+            elif total == difficulty:
+                result += f"\n⚖️ Tie.{difficulty_shifts_str}"
             else:
-                result += f"\n❌ Failure. (Needed {difficulty}) Shifts: {total - difficulty}"
+                result += f"\n❌ Failure.{difficulty_shifts_str}"
         await interaction.response.send_message(result, ephemeral=False)
 
     @staticmethod
@@ -189,7 +184,7 @@ class FateCharacter(BaseCharacter):
 
 class FateRollModifiers(RollModifiers):
     """
-    A roll formula specifically for the generic RPG system.
+    A roll formula specifically for the Fate RPG system.
     It can handle any roll parameters as needed.
     """
     def __init__(self, roll_parameters_dict: dict = None):
@@ -199,7 +194,7 @@ class FateRollModifiers(RollModifiers):
     def get_modifiers(self, character: FateCharacter) -> Dict[str, int]:
         modifiers = super().get_modifiers(character).items()
         if self.skill:
-            skill_value = character.skills.get(self.skill, 0)
+            skill_value = character.skills.get(self.skill)
             modifiers = list(modifiers) + [(self.skill, skill_value)]
         return dict(modifiers)
 

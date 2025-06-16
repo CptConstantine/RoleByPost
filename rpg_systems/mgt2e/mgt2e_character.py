@@ -176,27 +176,19 @@ class MGT2ECharacter(BaseCharacter):
 
     async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
         """
-        Rolls 2d6 with modifiers from the RollFormula object.
+        Prints the roll result
         """
-        # Build the formula string from the RollFormula object
-        # Example: "2d6+3-1"
-        formula_parts = ["2d6"]
-        for key, value in roll_formula_obj.get_modifiers(self).items():
-            try:
-                mod = int(value)
-                if mod >= 0:
-                    formula_parts.append(f"+{mod}")
-                else:
-                    formula_parts.append(f"{mod}")
-            except Exception:
-                continue
-        formula = "".join(formula_parts)
-        result, total = roll_formula(formula)
-        if total is not None and difficulty is not None:
+        result, total = roll_formula(self, "2d6", roll_formula_obj)
+
+        difficulty_shifts_str = ""
+        if difficulty:
+            shifts = total - difficulty
+            difficulty_shifts_str = f" (Needed {difficulty}) Shifts: {shifts}"
             if total >= difficulty:
-                result += f"\n✅ Success! (Needed {difficulty}) Effect: {total - difficulty}"
+                result += f"\n✅ Success.{difficulty_shifts_str}"
             else:
-                result += f"\n❌ Failure. (Needed {difficulty}) Effect: {total - difficulty}"
+                result += f"\n❌ Failure.{difficulty_shifts_str}"
+        
         await interaction.response.send_message(result, ephemeral=False)
 
     @staticmethod
