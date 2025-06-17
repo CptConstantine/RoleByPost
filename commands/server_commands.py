@@ -5,7 +5,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from core.shared_views import RequestRollView
-from core.utils import roll_formula, roll_parameters_to_dict
+from core.utils import roll_parameters_to_dict
 import core.factories as factories
 from data import repo
 
@@ -31,60 +31,76 @@ async def attribute_autocomplete(interaction: discord.Interaction, current: str)
     options = [k for k in attributes.keys() if current.lower() in k.lower()]
     return [app_commands.Choice(name=k, value=k) for k in options[:25]]
 
-def setup_server_commands(bot: commands.Bot):
-    @bot.command()
-    async def myguild(ctx):
-        await ctx.send(f"This server's guild_id is {ctx.guild.id}")
+class SetupCommands(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
 
-    @bot.command()
-    @commands.has_permissions(administrator=True)
-    async def setgm(ctx):
-        repo.set_gm(ctx.guild.id, ctx.author.id)
-        await ctx.send(f"✅ {ctx.author.display_name} is now a GM.")
+    setup_group = app_commands.Group(name="setup", description="Server setup commands")
 
-    @bot.command()
-    @commands.has_permissions(administrator=True)
-    async def setsystem(ctx, system: str):
+    @setup_group.command(
+        name="gmrole",
+        description="Set all members of a Discord role as GMs for the server. You must be an Admin."
+    )
+    @app_commands.describe(role="The Discord role whose members will be set as GMs")
+    async def setup_gmrole(self, interaction: discord.Interaction, role: discord.Role):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Only admins can set GMs.", ephemeral=True)
+            return
+        count = 0
+        for member in role.members:
+            repo.set_gm(interaction.guild.id, member.id)
+            count += 1
+        await interaction.response.send_message(
+            f"✅ Set {count} members of role `{role.name}` as GMs.",
+            ephemeral=True
+        )
+
+    @setup_group.command(
+        name="playerrole",
+        description="Set all members of a Discord role as players for the server. You must be an Admin."
+    )
+    @app_commands.describe(role="The Discord role whose members will be set as players")
+    async def setup_playerrole(self, interaction: discord.Interaction, role: discord.Role):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Only admins can set players.", ephemeral=True)
+            return
+        count = 0
+        for member in role.members:
+            repo.set_player(interaction.guild.id, member.id)
+            count += 1
+        await interaction.response.send_message(
+            f"✅ Set {count} members of role `{role.name}` as players.",
+            ephemeral=True
+        )
+
+    @setup_group.command(name="system", description="Set the RPG system for your server. You must be an Admin.")
+    @app_commands.describe(system="The system to use (e.g. generic, fate, mgt2e)")
+    async def setup_system(self, interaction: discord.Interaction, system: str):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Only admins can set the system.", ephemeral=True)
+            return
         valid_systems = ["generic", "fate", "mgt2e"]
         system = system.lower()
         if system not in valid_systems:
-            await ctx.send(f"❌ Invalid system. Valid options: {', '.join(valid_systems)}")
+            await interaction.response.send_message(f"❌ Invalid system. Valid options: {', '.join(valid_systems)}", ephemeral=True)
             return
-        repo.set_system(ctx.guild.id, system)
-        await ctx.send(f"✅ System set to {system.upper()} for this server.")
+        repo.set_system(interaction.guild.id, system)
+        await interaction.response.send_message(f"✅ System set to {system.upper()} for this server.", ephemeral=True)
 
-    @bot.command()
-    async def setdefaultskills(ctx, *, skills: str):
-        if not repo.is_gm(ctx.guild.id, ctx.author.id):
-            await ctx.send("❌ Only GMs can set default skills.")
-            return
-        system = repo.get_system(ctx.guild.id)
-        sheet = factories.get_specific_sheet(system)
-        if not hasattr(sheet, "parse_and_validate_skills"):
-            await ctx.send("❌ This system does not support setting default skills.")
-            return
-        skills_dict = sheet.parse_and_validate_skills(skills)
-        if not skills_dict:
-            await ctx.send("❌ Invalid format or no skills provided. Example: `Admin:0, Gun Combat:1, Pilot:2`")
-            return
-        repo.set_default_skills(ctx.guild.id, system, skills_dict)
-        await ctx.send(f"✅ Default skills for {system.upper()} updated for this server.")
-
-    @bot.tree.command(name="setdefaultskillsfile", description="Set default skills for this server's system with a .txt file (one skill per line).")
+    @setup_group.command(name="defaultskillsfile", description="Set default skills for this server's system with a .txt file (one skill per line).")
     @app_commands.describe(file="A .txt file with skills, one per line or Skill:Value per line")
-    async def setdefaultskillsfile(interaction: discord.Interaction, file: discord.Attachment):
-        await interaction.response.defer(ephemeral=True)
+    async def setup_defaultskillsfile(self, interaction: discord.Interaction, file: discord.Attachment):
         if not repo.is_gm(interaction.guild.id, interaction.user.id):
-            await interaction.followup.send("❌ Only GMs can set default skills.", ephemeral=True)
+            await interaction.response.send_message("❌ Only GMs can set default skills.", ephemeral=True)
             return
         if not file.filename.endswith('.txt'):
-            await interaction.followup.send("❌ Only .txt files are supported.", ephemeral=True)
+            await interaction.response.send_message("❌ Only .txt files are supported.", ephemeral=True)
             return
         try:
             file_bytes = await file.read()
             content = file_bytes.decode('utf-8')
         except Exception:
-            await interaction.followup.send("❌ Could not decode file. Please ensure it's a UTF-8 encoded .txt file.", ephemeral=True)
+            await interaction.response.send_message("❌ Could not decode file. Please ensure it's a UTF-8 encoded .txt file.", ephemeral=True)
             return
         skills_dict = {}
         for line in content.splitlines():
@@ -96,12 +112,12 @@ def setup_server_commands(bot: commands.Bot):
                 try:
                     skills_dict[k.strip()] = int(v.strip())
                 except ValueError:
-                    await interaction.followup.send(f"❌ Invalid value for skill: `{line}`. All values must be integers.", ephemeral=True)
+                    await interaction.response.send_message(f"❌ Invalid value for skill: `{line}`. All values must be integers.", ephemeral=True)
                     return
             else:
                 skills_dict[line] = -3
         if not skills_dict:
-            await interaction.followup.send("❌ No skills found in the file.", ephemeral=True)
+            await interaction.response.send_message("❌ No skills found in the file.", ephemeral=True)
             return
         system = repo.get_system(interaction.guild.id)
         sheet = factories.get_specific_sheet(system)
@@ -109,10 +125,35 @@ def setup_server_commands(bot: commands.Bot):
             skills_str = ", ".join(f"{k}:{v}" for k, v in skills_dict.items())
             skills_dict = sheet.parse_and_validate_skills(skills_str)
             if not skills_dict:
-                await interaction.followup.send("❌ The skills list is invalid for this system.", ephemeral=True)
+                await interaction.response.send_message("❌ The skills list is invalid for this system.", ephemeral=True)
                 return
         repo.set_default_skills(interaction.guild.id, system, skills_dict)
-        await interaction.followup.send(f"✅ Default skills for {system.upper()} updated from file.", ephemeral=True)
+        await interaction.response.send_message(f"✅ Default skills for {system.upper()} updated from file.", ephemeral=True)
+
+    @setup_group.command(name="defaultskills", description="Set default skills for this server's system via text.")
+    @app_commands.describe(skills="Skill list, e.g. Admin:0, Gun Combat:1, Pilot:2")
+    async def setup_defaultskills(self, interaction: discord.Interaction, skills: str):
+        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+            await interaction.response.send_message("❌ Only GMs can set default skills.", ephemeral=True)
+            return
+        system = repo.get_system(interaction.guild.id)
+        sheet = factories.get_specific_sheet(system)
+        if not hasattr(sheet, "parse_and_validate_skills"):
+            await interaction.response.send_message("❌ This system does not support setting default skills.", ephemeral=True)
+            return
+        skills_dict = sheet.parse_and_validate_skills(skills)
+        if not skills_dict:
+            await interaction.response.send_message("❌ Invalid format or no skills provided. Example: `Admin:0, Gun Combat:1, Pilot:2`", ephemeral=True)
+            return
+        repo.set_default_skills(interaction.guild.id, system, skills_dict)
+        await interaction.response.send_message(f"✅ Default skills for {system.upper()} updated for this server.", ephemeral=True)
+
+async def setup_server_commands(bot: commands.Bot):
+    await bot.add_cog(SetupCommands(bot))
+
+    @bot.command()
+    async def myguild(ctx):
+        await ctx.send(f"This server's guild_id is {ctx.guild.id}")
 
     @bot.tree.command(name="remind", description="GM: Remind a player or a role to post.")
     @app_commands.describe(
@@ -175,7 +216,7 @@ def setup_server_commands(bot: commands.Bot):
         description="Roll dice for your system."
     )
     @app_commands.describe(
-        roll_parameters="Roll parameters, e.g. skill:Athletics,attribute:Strength,mod1:2,mod2:-1",
+        roll_parameters="Roll parameters, e.g. skill:Athletics,attribute:END,mod1:2,mod2:-1",
         difficulty="Optional difficulty number to compare against (e.g. 15)"
     )
     async def roll(interaction: discord.Interaction, roll_parameters: str = None, difficulty: int = None):

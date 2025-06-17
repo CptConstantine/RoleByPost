@@ -15,11 +15,16 @@ async def npc_name_autocomplete(interaction: discord.Interaction, current: str):
     options = [c.name for c in npcs]
     return [app_commands.Choice(name=name, value=name) for name in options[:25]]
 
-def setup_scene_commands(bot: commands.Bot):
-    @bot.tree.command(name="scene_add", description="Add an NPC to the current scene.")
+class SceneCommands(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    scene_group = app_commands.Group(name="scene", description="Scene management commands")
+
+    @scene_group.command(name="add", description="Add an NPC to the current scene.")
     @app_commands.describe(npc_name="The name of the NPC to add to the scene")
     @app_commands.autocomplete(npc_name=npc_name_autocomplete)
-    async def scene_add(interaction: discord.Interaction, npc_name: str):
+    async def scene_add(self, interaction: discord.Interaction, npc_name: str):
         if not repo.is_gm(interaction.guild.id, interaction.user.id):
             await interaction.response.send_message("❌ Only GMs can manage the scene.", ephemeral=True)
             return
@@ -34,42 +39,44 @@ def setup_scene_commands(bot: commands.Bot):
         repo.add_scene_npc(interaction.guild.id, npc.id)
         await interaction.response.send_message(f"✅ **{npc_name}** added to the scene.", ephemeral=True)
 
-    @bot.command()
-    async def scene_remove(ctx, *, name: str):
-        if not repo.is_gm(ctx.guild.id, ctx.author.id):
-            await ctx.send("❌ Only GMs can manage the scene.")
+    @scene_group.command(name="remove", description="Remove an NPC from the current scene.")
+    @app_commands.describe(npc_name="The name of the NPC to remove from the scene")
+    @app_commands.autocomplete(npc_name=npc_name_autocomplete)
+    async def scene_remove(self, interaction: discord.Interaction, npc_name: str):
+        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+            await interaction.response.send_message("❌ Only GMs can manage the scene.", ephemeral=True)
             return
-        scene_npcs = repo.get_scene_npc_ids(ctx.guild.id)
-        npc = repo.get_character(ctx.guild.id, name)
+        scene_npcs = repo.get_scene_npc_ids(interaction.guild.id)
+        npc = repo.get_character(interaction.guild.id, npc_name)
         if not npc:
-            await ctx.send("❌ NPC not found.")
+            await interaction.response.send_message("❌ NPC not found.", ephemeral=True)
             return
         if npc.id not in scene_npcs:
-            await ctx.send("❌ That NPC isn't in the scene.")
+            await interaction.response.send_message("❌ That NPC isn't in the scene.", ephemeral=True)
             return
-        repo.remove_scene_npc(ctx.guild.id, npc.id)
-        await ctx.send(f"🗑️ **{name}** removed from the scene.")
+        repo.remove_scene_npc(interaction.guild.id, npc.id)
+        await interaction.response.send_message(f"🗑️ **{npc_name}** removed from the scene.", ephemeral=True)
 
-    @bot.command()
-    async def scene_clear(ctx):
-        if not repo.is_gm(ctx.guild.id, ctx.author.id):
-            await ctx.send("❌ Only GMs can manage the scene.")
+    @scene_group.command(name="clear", description="Clear all NPCs from the current scene.")
+    async def scene_clear(self, interaction: discord.Interaction):
+        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+            await interaction.response.send_message("❌ Only GMs can manage the scene.", ephemeral=True)
             return
-        repo.clear_scenes(ctx.guild.id)
-        await ctx.send("🧹 Scene NPC list cleared.")
+        repo.clear_scenes(interaction.guild.id)
+        await interaction.response.send_message("🧹 Scene NPC list cleared.", ephemeral=True)
 
-    @bot.command()
-    async def scene(ctx):
-        system = repo.get_system(ctx.guild.id)
+    @scene_group.command(name="view", description="View the current scene.")
+    async def scene_view(self, interaction: discord.Interaction):
+        system = repo.get_system(interaction.guild.id)
         sheet = factories.get_specific_sheet(system)
-        npc_ids = repo.get_scene_npc_ids(ctx.guild.id)
-        is_gm = repo.is_gm(ctx.guild.id, ctx.author.id)
+        npc_ids = repo.get_scene_npc_ids(interaction.guild.id)
+        is_gm = repo.is_gm(interaction.guild.id, interaction.user.id)
         lines = []
         for npc_id in npc_ids:
-            npc = repo.get_character_by_id(ctx.guild.id, npc_id)
+            npc = repo.get_character_by_id(interaction.guild.id, npc_id)
             if npc:
                 lines.append(sheet.format_npc_scene_entry(npc, is_gm))
-        notes = repo.get_scene_notes(ctx.guild.id)
+        notes = repo.get_scene_notes(interaction.guild.id)
         description = ""
         if notes:
             description += f"**Notes:**\n{notes}\n\n"
@@ -82,5 +89,8 @@ def setup_scene_commands(bot: commands.Bot):
             description=description,
             color=discord.Color.purple()
         )
-        view = shared_views.SceneNotesEditView(ctx.guild.id, is_gm)
-        await ctx.send(embed=embed, view=view)
+        view = shared_views.SceneNotesEditView(interaction.guild.id, is_gm)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
+
+async def setup_scene_commands(bot: commands.Bot):
+    await bot.add_cog(SceneCommands(bot))
