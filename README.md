@@ -1,13 +1,13 @@
 # PlayByPostBot
 
-A Discord bot for running play-by-post tabletop RPGs, supporting multiple systems (currently Fate and Mongoose Traveller 2e). PlayByPostBot helps manage character sheets, NPCs, scenes, and dice rolls, making it easy to run and play pbp games on Discord.
+A Discord bot for running play-by-post tabletop RPGs, supporting multiple systems (currently Generic, Fate and Mongoose Traveller 2e). PlayByPostBot helps manage character sheets, NPCs, scenes, and dice rolls, making it easy to run and play pbp games on Discord.
 
 ---
 
 ## Features
 
 - **Character Sheet Management**  
-  - Create, edit, and view player characters and NPCs for supported systems. Users can set their "active" character, which is used by default for `/roll` and `/sheet`.
+  - Create, edit, and view player characters and NPCs for supported systems. Users can set their "active" character, which is used by default for `/roll` and `/character sheet`.
   - System-specific fields and validation (e.g., Fate aspects, Traveller skills).
   - Import/export characters as JSON files for easy transfer between servers.
 
@@ -21,6 +21,7 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 
 - **Dice Rolling**  
   - Supports standard dice notation (e.g., `2d6+3`) and Fate/Fudge dice (`4df+1`).
+  - System-specific UI for modifying rolls with skills and attributes.
 
 - **Reminders**  
   - GMs can remind specific users or roles to post, with a custom message and delay (e.g., "in 2d" or "in 12h").
@@ -29,6 +30,8 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
   - Supports multiple initiative types:
     - **Generic:** GM sets the order, and turns proceed in that order. Start/End Turn buttons notify the next participant.
     - **Popcorn:** Each participant picks who goes next; at the end of a round, the last person can pick anyone (including themselves) to start the next round.
+  - Initiative participants are robustly managed as dataclasses for reliability.
+  - GMs can set the initiative order at any time with `/initiative order`.
   - Buttons for starting and ending turns, and display the current round and participant.
 
 ---
@@ -36,8 +39,8 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 ## Supported Systems
 
 - **Generic**
-- **Fate Core**
-- **Mongoose Traveller 2e**
+- **Fate Core/Condensed/Accelerated**
+- **Mongoose Traveller 1e/2e**
 
 ---
 
@@ -47,80 +50,87 @@ The following are the commands that are currently available.
 
 ### Setup
 
-- `!setgm`  
-  Set yourself as a GM for the server. You must be an Admin in the server.
-
-- `!setsystem fate` or `!setsystem mgt2e`  
+- `/setup system [system]`  
   Set the RPG system for your server. You must be an Admin in the server.
+
+- `/setup gmrole [role]`  
+  Set all members of a Discord role as GMs for the server. You must be an Admin.
+
+- `/setup playerrole [role]`  
+  Set all members of a Discord role as players for the server. You must be an Admin.
   
-- `!setdefaultskillsfile [.txt file]` or `!setdefaultskills [skill1:0, skill2:0, skill3:1, etc.]`
+- `/setup defaultskillsfile [.txt file]` or `/setup defaultskills [skill1:0, skill2:0, skill3:1, etc.]`  
   (GM only) Set default skills via command or file upload. Skills are validated per system (if the system has skills).
 
 ### Characters
 
-- `/roll [roll_parameters] [difficulty]`  
-  Roll dice for your active character (PC).
+- `/character create pc [name]`  
+  Create a new player character.
 
-- `/roll_request [char1,char2,etc.] [roll_parameters] [difficulty]`
-  (GM only) Request players to roll the given check. roll_parameters in the format skill:<skill>,attribute:<attribute>,mod1:+1,mod2:-3,etc.
-  
-- `/createchar [name]`  
-  Create a new character.
-
-- `/createnpc [name]`  
+- `/character create npc [name]`  
   (GM only) Create a new NPC.
 
-- `/setactive [char_name]`  
-  Set your active character (PC) for this server.
-
-- `/transferchar [char_name] [new_owner]`  
-  (GM only) Transfer a PC to another player.
-
-- `!sheet [char_name]`
-  View a character or NPC's sheet. Defaults to your active character if no name is given.
-
-- `/sheet [char_name]`  
+- `/character sheet [char_name]`  
   View a character or NPC's sheet with buttons for editing. Defaults to your active character if no name is given.
 
-- `/exportchar [char_name]`  
+- `/character export [char_name]`  
   Export your character or an NPC (if GM) as a JSON file.
 
-- `/importchar [.json file]`  
+- `/character import [.json file]`  
   Import a character or NPC from a JSON file.
 
-- `/remind [user] [role] [message] [delay]`  
-  (GM only) Remind a user or role to post. Sends a DM if they haven't posted in the server since the reminder. Delay supports formats like `24h`, `2d`, `90m` or `60` for seconds.
+- `/character transfer [char_name] [new_owner]`  
+  (GM only) Transfer a PC to another player.
+
+- `/character switch [char_name]`  
+  Set your active character (PC) for this server.
+
+### Rolling
+
+- `/roll [skill] [attribute] [modifier] [difficulty]`  
+  Roll dice for your active character (PC) with optional parameters.
+
+- `/roll request [chars_to_roll] [skill] [attribute] [modifier] [difficulty]`  
+  (GM only) Request players to roll with specified parameters. System-specific UIs allow players to adjust skills/attributes.
 
 ### Scene Management
 
-- `!scene`  
+- `/scene`  
   View all NPCs in the current scene.
   
-- `!scene_add [npc name]`  
+- `/scene add [npc name]`  
   Add an NPC to the current scene.
 
-- `!scene_remove [npc name]`  
+- `/scene remove [npc name]`  
   Remove an NPC from the scene.
 
-- `!scene_clear`  
+- `/scene clear`  
   Clear all NPCs from the scene.
 
 ### Initiative
 
-- `/initiative_start [type] [scene]`  
-  Start initiative in the current channel. Type can be "generic" or "popcorn". Scene is optional; uses the current scene if none is provided.
+- `/initiative start [type] [scene]`  
+  Start initiative in the current channel. Type can be "generic" or "popcorn". Scene is optional.
 
-- `/initiative_set_order [Name1, Name2, Name3, etc.]`  
+- `/initiative order [Name1, Name2, Name3, etc.]`  
   (GM only) Set the initiative order by providing a comma-separated list of participant names.
 
-- `/initiative_end`  
+- `/initiative end`  
   End initiative in the current channel.
 
-- `/initiative_add [name]`  
+- `/initiative add [name]`  
   Add a PC or NPC to the current initiative.
 
-- `/initiative_remove [name]`  
+- `/initiative remove [name]`  
   Remove a PC or NPC from the current initiative.
+
+- `/initiative default [type]`  
+  Set the default initiative type for this server.
+
+### Reminders
+
+- `/reminder send [user] [role] [message] [delay]`  
+  (GM only) Remind a user or role to post. Sends a DM if they haven't posted in the server since the reminder. Delay supports formats like `24h`, `2d`, `90m` or `60` for seconds.
 
 ---
 
@@ -128,16 +138,17 @@ The following are the commands that are currently available.
 
 ### Top Priority
 
-- Use sub-commands to make slash commands better organized
-- System specific upgrades to the /roll_request command to allow players to modify the skill and/or attribute
 - Optionally set automatic reminders when someone is mentioned
+- Manage channels so that certain commands can only be used in specific channels to prevent clutter
 - Commands to make narration and dialogue more interesting
 - User can provide an OpenAI API key to gain access to commands that use AI (summarize recent posts, ask rules questions)
+- Inventory system to track equipment
 
 ### Secondary Priority
 
-- Support for other systems
+- Avatars for characters
 - System specific commands (ex. starships, travel, and maintenance cost calculations for Traveller; system specific damage calculations)
+- Support for other systems
 
 ---
 
