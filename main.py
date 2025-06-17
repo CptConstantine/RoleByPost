@@ -4,7 +4,7 @@ import dotenv
 import discord
 from discord.ext import commands
 from data import repo
-from commands import character_commands, initiative_commands, scene_commands, server_commands
+from commands import character_commands, initiative_commands, reminder_commands, roll_commands, scene_commands, setup_commands
 
 dotenv.load_dotenv()
 
@@ -16,10 +16,12 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
 async def setup_hook():
-    await server_commands.setup_server_commands(bot)
-    await initiative_commands.setup_initiative_commands(bot)
+    await setup_commands.setup_setup_commands(bot)
+    await character_commands.setup_character_commands(bot)
     await scene_commands.setup_scene_commands(bot)
-    character_commands.setup_character_commands(bot)
+    await initiative_commands.setup_initiative_commands(bot)
+    await roll_commands.setup_roll_commands(bot)
+    await reminder_commands.setup_reminder_commands(bot)
     await bot.tree.sync()
 
 @bot.event
@@ -51,6 +53,10 @@ async def on_message(message):
     if message.guild and not message.author.bot:
         repo.set_last_message_time(message.guild.id, message.author.id, message.created_at.timestamp())
     await bot.process_commands(message)
+
+@bot.command()
+async def myguild(ctx):
+    await ctx.send(f"This server's guild_id is {ctx.guild.id}")
 
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 bot.run(os.getenv("DISCORD_BOT_TOKEN"), log_handler=handler, log_level=logging.DEBUG)

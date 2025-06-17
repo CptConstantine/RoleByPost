@@ -58,3 +58,13 @@ def get_specific_roll_formula(system: str, roll_parameters_dict: dict = None):
         return generic_character.GenericRollModifiers(roll_parameters_dict)
     else:
         raise ValueError(f"Unknown system: {system}")
+
+def get_specific_roll_formula_view(system: str, roll_formula_obj, difficulty: int = None):
+    if system == "fate":
+        return fate_character.FateRollModifiersView(roll_formula_obj, difficulty)
+    elif system == "mgt2e":
+        return mgt2e_character.MGT2ERollModifiersView(roll_formula_obj, difficulty)
+    elif system == "generic":
+        return generic_character.GenericRollModifiersView(roll_formula_obj, difficulty)
+    else:
+        raise ValueError(f"Unknown system: {system}")

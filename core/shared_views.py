@@ -1,3 +1,4 @@
+import re
 import discord
 from discord import Interaction, TextStyle, ui
 from core import factories
@@ -217,10 +218,18 @@ class RollModifiersView(ui.View):
         self.modifier_buttons = {}
 
         # Create a button for each key in the roll formula
+        dice_pattern = re.compile(r"^\s*\d*d\d+([+-]\d+)?\s*$", re.IGNORECASE)
         for key, value in self.roll_formula_obj.to_dict().items():
-            button = EditModifierButton(key, str(value), self)
-            self.modifier_buttons[key] = button
-            self.add_item(button)
+            is_numeric = False
+            try:
+                int(value)
+                is_numeric = True
+            except (ValueError, TypeError):
+                pass
+            if is_numeric or dice_pattern.match(str(value)):
+                button = EditModifierButton(key, str(value), self)
+                self.modifier_buttons[key] = button
+                self.add_item(button)
 
         # Add a button to add new modifiers
         self.add_item(AddModifierButton(self))

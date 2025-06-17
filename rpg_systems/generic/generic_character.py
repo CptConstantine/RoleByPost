@@ -22,7 +22,11 @@ class GenericCharacter(BaseCharacter):
         # No system-specific fields for generic
         pass
 
-    async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
+    async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: "GenericRollModifiers", difficulty: int = None):
+        """
+        Opens a view for editing the roll parameters.
+        Generic version doesn't have skill selection but does allow modifier adjustment.
+        """
         view = GenericRollModifiersView(roll_formula_obj, difficulty)
         await interaction.response.send_message(
             content="Adjust your roll formula as needed, then finalize to roll.",
@@ -110,6 +114,9 @@ class GenericSheetEditView(ui.View):
         )
 
 class GenericRollModifiersView(RollModifiersView):
+    """
+    Generic roll modifiers view with just the basic modifier functionality.
+    """
     def __init__(self, roll_formula_obj: RollModifiers, difficulty: int = None):
         super().__init__(roll_formula_obj, difficulty)
         self.add_item(FinalizeRollButton(roll_formula_obj, difficulty))

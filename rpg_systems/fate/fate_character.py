@@ -136,15 +136,25 @@ class FateCharacter(BaseCharacter):
                 if not hasattr(self, key) or getattr(self, key) in (None, [], {}, 0, False):
                     setattr(self, key, value)
     
-    async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
+    async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: "FateRollModifiers", difficulty: int = None):
+        """
+        Opens a view for editing the roll parameters, prepopulated with any requested skill.
+        """
         view = FateRollModifiersView(roll_formula_obj, difficulty)
+        
+        # Create a message that shows what was initially requested
+        content = "Adjust your roll formula as needed, then finalize to roll."
+        if roll_formula_obj.skill:
+            skill_value = self.skills.get(roll_formula_obj.skill, 0)
+            content = f"Roll requested with skill: **{roll_formula_obj.skill}** (+{skill_value if skill_value >= 0 else skill_value})\n{content}"
+        
         await interaction.response.send_message(
-            content="Adjust your roll formula as needed, then finalize to roll.",
+            content=content,
             view=view,
             ephemeral=True
         )
         
-    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
+    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: "FateRollModifiers", difficulty: int = None):
         """
         Prints the roll result
         """
@@ -663,6 +673,61 @@ class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
         await interaction.response.edit_message(content=f"✅ {self.skill} updated.", embed=embed, view=view)
 
 class FateRollModifiersView(RollModifiersView):
-    def __init__(self, roll_formula_obj: RollModifiers, difficulty: int = None):
+    """
+    Fate-specific roll modifiers view that includes a button to select skills.
+    """
+    def __init__(self, roll_formula_obj: FateRollModifiers, difficulty: int = None):
+        self.character = None
         super().__init__(roll_formula_obj, difficulty)
+        # Add a button for skill selection
+        self.add_item(FateSelectSkillButton(self, roll_formula_obj.skill))
         self.add_item(FinalizeRollButton(roll_formula_obj, difficulty))
+    
+    # Override to ensure we get the character before building the view
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        self.character = repo.get_active_character(interaction.guild.id, interaction.user.id)
+        if not self.character:
+            await interaction.response.send_message("❌ No active character found.", ephemeral=True)
+            return False
+        return True
+
+class FateSelectSkillButton(ui.Button):
+    """Button that opens a skill selection menu when clicked"""
+    def __init__(self, parent_view: FateRollModifiersView, selected_skill: str = None):
+        super().__init__(
+            label=selected_skill if selected_skill else "Select Skill",
+            style=discord.ButtonStyle.primary,
+            row=3
+        )
+        self.parent_view = parent_view
+    
+    async def callback(self, interaction: discord.Interaction):
+        character = repo.get_active_character(interaction.guild.id, interaction.user.id)
+        if not character:
+            await interaction.response.send_message("❌ No active character found.", ephemeral=True)
+            return
+        
+        skills = character.skills if hasattr(character, 'skills') else {}
+        skill_options = [SelectOption(label=f"{k} (+{v})" if v >= 0 else f"{k} ({v})", 
+                                      value=k) 
+                         for k, v in sorted(skills.items(), key=lambda x: (-x[1], x[0]))]
+        
+        if not skill_options:
+            await interaction.response.send_message("❌ Your character has no skills to select.", ephemeral=True)
+            return
+        
+        async def on_skill_selected(view, interaction2, skill):
+            # Update the roll formula with the selected skill
+            self.label = skill
+            self.parent_view.roll_formula_obj.skill = skill
+            skill_value = character.skills.get(skill, 0)
+            await interaction2.response.edit_message(
+                content=f"Selected skill: **{skill}** (+{skill_value if skill_value >= 0 else skill_value})",
+                view=self.parent_view
+            )
+        
+        await interaction.response.send_message(
+            "Select a skill for your roll:",
+            view=PaginatedSelectView(skill_options, on_skill_selected, interaction.user.id, prompt="Select a skill:"),
+            ephemeral=True
+        )
