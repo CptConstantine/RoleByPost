@@ -12,14 +12,21 @@ class GenericInitiativeView(BaseInitiativeView):
         super().__init__(guild_id, channel_id, initiative)
         self.gm_ids = repo.get_gm_ids(guild_id)
         self.allowed_ids = list(self.gm_ids) # Only GM can start initiative
+        
         if not initiative.is_started:
             self.add_item(StartInitiativeButton(self))
         else:
-            self.allowed_ids.append(initiative.current)  # Current participant can end their turn
+            # Find the owner ID of the current participant and add it to allowed_ids
+            current_participant = next((p for p in initiative.participants 
+                                      if p.id == initiative.current), None)
+            
+            if current_participant and current_participant.owner_id:
+                self.allowed_ids.append(current_participant.owner_id)  # Add owner ID instead of character ID
+                
             self.add_item(EndTurnButton(self))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        # Only allow the current participant or GM to interact
+        # Only allow the current participant's owner or GM to interact
         return str(interaction.user.id) in self.allowed_ids
 
     async def update_view(self, interaction: discord.Interaction):
@@ -74,9 +81,14 @@ class PopcornInitiativeView(BaseInitiativeView):
     def __init__(self, guild_id, channel_id, initiative: PopcornInitiative):
         super().__init__(guild_id, channel_id, initiative)
         self.gm_ids = repo.get_gm_ids(guild_id)
-        self.allowed_ids = [initiative.current] if initiative.current else []
-        if self.gm_ids:
-            self.allowed_ids.extend(self.gm_ids)
+        self.allowed_ids = list(self.gm_ids)  # GMs are always allowed
+        
+        # If there's a current participant, find their owner_id 
+        if initiative.current:
+            current_participant = next((p for p in initiative.participants 
+                                      if p.id == initiative.current), None)
+            if current_participant and current_participant.owner_id:
+                self.allowed_ids.append(current_participant.owner_id)
 
         # If initiative.current is None, it's the first pick (GM chooses)
         if initiative.current is None:
@@ -99,6 +111,7 @@ class PopcornInitiativeView(BaseInitiativeView):
                 self.add_item(PopcornNextSelect(options, self))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # Only allow the current participant's owner or GM to interact
         return str(interaction.user.id) in self.allowed_ids
 
     async def update_view(self, interaction: discord.Interaction):
