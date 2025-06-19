@@ -175,6 +175,46 @@ class BaseCharacter(BaseRpgObj):
     @is_npc.setter
     def is_npc(self, value: bool):
         self.data["is_npc"] = value
+    
+    @property
+    def avatar_url(self):
+        return self.data.get("avatar_url")
+    
+    @avatar_url.setter
+    def avatar_url(self, url):
+        self.data["avatar_url"] = url
+
+    @staticmethod
+    def create_base_character(id, name, owner_id, is_npc=False, notes=None, avatar_url=None, **additional_fields):
+        """
+        Helper method to create a standardized character dictionary.
+        
+        Args:
+            id (str): Unique character ID
+            name (str): Character name
+            owner_id (str): ID of the character's owner
+            is_npc (bool): Whether the character is an NPC
+            notes (list): List of character notes
+            avatar_url (str): URL to character's avatar image
+            additional_fields: Any additional system-specific fields
+            
+        Returns:
+            dict: A properly formatted character dictionary
+        """
+        character = {
+            "id": str(id),
+            "name": name,
+            "owner_id": str(owner_id),
+            "is_npc": bool(is_npc),
+            "notes": notes or [],
+            "avatar_url": avatar_url
+        }
+        
+        # Add any additional fields
+        for key, value in additional_fields.items():
+            character[key] = value
+            
+        return character
 
     @abstractmethod
     def apply_defaults(self, is_npc=False, guild_id=None):

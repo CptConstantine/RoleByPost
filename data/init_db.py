@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS characters (
     owner_id TEXT,
     is_npc BOOLEAN,
     system_specific_data TEXT,
-    notes TEXT DEFAULT ''
+    notes TEXT DEFAULT '[]',
+    avatar_url TEXT DEFAULT '',
 )
 """)
 

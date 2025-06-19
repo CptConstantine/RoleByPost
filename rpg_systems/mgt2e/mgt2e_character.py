@@ -232,15 +232,21 @@ class MGT2ECharacter(BaseCharacter):
     def get_trained_skills(self, skills: dict) -> dict:
         trained_groups = set()
         for skill_name, value in skills.items():
+            if skill_name == "Jack of All Trades" and value <= 0:
+                continue
             if "(" in skill_name and ")" in skill_name and value >= 0:
                 group = skill_name.split("(", 1)[0].strip()
                 trained_groups.add(group)
         for skill_name, value in skills.items():
+            if skill_name == "Jack of All Trades" and value <= 0:
+                continue
             if "(" not in skill_name and value >= 0:
                 trained_groups.add(skill_name.strip())
 
         trained_skills = {}
         for skill_name, value in skills.items():
+            if skill_name == "Jack of All Trades" and value <= 0:
+                continue
             if "(" in skill_name and ")" in skill_name:
                 group = skill_name.split("(", 1)[0].strip()
                 if group in trained_groups:
@@ -250,6 +256,8 @@ class MGT2ECharacter(BaseCharacter):
         return trained_skills
 
     def is_skill_trained(self, skills: dict, skill_name: str) -> bool:
+        if skill_name == "Jack of All Trades":
+            return False
         if "(" in skill_name and ")" in skill_name:
             group = skill_name.split("(", 1)[0].strip()
             for k, v in skills.items():

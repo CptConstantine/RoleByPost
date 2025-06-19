@@ -72,8 +72,8 @@ def set_character(guild_id, character: BaseCharacter, system=None):
     with get_db() as conn:
         conn.execute("""
             INSERT OR REPLACE INTO characters
-            (id, guild_id, system, name, owner_id, is_npc, system_specific_data, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (id, guild_id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             str(character.id),
             str(guild_id),
@@ -82,7 +82,8 @@ def set_character(guild_id, character: BaseCharacter, system=None):
             str(character.owner_id),
             bool(character.is_npc),
             json.dumps(system_specific_data),
-            json.dumps(notes)
+            json.dumps(notes),
+            character.avatar_url
         ))
         conn.commit()
 
@@ -92,50 +93,50 @@ def get_character(guild_id, char_name):
     Load a character from the database and return an instance of the system-specific Character class.
     """
     with get_db() as conn:
-        cur = conn.execute("SELECT id, system, name, owner_id, is_npc, system_specific_data, notes FROM characters WHERE guild_id = ? AND name = ?", (str(guild_id), str(char_name)))
+        cur = conn.execute("SELECT id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url FROM characters WHERE guild_id = ? AND name = ?", (str(guild_id), str(char_name)))
         row = cur.fetchone()
         if not row:
             return None
-        id, system, name, owner_id, is_npc, system_specific_data, notes = row
+        id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url = row
 
-        CharacterClass = factories.get_specific_character(system)
-        system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC if is_npc else CharacterClass.SYSTEM_SPECIFIC_CHARACTER
-        system_specific = json.loads(system_specific_data)
-        character = {
-            "id": id,
-            "name": name,
-            "owner_id": owner_id,
-            "is_npc": is_npc,
-            "notes": json.loads(notes) or [],
-        }
-        for key in system_fields:
-            character[key] = system_specific.get(key, system_fields[key])
-        return CharacterClass.from_dict(character)
+        character = build_character(id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url)
+        character
+        return character
 
 def get_character_by_id(guild_id, char_id):
     """
     Load a character from the database and return an instance of the system-specific Character class.
     """
     with get_db() as conn:
-        cur = conn.execute("SELECT id, system, name, owner_id, is_npc, system_specific_data, notes FROM characters WHERE guild_id = ? AND id = ?", (str(guild_id), str(char_id)))
+        cur = conn.execute("SELECT id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url FROM characters WHERE guild_id = ? AND id = ?", (str(guild_id), str(char_id)))
         row = cur.fetchone()
         if not row:
             return None
-        id, system, name, owner_id, is_npc, system_specific_data, notes = row
+        id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url = row
 
-        CharacterClass = factories.get_specific_character(system)
-        system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC if is_npc else CharacterClass.SYSTEM_SPECIFIC_CHARACTER
-        system_specific = json.loads(system_specific_data)
-        character = {
-            "id": id,
-            "name": name,
-            "owner_id": owner_id,
-            "is_npc": is_npc,
-            "notes": json.loads(notes) or [],
-        }
-        for key in system_fields:
-            character[key] = system_specific.get(key, system_fields[key])
-        return CharacterClass.from_dict(character)
+        character = build_character(id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url)
+        return character
+
+def build_character(id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url):
+    CharacterClass = factories.get_specific_character(system)
+    system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC if is_npc else CharacterClass.SYSTEM_SPECIFIC_CHARACTER
+    system_specific = json.loads(system_specific_data)
+    
+    # Use the helper method
+    character_dict = BaseCharacter.create_base_character(
+        id=id,
+        name=name,
+        owner_id=owner_id,
+        is_npc=is_npc,
+        notes=json.loads(notes) or [],
+        avatar_url=avatar_url
+    )
+    
+    # Add system-specific fields
+    for key in system_fields:
+        character_dict[key] = system_specific.get(key, system_fields[key])
+        
+    return CharacterClass.from_dict(character_dict)
 
 
 def get_all_characters(guild_id, system=None):
@@ -147,12 +148,12 @@ def get_all_characters(guild_id, system=None):
     with get_db() as conn:
         if system:
             cur = conn.execute(
-                "SELECT id, system, name, owner_id, is_npc, system_specific_data, notes FROM characters WHERE guild_id = ? AND system = ?",
+                "SELECT id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url FROM characters WHERE guild_id = ? AND system = ?",
                 (str(guild_id), system)
             )
         else:
             cur = conn.execute(
-                "SELECT id, system, name, owner_id, is_npc, system_specific_data, notes FROM characters WHERE guild_id = ?",
+                "SELECT id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url FROM characters WHERE guild_id = ?",
                 (str(guild_id),)
             )
         rows = cur.fetchall()
@@ -160,20 +161,26 @@ def get_all_characters(guild_id, system=None):
         if not rows:
             return []
         for row in rows:
-            id, system_val, name, owner_id, is_npc, system_specific_data, notes = row
+            id, system_val, name, owner_id, is_npc, system_specific_data, notes, avatar_url = row
             CharacterClass = factories.get_specific_character(system_val)
             system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC if is_npc else CharacterClass.SYSTEM_SPECIFIC_CHARACTER
             system_specific = json.loads(system_specific_data)
-            character = {
-                "id": id,
-                "name": name,
-                "owner_id": owner_id,
-                "is_npc": is_npc,
-                "notes": notes or "",
-            }
+            
+            # Use the helper method
+            character_dict = BaseCharacter.create_base_character(
+                id=id,
+                name=name,
+                owner_id=owner_id,
+                is_npc=is_npc,
+                notes=json.loads(notes) or [],
+                avatar_url=avatar_url
+            )
+            
+            # Add system-specific fields
             for key in system_fields:
-                character[key] = system_specific.get(key, system_fields[key])
-            characters.append(CharacterClass.from_dict(character))
+                character_dict[key] = system_specific.get(key, system_fields[key])
+                
+            characters.append(CharacterClass.from_dict(character_dict))
     return characters
 
 

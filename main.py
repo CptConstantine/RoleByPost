@@ -3,6 +3,7 @@ import logging
 import dotenv
 import discord
 from discord.ext import commands
+from commands.narration import process_narration
 from data import repo
 from commands import character_commands, initiative_commands, reminder_commands, roll_commands, scene_commands, setup_commands
 
@@ -49,9 +50,22 @@ async def on_guild_join(guild):
                 break
 
 @bot.event
-async def on_message(message):
+async def on_message(message: discord.Message):
     if message.guild and not message.author.bot:
         repo.set_last_message_time(message.guild.id, message.author.id, message.created_at.timestamp())
+
+    # Process narration
+    if message.content.startswith("gm::") or message.content.startswith("pc::") or message.content.startswith("npc::"):
+        try:
+            await process_narration(message)
+        except Exception as e:
+            print(f"Error processing narration: {e}")
+            try:
+                await message.reply(f"❌ Error processing character speech: {str(e)}", delete_after=10)
+            except:
+                pass
+        return
+
     await bot.process_commands(message)
 
 @bot.command()
