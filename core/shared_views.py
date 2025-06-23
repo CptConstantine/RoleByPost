@@ -114,7 +114,7 @@ class EditSceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
         is_gm = repo.is_gm(self.guild_id, interaction.user.id)
         lines = []
         for npc_id in npc_ids:
-            npc = repo.get_character(self.guild_id, npc_id)
+            npc = repo.get_character_by_id(self.guild_id, npc_id)
             if npc:
                 lines.append(sheet.format_npc_scene_entry(npc, is_gm))
         notes = repo.get_scene_notes(self.guild_id)
