@@ -21,6 +21,19 @@ class InitiativeCommands(commands.Cog):
         guild_id = interaction.guild.id
         channel_id = interaction.channel.id
 
+        # End any existing initiative in this channel
+        initiative_data = repo.get_initiative(guild_id, channel_id)
+        if initiative_data and initiative_data["is_active"]:
+            # Try to delete the old pinned message
+            message_id = repo.get_initiative_message_id(guild_id, channel_id)
+            if message_id:
+                try:
+                    message = await interaction.channel.fetch_message(int(message_id))
+                    await message.delete()
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    pass  # Ignore if we can't find or delete the message
+            repo.end_initiative(guild_id, channel_id)
+
         # Use default initiative type if not specified
         if not type:
             type = repo.get_default_initiative_type(guild_id)
@@ -49,12 +62,29 @@ class InitiativeCommands(commands.Cog):
 
         initiative = InitiativeClass.from_participants(participants)
         repo.start_initiative(guild_id, channel_id, type, initiative.to_dict())
+        
+        # Create view and initialize the pinned message
         view = factories.get_specific_initiative_view(guild_id, channel_id, initiative)
-        await interaction.followup.send("🚦 Initiative started!", view=view, ephemeral=False)
+        
+        # We need to trigger the view update to create the pinned message
+        await view.update_view(interaction)
+        await interaction.followup.send("🚦 Initiative started and pinned!", ephemeral=True)
 
     @initiative_group.command(name="end", description="End initiative in this channel.")
     async def initiative_end(self, interaction: discord.Interaction):
-        repo.end_initiative(interaction.guild.id, interaction.channel.id)
+        guild_id = interaction.guild.id
+        channel_id = interaction.channel.id
+        
+        # Try to delete the pinned message
+        message_id = repo.get_initiative_message_id(guild_id, channel_id)
+        if message_id:
+            try:
+                message = await interaction.channel.fetch_message(int(message_id))
+                await message.delete()
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass  # Ignore if we can't find or delete the message
+    
+        repo.end_initiative(guild_id, channel_id)
         await interaction.response.send_message("🛑 Initiative ended.", ephemeral=False)
 
     @initiative_group.command(name="add", description="Add a PC or NPC to the current initiative.")
@@ -79,6 +109,17 @@ class InitiativeCommands(commands.Cog):
         )
         initiative.participants.append(participant)
         repo.update_initiative_state(interaction.guild.id, interaction.channel.id, initiative.to_dict())
+        
+        # Create a view and update the pinned message 
+        message_id = repo.get_initiative_message_id(interaction.guild.id, interaction.channel.id)
+        view = factories.get_specific_initiative_view(
+            interaction.guild.id, 
+            interaction.channel.id, 
+            initiative,
+            message_id
+        )
+        await view.update_view(interaction)
+        
         await interaction.response.send_message(f"✅ Added {char.name} to initiative.", ephemeral=True)
 
     @initiative_group.command(name="remove", description="Remove a PC or NPC from the current initiative.")
@@ -96,6 +137,17 @@ class InitiativeCommands(commands.Cog):
             await interaction.response.send_message("❌ Name not found in initiative.", ephemeral=True)
             return
         repo.update_initiative_state(interaction.guild.id, interaction.channel.id, initiative.to_dict())
+        
+        # Update the pinned message with the new state
+        message_id = repo.get_initiative_message_id(interaction.guild.id, interaction.channel.id)
+        view = factories.get_specific_initiative_view(
+            interaction.guild.id, 
+            interaction.channel.id, 
+            initiative,
+            message_id
+        )
+        await view.update_view(interaction)
+        
         await interaction.response.send_message(f"✅ Removed {name} from initiative.", ephemeral=True)
 
     @initiative_group.command(name="default", description="Set the default initiative type for this server.")
@@ -103,42 +155,6 @@ class InitiativeCommands(commands.Cog):
     async def set_default_initiative(self, interaction: discord.Interaction, type: str):
         repo.set_default_initiative_type(interaction.guild.id, type)
         await interaction.response.send_message(f"✅ Default initiative type set to {type}.", ephemeral=True)
-
-    @initiative_group.command(name="order", description="GM: Set the initiative order for the current channel.")
-    @app_commands.describe(order="Comma-separated list of participant names in initiative order")
-    async def initiative_set_order(self, interaction: discord.Interaction, order: str):
-        if not repo.is_gm(interaction.guild.id, interaction.user.id):
-            await interaction.response.send_message("❌ Only GMs can set initiative order.", ephemeral=True)
-            return
-
-        initiative_data = repo.get_initiative(interaction.guild.id, interaction.channel.id)
-        if not initiative_data or not initiative_data["is_active"]:
-            await interaction.response.send_message("❌ No active initiative in this channel.", ephemeral=True)
-            return
-
-        InitiativeClass = factories.get_specific_initiative(initiative_data["type"])
-        initiative = InitiativeClass.from_dict(initiative_data["initiative_state"])
-
-        names = [name.strip() for name in order.split(",") if name.strip()]
-        if not names:
-            await interaction.response.send_message("❌ Please provide a comma-separated list of names.", ephemeral=True)
-            return
-
-        name_to_participant = {p.name.lower(): p for p in initiative.participants}
-        new_order = []
-        for name in names:
-            p = name_to_participant.get(name.lower())
-            if not p:
-                await interaction.response.send_message(f"❌ Name '{name}' not found among current participants.", ephemeral=True)
-                return
-            new_order.append(p)
-
-        initiative.participants = new_order
-        repo.update_initiative_state(interaction.guild.id, interaction.channel.id, initiative.to_dict())
-        await interaction.response.send_message(
-            f"✅ Initiative order set: {', '.join([p.name for p in new_order])}. Press Start Initiative to begin.",
-            ephemeral=True
-        )
 
 async def setup_initiative_commands(bot: commands.Bot):
     await bot.add_cog(InitiativeCommands(bot))

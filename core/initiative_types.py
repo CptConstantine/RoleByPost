@@ -174,16 +174,18 @@ class PopcornInitiative(BaseInitiative):
         """
         Advance to the next turn, chosen by the current player.
         """
+        if not self.remaining_in_round:
+            self.remaining_in_round = [p.id for p in self.participants]
+
         if next_id in self.remaining_in_round:
             self.remaining_in_round.remove(next_id)
         self.last = self.current
         self.current = next_id
 
         # If no one is left, start a new round and increment round_number
-        if not self.remaining_in_round:
+        if len(self.remaining_in_round) == len(self.participants) - 1:
             self.round_number += 1
-            # Allow anyone (including the last person) to be picked first
-            self.remaining_in_round = [p.id for p in self.participants]
+        if not self.remaining_in_round:
             self.last = None  # Last resets for new round
 
     def is_round_end(self):

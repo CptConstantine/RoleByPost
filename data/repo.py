@@ -380,6 +380,29 @@ def update_initiative_state(guild_id, channel_id, initiative_state):
         )
         conn.commit()
 
+def set_initiative_message_id(guild_id, channel_id, message_id):
+    """
+    Store the message ID for the initiative message
+    """
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE initiative SET message_id = ? WHERE guild_id = ? AND channel_id = ?",
+            (str(message_id), str(guild_id), str(channel_id))
+        )
+        conn.commit()
+
+def get_initiative_message_id(guild_id, channel_id):
+    """
+    Get the message ID for the initiative message
+    """
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT message_id FROM initiative WHERE guild_id = ? AND channel_id = ?",
+            (str(guild_id), str(channel_id))
+        )
+        row = cur.fetchone()
+        return row[0] if row and row[0] else None
+
 def set_initiative_active(guild_id, channel_id, is_active):
     """
     Set whether initiative is active for a channel.

@@ -41,11 +41,21 @@ def get_specific_initiative(initiative_type: str):
     else:
         raise ValueError(f"Unknown initiative type: {initiative_type}")
 
-def get_specific_initiative_view(guild_id: str, channel_id: str, initiative):
+def get_specific_initiative_view(guild_id: str, channel_id: str, initiative, message_id=None):
     if initiative.type == "popcorn":
-        return initiative_views.PopcornInitiativeView(guild_id=guild_id, channel_id=channel_id, initiative=initiative)
+        return initiative_views.PopcornInitiativeView(
+            guild_id=guild_id, 
+            channel_id=channel_id, 
+            initiative=initiative,
+            message_id=message_id
+        )
     elif initiative.type == "generic":
-        return initiative_views.GenericInitiativeView(guild_id=guild_id, channel_id=channel_id, initiative=initiative)
+        return initiative_views.GenericInitiativeView(
+            guild_id=guild_id, 
+            channel_id=channel_id, 
+            initiative=initiative,
+            message_id=message_id
+        )
     else:
         raise ValueError(f"Unknown initiative type: {initiative.type}")
     

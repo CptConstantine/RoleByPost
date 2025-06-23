@@ -87,16 +87,7 @@ async def process_narration(message):
                 alias = npc_name  # Use the NPC name as an alias if no alias was provided
             
             # Create a temporary character for display
-            system = repo.get_system(guild_id) 
-            CharacterClass = factories.get_specific_character(system)
-            character = CharacterClass({
-                "id": f"temp_{npc_name.lower().replace(' ', '_')}",
-                "name": npc_name,
-                "owner_id": user_id,
-                "is_npc": True,
-                "notes": [],
-                "avatar_url": None
-            })
+            character = BaseCharacter.create_base_character(f"temp_{npc_name.lower().replace(' ', '_')}", npc_name, user_id, is_npc=True, notes=[])
     else:
         return  # Not a narration command
     

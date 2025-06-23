@@ -17,12 +17,23 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
 async def setup_hook():
+    """Setup hook runs before the bot connects to Discord"""
+    # Register command trees
     await setup_commands.setup_setup_commands(bot)
     await character_commands.setup_character_commands(bot)
     await scene_commands.setup_scene_commands(bot)
     await initiative_commands.setup_initiative_commands(bot)
     await roll_commands.setup_roll_commands(bot)
     await reminder_commands.setup_reminder_commands(bot)
+    
+    # Register persistent views
+    from core.initiative_views import GenericInitiativeView, PopcornInitiativeView
+    
+    # Register empty instances of the initiative views for persistence
+    bot.add_view(GenericInitiativeView()) 
+    bot.add_view(PopcornInitiativeView())
+
+    # Sync the command tree
     await bot.tree.sync()
 
 @bot.event

@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS initiative (
     type TEXT NOT NULL,
     initiative_state TEXT NOT NULL,
     is_active BOOLEAN NOT NULL,
+    message_id TEXT,
     PRIMARY KEY (guild_id, channel_id)
 )
 """)

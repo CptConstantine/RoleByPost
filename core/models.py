@@ -96,25 +96,6 @@ class BaseInitiative(ABC):
     def round_number(self, value: int):
         self.data["round_number"] = value
 
-class BaseInitiativeView(ABC, discord.ui.View):
-    """
-    Abstract base class for initiative views.
-    System-specific initiative views should inherit from this and implement all methods.
-    """
-    def __init__(self, guild_id, channel_id, initiative):
-        super().__init__(timeout=120)
-        self.guild_id = guild_id
-        self.channel_id = channel_id
-        self.initiative = initiative
-
-    @abstractmethod
-    async def update_view(self, interaction: discord.Interaction):
-        """
-        Update the initiative view (e.g., after a turn advances).
-        Must be implemented by subclasses.
-        """
-        pass
-
 class RollModifiers(ABC):
     """
     A flexible container for roll parameters (e.g., skill, attribute, modifiers).
