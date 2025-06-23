@@ -112,9 +112,6 @@ The following are the commands that are currently available.
 - `/initiative start [type] [scene]`  
   Start initiative in the current channel. Type can be "generic" or "popcorn". Scene is optional.
 
-- `/initiative order [Name1, Name2, Name3, etc.]`  
-  (GM only) Set the initiative order by providing a comma-separated list of participant names.
-
 - `/initiative end`  
   End initiative in the current channel.
 
