@@ -184,7 +184,7 @@ class EditNotesModal(ui.Modal, title="Edit Notes"):
 
 class RequestRollView(ui.View):
     def __init__(self, roll_formula: RollModifiers = None, difficulty: int = None):
-        super().__init__(timeout=300)
+        super().__init__(timeout=60*60*24*7) # 1 week timeout; easy enough to re-request a roll after a bot restart
         self.roll_formula_obj = roll_formula
         self.difficulty = difficulty
         self.add_item(EditRequestedRollButton(roll_formula, difficulty))
@@ -210,9 +210,9 @@ class RollModifiersView(ui.View):
     Each modifier/property is shown as a button; clicking it opens a modal to edit its value.
     """
     def __init__(self, roll_formula_obj: RollModifiers, character: BaseCharacter, difficulty: int = None):
-        super().__init__(timeout=300)
-        self.roll_formula_obj = roll_formula_obj  # The RollFormula object being edited
-        self.character = character                # The character making the roll
+        super().__init__(timeout=60*60*24) # 1 day timeout
+        self.roll_formula_obj = roll_formula_obj
+        self.character = character
         self.difficulty = difficulty  
 
         self.modifier_buttons = {}
