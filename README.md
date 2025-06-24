@@ -200,12 +200,13 @@ For more detailed help, use `/character narration`.
 
 ### Top Priority
 
-- Manage channels so that certain commands can only be used in specific channels to prevent clutter
+- Add ability for players to manage multiple characters (for companions, minions, hirelings, etc.) and optionally speak as them for narration
 - User can provide an OpenAI API key to gain access to commands that use AI (summarize recent posts, ask rules questions)
 - Inventory system to track equipment
 
 ### Secondary Priority
 
+- Manage channels so that certain commands can only be used in specific channels to prevent clutter
 - System specific commands (ex. starships, travel, and maintenance cost calculations for Traveller; system specific damage calculations)
 - Support for other systems
 

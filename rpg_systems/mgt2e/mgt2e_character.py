@@ -460,13 +460,22 @@ class MGT2ESheetEditView(ui.View):
 
         async def on_category_selected(view, interaction, category):
             skills_in_cat = categories[category]
-            skill_options = [SelectOption(label=skill, value=skill) for skill in sorted(skills_in_cat)]
-            async def on_skill_selected(view2, interaction2, skill):
-                await interaction2.response.send_modal(EditSkillValueModal(self.char_id, skill))
-            await interaction.response.edit_message(
-                content=f"Select a skill in {category}:",
-                view=PaginatedSelectView(skill_options, on_skill_selected, interaction.user.id, prompt=f"Select a skill in {category}:")
-            )
+            
+            # If there's only one skill in this category and it's the same as the category name,
+            # it means this is a standalone skill with no specialties
+            if len(skills_in_cat) == 1 and skills_in_cat[0] == category:
+                # Skip the skill selection step and directly open the edit modal
+                await interaction.response.send_modal(EditSkillValueModal(self.char_id, category))
+            else:
+                # Multiple skills or specialties, continue with skill selection
+                skill_options = [SelectOption(label=skill, value=skill) for skill in sorted(skills_in_cat)]
+                async def on_skill_selected(view2, interaction2, skill):
+                    await interaction2.response.send_modal(EditSkillValueModal(self.char_id, skill))
+                
+                await interaction.response.edit_message(
+                    content=f"Select a skill in {category}:",
+                    view=PaginatedSelectView(skill_options, on_skill_selected, interaction.user.id, prompt=f"Select a skill in {category}:")
+                )
 
         await interaction.response.send_message(
             "Select a skill category:",
@@ -627,16 +636,65 @@ class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
             skills = character.skills  # Use property
             if value.lower() == "untrained":
                 skills[self.skill] = -3
+                
+                # If this skill is a specialty (has parentheses), 
+                # we should update other specialties in the same category to untrained as well
+                if "(" in self.skill and ")" in self.skill:
+                    category = self.skill.split("(", 1)[0].strip()
+                    
+                    # Get skill categories
+                    categories = get_skill_categories(skills)
+                    specialties = categories.get(category, [])
+                    
+                    # Set all specialties in this category to untrained
+                    for specialty in specialties:
+                        # Skip the current skill
+                        if specialty == self.skill:
+                            continue
+                        
+                        # Set specialty to untrained (-3)
+                        skills[specialty] = -3
+                
             else:
-                skills[self.skill] = int(value)
+                new_value = int(value)
+                skills[self.skill] = new_value
+                
+                # If this skill is a specialty (has parentheses) and is being set to >= 0,
+                # we should update other specialties in the same category to be at least 0
+                if new_value >= 0 and "(" in self.skill and ")" in self.skill:
+                    category = self.skill.split("(", 1)[0].strip()
+                    
+                    # Get skill categories
+                    categories = get_skill_categories(skills)
+                    specialties = categories.get(category, [])
+                    
+                    # Update all related specialties in the same category
+                    for specialty in specialties:
+                        # Skip the current skill
+                        if specialty == self.skill:
+                            continue
+                            
+                        # If the specialty is untrained, set it to 0
+                        if skills.get(specialty, -3) < 0:
+                            skills[specialty] = 0
+                
             character.skills = skills  # Save back using property setter
-        except Exception:
-            await interaction.response.send_message("❌ Please enter a number or 'untrained'.", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Please enter a number or 'untrained'. Error: {str(e)}", ephemeral=True)
             return
+            
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
         embed = MGT2ESheet().format_full_sheet(character)
         view = MGT2ESheetEditView(interaction.user.id, self.char_id)
-        await interaction.response.edit_message(content=f"✅ {self.skill} updated.", embed=embed, view=view)
+        
+        # Create a more informative success message that mentions if other skills were updated
+        content = f"✅ {self.skill} updated."
+        if value.lower() == "untrained" and "(" in self.skill and ")" in self.skill:
+            content += " Related skill specialties have also been set to untrained."
+        elif value.lower() != "untrained" and int(value) >= 0 and "(" in self.skill and ")" in self.skill:
+            content += " Related skill specialties have also been set to at least 0."
+            
+        await interaction.response.edit_message(content=content, embed=embed, view=view)
 
 class MGT2ERollModifiersView(RollModifiersView):
     """
@@ -684,28 +742,42 @@ class MGT2ESelectSkillButton(ui.Button):
         
         async def on_category_selected(view, interaction, category):
             skills_in_cat = categories[category]
-            skill_options = [SelectOption(label=f"{skill} ({skills.get(skill, -3)})", value=skill) 
-                             for skill in sorted(skills_in_cat)]
             
-            async def on_skill_selected(view2, interaction2, skill):
-                # Update the roll formula with the selected skill
-                self.label = skill
-                self.parent_view.roll_formula_obj.skill = skill
-                skill_mod = character.get_skill_modifier(skills, skill)
-                await interaction2.response.edit_message(
-                    content=f"Selected skill: **{skill}** ({skill_mod})",
+            # If there's only one skill in this category and it's the same as the category name,
+            # it means this is a standalone skill with no specialties
+            if len(skills_in_cat) == 1 and skills_in_cat[0] == category:
+                # Skip the skill selection step and directly update the roll formula
+                self.label = category
+                self.parent_view.roll_formula_obj.skill = category
+                skill_mod = character.get_skill_modifier(skills, category)
+                await interaction.response.edit_message(
+                    content=f"Selected skill: **{category}** ({skill_mod})",
                     view=self.parent_view
                 )
-            
-            await interaction.response.edit_message(
-                content=f"Select a skill in {category}:",
-                view=PaginatedSelectView(
-                    skill_options, 
-                    on_skill_selected, 
-                    interaction.user.id, 
-                    prompt=f"Select a skill in {category}:"
+            else:
+                # Multiple skills or specialties, continue with skill selection
+                skill_options = [SelectOption(label=f"{skill} ({skills.get(skill, -3)})", value=skill) 
+                                for skill in sorted(skills_in_cat)]
+                
+                async def on_skill_selected(view2, interaction2, skill):
+                    # Update the roll formula with the selected skill
+                    self.label = skill
+                    self.parent_view.roll_formula_obj.skill = skill
+                    skill_mod = character.get_skill_modifier(skills, skill)
+                    await interaction2.response.edit_message(
+                        content=f"Selected skill: **{skill}** ({skill_mod})",
+                        view=self.parent_view
+                    )
+                
+                await interaction.response.edit_message(
+                    content=f"Select a skill in {category}:",
+                    view=PaginatedSelectView(
+                        skill_options, 
+                        on_skill_selected, 
+                        interaction.user.id, 
+                        prompt=f"Select a skill in {category}:"
+                    )
                 )
-            )
         
         await interaction.response.send_message(
             "Select a skill category:",
