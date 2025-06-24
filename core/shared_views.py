@@ -72,14 +72,6 @@ class PaginatedNextButton(ui.Button):
             )
         )
 
-class SceneNotesEditView(discord.ui.View):
-    def __init__(self, guild_id, is_gm):
-        super().__init__(timeout=None)
-        self.guild_id = guild_id
-        self.is_gm = is_gm
-        if is_gm:
-            self.add_item(SceneNotesButton(guild_id))
-
 class SceneNotesButton(discord.ui.Button):
     def __init__(self, guild_id):
         super().__init__(label="Edit Scene Notes", style=discord.ButtonStyle.primary)
@@ -89,13 +81,22 @@ class SceneNotesButton(discord.ui.Button):
         if not repo.is_gm(interaction.guild.id, interaction.user.id):
             await interaction.response.send_message("❌ Only GMs can edit scene notes.", ephemeral=True)
             return
-        await interaction.response.send_modal(EditSceneNotesModal(self.guild_id))  # No need to pass interaction.message
+            
+        # Get the active scene
+        active_scene = repo.get_active_scene(interaction.guild.id)
+        if not active_scene:
+            await interaction.response.send_message("❌ No active scene available.", ephemeral=True)
+            return
+            
+        await interaction.response.send_modal(EditSceneNotesModal(interaction.guild.id, active_scene["id"]))
+
 
 class EditSceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
-    def __init__(self, guild_id):
+    def __init__(self, guild_id, scene_id):
         super().__init__()
         self.guild_id = guild_id
-        current_notes = repo.get_scene_notes(guild_id) or ""
+        self.scene_id = scene_id
+        current_notes = repo.get_scene_notes(guild_id, scene_id) or ""
         self.notes = discord.ui.TextInput(
             label="Scene Notes",
             style=discord.TextStyle.paragraph,
@@ -106,32 +107,45 @@ class EditSceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
         self.add_item(self.notes)
 
     async def on_submit(self, interaction: discord.Interaction):
-        repo.set_scene_notes(self.guild_id, self.notes.value)
+        repo.set_scene_notes(self.guild_id, self.notes.value, self.scene_id)
+        
         # Rebuild the scene embed and view
         system = repo.get_system(self.guild_id)
         sheet = factories.get_specific_sheet(system)
-        npc_ids = repo.get_scene_npc_ids(self.guild_id)
+        npc_ids = repo.get_scene_npc_ids(self.guild_id, self.scene_id)
         is_gm = repo.is_gm(self.guild_id, interaction.user.id)
+        active_scene = repo.get_active_scene(self.guild_id)
+        
         lines = []
         for npc_id in npc_ids:
             npc = repo.get_character_by_id(self.guild_id, npc_id)
             if npc:
                 lines.append(sheet.format_npc_scene_entry(npc, is_gm))
-        notes = repo.get_scene_notes(self.guild_id)
+                
+        notes = repo.get_scene_notes(self.guild_id, self.scene_id)
         description = ""
         if notes:
             description += f"**Notes:**\n{notes}\n\n"
+            
         if lines:
             description += "\n\n".join(lines)
         else:
-            description += "📭 No NPCs are currently in the scene."
+            description += "📭 No NPCs are currently in this scene."
+            
         embed = discord.Embed(
-            title="🎭 The Current Scene",
+            title=f"🎭 Scene: {active_scene['name']}",
             description=description,
             color=discord.Color.purple()
         )
+        
         view = SceneNotesEditView(self.guild_id, is_gm)
         await interaction.response.edit_message(embed=embed, view=view)
+
+class SceneNotesEditView(discord.ui.View):
+    def __init__(self, guild_id, is_gm=False):
+        super().__init__()
+        if is_gm:
+            self.add_item(SceneNotesButton(guild_id))
 
 class EditNameModal(ui.Modal, title="Edit Character Name"):
     def __init__(self, char_id: str, current_name: str, system: str, make_view_embed):

@@ -7,17 +7,18 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 ## Features
 
 - **Character Sheet Management**  
-  - Create, edit, and view player characters and NPCs for supported systems. Users can set their "active" character, which is used by default for `/roll` and `/character sheet`.
+  - Create, edit, and view player characters and NPCs for supported systems. Users can set their "active" character, which is used by default for `/roll check` and `/character sheet`.
   - System-specific fields and validation (e.g., Fate aspects, Traveller skills).
   - Import/export characters as JSON files for easy transfer between servers.
 
 - **Scene Management**  
-  - Add or remove NPCs from the current scene.
-  - View a summary of all NPCs in the scene.
+  - Create and manage multiple scenes.
+  - Switch between scenes to organize different locations or encounters.
+  - Add or remove NPCs from scenes.
+  - View a summary of all NPCs in a scene.
 
 - **Customizable Skills**  
-  - GMs can set default skill lists per server and system, via text or file upload.
-  - Supports `.txt` file uploads for easy skill list customization.
+  - GMs can set default skill lists per server and system, via .txt file upload.
 
 - **Dice Rolling**  
   - Supports standard dice notation (e.g., `2d6+3`) and Fate/Fudge dice (`4df+1`).
@@ -30,9 +31,8 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
   - Supports multiple initiative types:
     - **Generic:** GM sets the order, and turns proceed in that order. Start/End Turn buttons notify the next participant.
     - **Popcorn:** Each participant picks who goes next; at the end of a round, the last person can pick anyone (including themselves) to start the next round.
-  - Initiative participants are robustly managed as dataclasses for reliability.
-  - GMs can set the initiative order at any time with `/initiative order`.
-  - Buttons for starting and ending turns, and display the current round and participant.
+  - GMs can set the initiative order directly from the initiative tracker.
+  - Buttons for starting and ending turns, and displays the current round and participants.
 
 ---
 
@@ -87,30 +87,48 @@ The following are the commands that are currently available.
 
 ### Rolling
 
-- `/roll [skill] [attribute] [modifier] [difficulty]`  
-  Roll dice for your active character (PC) with optional parameters.
+- `/roll check [roll_parameters]`  
+  Roll dice for your active character with optional parameters.
 
-- `/roll request [chars_to_roll] [skill] [attribute] [modifier] [difficulty]`  
+- `/roll custom`
+  Open the system specific roll interface for your character.
+
+- `/roll request [chars_to_roll] [roll_parameters] [difficulty]`  
   (GM only) Request players to roll with specified parameters. System-specific UIs allow players to adjust skills/attributes.
 
 ### Scene Management
 
-- `/scene`  
-  View all NPCs in the current scene.
+- `/scene create [name]`  
+  (GM only) Create a new scene with the given name.
+
+- `/scene list`  
+  View all available scenes with an indicator for the active one.
+
+- `/scene switch [scene_name]`  
+  (GM only) Switch to a different scene.
+
+- `/scene rename [current_name] [new_name]`  
+  (GM only) Rename an existing scene.
+
+- `/scene delete [scene_name]`  
+  (GM only) Delete a scene and all its associated data.
+
+- `/scene view`  
+  View the current active scene.
   
 - `/scene add [npc name]`  
-  Add an NPC to the current scene.
+  (GM only) Add an NPC to the current active scene.
 
 - `/scene remove [npc name]`  
-  Remove an NPC from the scene.
+  (GM only) Remove an NPC from the current active scene.
 
 - `/scene clear`  
-  Clear all NPCs from the scene.
+  (GM only) Clear all NPCs from the current active scene.
 
 ### Initiative
 
 - `/initiative start [type] [scene]`  
-  Start initiative in the current channel. Type can be "generic" or "popcorn". Scene is optional.
+  Start initiative in the current channel. Scene and type are optional.
 
 - `/initiative end`  
   End initiative in the current channel.
@@ -137,13 +155,11 @@ The following are the commands that are currently available.
 
 - Optionally set automatic reminders when someone is mentioned
 - Manage channels so that certain commands can only be used in specific channels to prevent clutter
-- Commands to make narration and dialogue more interesting
 - User can provide an OpenAI API key to gain access to commands that use AI (summarize recent posts, ask rules questions)
 - Inventory system to track equipment
 
 ### Secondary Priority
 
-- Avatars for characters
 - System specific commands (ex. starships, travel, and maintenance cost calculations for Traveller; system specific damage calculations)
 - Support for other systems
 

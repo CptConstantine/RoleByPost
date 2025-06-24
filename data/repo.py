@@ -1,5 +1,7 @@
 import sqlite3
 import json
+import uuid
+import time
 from core.models import BaseCharacter
 import core.factories as factories
 
@@ -230,57 +232,216 @@ def get_default_skills(guild_id, system):
         return None
 
 
-def add_scene_npc(guild_id, npc_id):
+def create_scene(guild_id, name):
+    """Create a new scene with the given name"""
+    scene_id = str(uuid.uuid4())
     with get_db() as conn:
-        conn.execute("INSERT OR IGNORE INTO scene_npcs (guild_id, npc_id) VALUES (?, ?)", (str(guild_id), str(npc_id)))
-        conn.commit()
-
-
-def remove_scene_npc(guild_id, npc_id):
-    with get_db() as conn:
-        conn.execute("DELETE FROM scene_npcs WHERE guild_id = ? AND npc_id = ?", (str(guild_id), str(npc_id)))
-        conn.commit()
-
-
-def clear_scenes(guild_id):
-    with get_db() as conn:
-        conn.execute("DELETE FROM scene_npcs WHERE guild_id = ?", (str(guild_id),))
-        conn.commit()
-        conn.execute("DELETE FROM scene_notes WHERE guild_id = ?", (str(guild_id),))
-        conn.commit()
-
-
-def get_scene_npc_ids(guild_id):
-    with get_db() as conn:
-        cur = conn.execute("SELECT npc_id FROM scene_npcs WHERE guild_id = ?", (str(guild_id),))
-        return [row[0] for row in cur.fetchall()]
-    
-
-def get_scene_npcs(guild_id):
-    """
-    Returns a list of all NPC character objects currently in the scene for the given guild.
-    """
-    npc_ids = get_scene_npc_ids(guild_id)
-    return [get_character_by_id(guild_id, npc_id) for npc_id in npc_ids if get_character_by_id(guild_id, npc_id) is not None]
-    
-
-def set_scene_notes(guild_id, notes):
-    with get_db() as conn:
+        # First, check if this is the first scene for the guild
+        cur = conn.execute("SELECT COUNT(*) FROM scenes WHERE guild_id = ?", (str(guild_id),))
+        is_first_scene = cur.fetchone()[0] == 0
+        
+        # Insert the new scene
         conn.execute(
-            "INSERT OR REPLACE INTO scene_notes (guild_id, notes) VALUES (?, ?)",
-            (str(guild_id), notes)
+            "INSERT INTO scenes (guild_id, scene_id, name, is_active, creation_time) VALUES (?, ?, ?, ?, ?)",
+            (str(guild_id), scene_id, name, is_first_scene, time.time())
         )
         conn.commit()
+        return scene_id
 
-
-def get_scene_notes(guild_id):
+def get_scenes(guild_id):
+    """Get all scenes for a guild"""
     with get_db() as conn:
         cur = conn.execute(
-            "SELECT notes FROM scene_notes WHERE guild_id = ?",
+            "SELECT scene_id, name, is_active FROM scenes WHERE guild_id = ? ORDER BY creation_time",
+            (str(guild_id),)
+        )
+        return [{"id": row[0], "name": row[1], "is_active": bool(row[2])} for row in cur.fetchall()]
+
+def get_scene_by_name(guild_id, name):
+    """Get a scene by name"""
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT scene_id, name, is_active FROM scenes WHERE guild_id = ? AND LOWER(name) = LOWER(?)",
+            (str(guild_id), name.lower())
+        )
+        row = cur.fetchone()
+        if row:
+            return {"id": row[0], "name": row[1], "is_active": bool(row[2])}
+        return None
+
+def get_active_scene(guild_id):
+    """Get the active scene for a guild"""
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT scene_id, name FROM scenes WHERE guild_id = ? AND is_active = 1",
             (str(guild_id),)
         )
         row = cur.fetchone()
+        if row:
+            return {"id": row[0], "name": row[1], "is_active": True}
+        return None
+
+def set_active_scene(guild_id, scene_id):
+    """Set a scene as active and deactivate all others"""
+    with get_db() as conn:
+        # First deactivate all scenes
+        conn.execute(
+            "UPDATE scenes SET is_active = 0 WHERE guild_id = ?",
+            (str(guild_id),)
+        )
+        # Then activate the specified scene
+        conn.execute(
+            "UPDATE scenes SET is_active = 1 WHERE guild_id = ? AND scene_id = ?",
+            (str(guild_id), str(scene_id))
+        )
+        conn.commit()
+
+def delete_scene(guild_id, scene_id):
+    """Delete a scene and all associated data"""
+    with get_db() as conn:
+        # Delete the scene
+        conn.execute(
+            "DELETE FROM scenes WHERE guild_id = ? AND scene_id = ?",
+            (str(guild_id), str(scene_id))
+        )
+        # Delete associated notes
+        conn.execute(
+            "DELETE FROM scene_notes WHERE guild_id = ? AND scene_id = ?",
+            (str(guild_id), str(scene_id))
+        )
+        # Delete associated NPCs
+        conn.execute(
+            "DELETE FROM scene_npcs WHERE guild_id = ? AND scene_id = ?",
+            (str(guild_id), str(scene_id))
+        )
+        conn.commit()
+        
+        # If the deleted scene was active, set another scene as active if available
+        if conn.total_changes > 0:
+            cur = conn.execute(
+                "SELECT scene_id FROM scenes WHERE guild_id = ? ORDER BY creation_time LIMIT 1",
+                (str(guild_id),)
+            )
+            row = cur.fetchone()
+            if row:
+                conn.execute(
+                    "UPDATE scenes SET is_active = 1 WHERE guild_id = ? AND scene_id = ?",
+                    (str(guild_id), row[0])
+                )
+                conn.commit()
+
+def rename_scene(guild_id, scene_id, new_name):
+    """Rename a scene"""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE scenes SET name = ? WHERE guild_id = ? AND scene_id = ?",
+            (new_name, str(guild_id), str(scene_id))
+        )
+        conn.commit()
+
+# Modified scene notes functions
+
+def set_scene_notes(guild_id, notes, scene_id=None):
+    """Set notes for a scene"""
+    if scene_id is None:
+        scene = get_active_scene(guild_id)
+        if not scene:
+            return False
+        scene_id = scene["id"]
+        
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO scene_notes (guild_id, scene_id, notes) VALUES (?, ?, ?)",
+            (str(guild_id), str(scene_id), notes)
+        )
+        conn.commit()
+        return True
+
+def get_scene_notes(guild_id, scene_id=None):
+    """Get notes for a scene"""
+    if scene_id is None:
+        scene = get_active_scene(guild_id)
+        if not scene:
+            return None
+        scene_id = scene["id"]
+        
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT notes FROM scene_notes WHERE guild_id = ? AND scene_id = ?",
+            (str(guild_id), str(scene_id))
+        )
+        row = cur.fetchone()
         return row[0] if row else None
+
+# Modified scene NPCs functions
+
+def add_scene_npc(guild_id, npc_id, scene_id=None):
+    """Add an NPC to a scene"""
+    if scene_id is None:
+        scene = get_active_scene(guild_id)
+        if not scene:
+            return False
+        scene_id = scene["id"]
+        
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO scene_npcs (guild_id, scene_id, npc_id) VALUES (?, ?, ?)",
+            (str(guild_id), str(scene_id), str(npc_id))
+        )
+        conn.commit()
+        return True
+
+def remove_scene_npc(guild_id, npc_id, scene_id=None):
+    """Remove an NPC from a scene"""
+    if scene_id is None:
+        scene = get_active_scene(guild_id)
+        if not scene:
+            return False
+        scene_id = scene["id"]
+        
+    with get_db() as conn:
+        conn.execute(
+            "DELETE FROM scene_npcs WHERE guild_id = ? AND scene_id = ? AND npc_id = ?",
+            (str(guild_id), str(scene_id), str(npc_id))
+        )
+        conn.commit()
+        return True
+
+def clear_scene_npcs(guild_id, scene_id=None):
+    """Remove all NPCs from a scene"""
+    if scene_id is None:
+        scene = get_active_scene(guild_id)
+        if not scene:
+            return False
+        scene_id = scene["id"]
+        
+    with get_db() as conn:
+        conn.execute(
+            "DELETE FROM scene_npcs WHERE guild_id = ? AND scene_id = ?",
+            (str(guild_id), str(scene_id))
+        )
+        conn.commit()
+        return True
+
+def get_scene_npc_ids(guild_id, scene_id=None):
+    """Get all NPCs in a scene"""
+    if scene_id is None:
+        scene = get_active_scene(guild_id)
+        if not scene:
+            return []
+        scene_id = scene["id"]
+        
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT npc_id FROM scene_npcs WHERE guild_id = ? AND scene_id = ?",
+            (str(guild_id), str(scene_id))
+        )
+        return [row[0] for row in cur.fetchall()]
+
+def get_scene_npcs(guild_id, scene_id=None):
+    """Get all NPCs in a scene as character objects"""
+    npc_ids = get_scene_npc_ids(guild_id, scene_id)
+    return [get_character_by_id(guild_id, npc_id) for npc_id in npc_ids if get_character_by_id(guild_id, npc_id) is not None]
 
 
 def set_active_character(guild_id, user_id, char_id):

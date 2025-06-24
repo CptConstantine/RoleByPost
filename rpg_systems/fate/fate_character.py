@@ -228,7 +228,8 @@ class FateSheet(BaseSheet):
             embed.add_field(name="Aspects", value="None", inline=False)
 
         # --- Skills ---
-        skills = character.skills
+        # Only display skills > 0
+        skills = {k: v for k, v in character.skills.items() if v > 0}
         if skills:
             sorted_skills = sorted(skills.items(), key=lambda x: -x[1])
             skill_lines = [f"**{k}**: +{v}" for k, v in sorted_skills]
@@ -305,7 +306,19 @@ class FateSheetEditView(ui.View):
             return False
         return True
 
-    @ui.button(label="Edit Name", style=discord.ButtonStyle.secondary, row=1)
+    @ui.button(label="Edit Stress", style=discord.ButtonStyle.primary, row=1)
+    async def edit_stress(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(EditStressModal(self.char_id))
+
+    @ui.button(label="Edit Consequences", style=discord.ButtonStyle.primary, row=1)
+    async def edit_consequences(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.edit_message(content="Editing consequences:", view=EditConsequencesView(interaction.guild.id, self.editor_id, self.char_id))
+
+    @ui.button(label="Edit Fate Points", style=discord.ButtonStyle.primary, row=1)
+    async def edit_fp(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(EditFatePointsModal(self.char_id))
+
+    @ui.button(label="Edit Name", style=discord.ButtonStyle.secondary, row=2)
     async def edit_name(self, interaction: discord.Interaction, button: ui.Button):
         character = get_character(interaction.guild.id, self.char_id)
         await interaction.response.send_modal(
@@ -337,19 +350,7 @@ class FateSheetEditView(ui.View):
             ephemeral=True
         )
 
-    @ui.button(label="Edit Stress", style=discord.ButtonStyle.primary, row=1)
-    async def edit_stress(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.send_modal(EditStressModal(self.char_id))
-
-    @ui.button(label="Edit Consequences", style=discord.ButtonStyle.primary, row=1)
-    async def edit_consequences(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.edit_message(content="Editing consequences:", view=EditConsequencesView(interaction.guild.id, self.editor_id, self.char_id))
-
-    @ui.button(label="Edit Fate Points", style=discord.ButtonStyle.primary, row=1)
-    async def edit_fp(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.send_modal(EditFatePointsModal(self.char_id))
-
-    @ui.button(label="Edit Notes", style=discord.ButtonStyle.secondary, row=4)
+    @ui.button(label="Edit Notes", style=discord.ButtonStyle.secondary, row=2)
     async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
         character = get_character(interaction.guild.id, self.char_id)
         notes = "\n".join(character.notes) if character and character.notes else ""
