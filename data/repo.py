@@ -609,3 +609,67 @@ def get_default_initiative_type(guild_id):
         )
         row = cur.fetchone()
         return row[0] if row else None
+
+# Add these functions to repo.py
+
+def get_auto_reminder_settings(guild_id):
+    """Get auto-reminder settings for a guild"""
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT enabled, delay_seconds FROM auto_reminder_settings WHERE guild_id = ?",
+            (str(guild_id),)
+        )
+        row = cur.fetchone()
+        if row:
+            return {"enabled": bool(row[0]), "delay_seconds": row[1]}
+        else:
+            # Default settings if not found
+            return {"enabled": False, "delay_seconds": 86400}
+
+def set_auto_reminder(guild_id, enabled, delay_seconds):
+    """Enable or disable auto-reminders for a guild"""
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO auto_reminder_settings (guild_id, enabled, delay_seconds) "
+            "VALUES (?, ?, ?)",
+            (str(guild_id), int(enabled), delay_seconds)
+        )
+        conn.commit()
+
+def is_user_opted_out(guild_id, user_id):
+    """Check if a user has opted out of auto-reminders"""
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT opted_out FROM auto_reminder_optouts WHERE guild_id = ? AND user_id = ?",
+            (str(guild_id), str(user_id))
+        )
+        row = cur.fetchone()
+        return bool(row[0]) if row else False
+
+def set_user_optout(guild_id, user_id, opted_out):
+    """Set whether a user has opted out of auto-reminders"""
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO auto_reminder_optouts (guild_id, user_id, opted_out) "
+            "VALUES (?, ?, ?)",
+            (str(guild_id), str(user_id), int(opted_out))
+        )
+        conn.commit()
+
+def get_all_auto_reminder_users(guild_id):
+    """Get all users who have been mentioned for auto-reminders"""
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT user_id FROM auto_reminder_optouts WHERE guild_id = ?",
+            (str(guild_id),)
+        )
+        return [row[0] for row in cur.fetchall()]
+
+def update_last_message_time(guild_id, user_id, timestamp):
+    """Update the last message timestamp for a user in a guild"""
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO last_message_times (guild_id, user_id, timestamp) VALUES (?, ?, ?)",
+            (str(guild_id), str(user_id), timestamp)
+        )
+        conn.commit()

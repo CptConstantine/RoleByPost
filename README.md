@@ -7,7 +7,7 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 ## Features
 
 - **Character Sheet Management**  
-  - Create, edit, and view player characters and NPCs for supported systems. Users can set their "active" character, which is used by default for `/roll check` and `/character sheet`.
+  - Create, edit, and view player characters and NPCs for supported systems. Users can set their "active" character, which is used by default for `/roll` and `/character sheet`.
   - System-specific fields and validation (e.g., Fate aspects, Traveller skills).
   - Import/export characters as JSON files for easy transfer between servers.
 
@@ -26,6 +26,8 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 
 - **Reminders**  
   - GMs can remind specific users or roles to post, with a custom message and delay (e.g., "in 2d" or "in 12h").
+  - Automatic reminders when users are mentioned but haven't responded.
+  - Users can opt out of automatic reminders if they prefer.
 
 - **Initiative Management**
   - Supports multiple initiative types:
@@ -33,6 +35,11 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
     - **Popcorn:** Each participant picks who goes next; at the end of a round, the last person can pick anyone (including themselves) to start the next round.
   - GMs can set the initiative order directly from the initiative tracker.
   - Buttons for starting and ending turns, and displays the current round and participants.
+
+- **Character Speech and Narration**
+  - Players can speak as their characters with formatted messages and avatars
+  - GMs can speak as NPCs with custom display names
+  - GMs can provide narration with special formatting
 
 ---
 
@@ -147,13 +154,52 @@ The following are the commands that are currently available.
 - `/reminder send [user] [role] [message] [delay]`  
   (GM only) Remind a user or role to post. Sends a DM if they haven't posted in the server since the reminder. Delay supports formats like `24h`, `2d`, `90m` or `60` for seconds.
 
+- `/reminder set [user] [time] [message]`  
+  (GM only) Set a reminder for yourself or another user with a custom message and time delay.
+
+- `/reminder setauto [enabled] [delay]`  
+  (GM only) Configure automatic reminders when users are mentioned. Set whether they're enabled and/or the delay before sending.
+
+- `/reminder autooptout [opt_out]`  
+  Opt out of receiving automatic reminders when mentioned. Set to false to opt back in.
+
+- `/reminder autostatus`  
+  Check the current automatic reminder settings for this server.
+
+### Character Speech and Narration
+
+This bot provides special message prefixes that transform regular text messages into formatted character speech or GM narration:
+
+- **Speaking as Your Character**  
+  `pc::Your character's message here`  
+  Displays a message as your currently active character, with their avatar if set.
+
+- **GM: Speaking as NPCs**  
+  `npc::NPC Name::Message content`  
+  Displays a message as the specified NPC, with their avatar if available.
+
+- **GM: Using Aliases**  
+  `npc::NPC Name::Alias::Message content`  
+  Lets GMs use an alias for the NPC in this specific message.
+
+- **GM: On-the-fly NPCs**  
+  Even if the NPC doesn't exist in the database, the bot creates a temporary character for the message.
+
+- **GM Narration**  
+  `gm::Your narration text here`  
+  Creates a purple-bordered embed with the GM's avatar for scene descriptions and narration.
+
+- **Character Avatars**  
+  Set your character's avatar with `/character setavatar [url]` to enhance the immersion.
+
+For more detailed help, use `/character narration`.
+
 ---
 
 ## Features Planned
 
 ### Top Priority
 
-- Optionally set automatic reminders when someone is mentioned
 - Manage channels so that certain commands can only be used in specific channels to prevent clutter
 - User can provide an OpenAI API key to gain access to commands that use AI (summarize recent posts, ask rules questions)
 - Inventory system to track equipment

@@ -60,15 +60,6 @@ CREATE TABLE IF NOT EXISTS last_message_times (
 """)
 
 cur.execute("""
-CREATE TABLE IF NOT EXISTS reminders (
-    guild_id TEXT NOT NULL,
-    user_id TEXT NOT NULL,
-    timestamp REAL NOT NULL,
-    PRIMARY KEY (guild_id, user_id)
-)
-""")
-
-cur.execute("""
 CREATE TABLE IF NOT EXISTS initiative (
     guild_id TEXT NOT NULL,
     channel_id TEXT NOT NULL,
@@ -116,6 +107,34 @@ CREATE TABLE IF NOT EXISTS scene_npcs (
     scene_id TEXT NOT NULL,
     npc_id TEXT NOT NULL,
     PRIMARY KEY (guild_id, scene_id, npc_id)
+)
+""")
+
+cur.execute("""
+CREATE TABLE IF NOT EXISTS reminders (
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    timestamp REAL NOT NULL,
+    PRIMARY KEY (guild_id, user_id)
+)
+""")
+
+# Table for server auto-reminder settings
+cur.execute("""
+CREATE TABLE IF NOT EXISTS auto_reminder_settings (
+    guild_id TEXT PRIMARY KEY,
+    enabled BOOLEAN NOT NULL DEFAULT 0,
+    delay_seconds INTEGER NOT NULL DEFAULT 86400
+)
+""")
+
+# Table for user-specific auto-reminder opt-outs
+cur.execute("""
+CREATE TABLE IF NOT EXISTS auto_reminder_optouts (
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    opted_out BOOLEAN NOT NULL DEFAULT 0,
+    PRIMARY KEY (guild_id, user_id)
 )
 """)
 

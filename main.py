@@ -62,8 +62,27 @@ async def on_guild_join(guild):
 
 @bot.event
 async def on_message(message: discord.Message):
-    if message.guild and not message.author.bot:
-        repo.set_last_message_time(message.guild.id, message.author.id, message.created_at.timestamp())
+    # Don't process commands here - we use the app_commands system
+    
+    # Ignore messages from the bot itself
+    if message.author == bot.user:
+        return
+        
+    # Update the last message time for the user
+    if message.guild:
+        repo.update_last_message_time(message.guild.id, message.author.id, message.created_at.timestamp())
+        
+        # Handle mentions for automatic reminders
+        if message.mentions:
+            reminder_cog = bot.get_cog("ReminderCommands")
+            if reminder_cog:
+                for user in message.mentions:
+                    # Skip if the mentioned user is the message author or a bot
+                    if not user.bot:
+                        await reminder_cog.handle_mention(message, user)
+    
+    # Process commands as usual - add this only if you're using the commands framework            
+    # await bot.process_commands(message)
 
     # Process narration
     if message.content.startswith("gm::") or message.content.startswith("pc::") or message.content.startswith("npc::"):
