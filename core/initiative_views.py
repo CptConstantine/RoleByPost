@@ -305,8 +305,14 @@ class GenericInitiativeView(BasePinnedInitiativeView):
             
         else:
             current_name = self.initiative.get_participant_name(self.initiative.current)
+
             content = f"🎲 **INITIATIVE TRACKING** 🎲\n\n🔔 It's now **{current_name}**'s turn! (Round {self.initiative.round_number})"
-            
+
+            current_participant = next((p for p in self.initiative.participants if p.id == self.initiative.current), None)
+            if current_participant and not current_participant.is_npc and current_participant.owner_id:
+                mention = f"<@{current_participant.owner_id}>, it's your turn!"
+                content += f"\n{mention}"
+
             # Add round information
             embed.add_field(name="Round", value=str(self.initiative.round_number), inline=True)
             embed.add_field(name="Current Turn", value=current_name, inline=True)
@@ -555,14 +561,21 @@ class PopcornInitiativeView(BasePinnedInitiativeView):
             remaining_names = [self.initiative.get_participant_name(pid) for pid in self.initiative.remaining_in_round]
             embed.add_field(name="Remaining", value=", ".join(remaining_names), inline=True)
         
+        current_participant = next((p for p in self.initiative.participants if p.id == self.initiative.current), None)
+        mention = ""
+        if current_participant and not current_participant.is_npc and current_participant.owner_id:
+            mention = f"<@{current_participant.owner_id}>, it's your turn!"
+
         # Different content based on the initiative state
         if self.initiative.is_round_end():
             next_name = self.initiative.get_participant_name(self.initiative.current)
             content = f"🎲 **POPCORN INITIATIVE** 🎲"
+            content += f"\n{mention}"
             embed.description = f"Current Turn: **{next_name}**\n\nEnd of the round\nUse the dropdown below to pick who goes next when your turn is complete."
         elif self.initiative.current:
             next_name = self.initiative.get_participant_name(self.initiative.current)
             content = f"🎲 **POPCORN INITIATIVE** 🎲"
+            content += f"\n{mention}"
             embed.description = f"Current Turn: **{next_name}**\n\nUse the dropdown below to pick who goes next when your turn is complete."
         else:
             content = "🎲 **POPCORN INITIATIVE** 🎲"

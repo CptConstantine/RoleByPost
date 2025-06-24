@@ -294,10 +294,6 @@ class ReminderCommands(commands.Cog):
         """Handle automatic reminders for user mentions"""
         guild_id = message.guild.id
         user_id = mentioned_user.id
-        
-        # Ignore mentions by bots
-        if message.author.bot:
-            return
             
         # Check if automatic reminders are enabled for this server
         settings = repo.get_auto_reminder_settings(guild_id)

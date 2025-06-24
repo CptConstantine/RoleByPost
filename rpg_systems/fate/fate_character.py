@@ -337,16 +337,12 @@ class FateSheetEditView(ui.View):
     @ui.button(label="Edit Skills", style=discord.ButtonStyle.secondary, row=2)
     async def edit_skills(self, interaction: discord.Interaction, button: ui.Button):
         character = get_character(interaction.guild.id, self.char_id)
-        skills = character.skills if character.skills else {}
-        skill_options = [SelectOption(label=k, value=k) for k in sorted(skills.keys())]
-
-        async def on_skill_selected(view, interaction2, skill):
-            current_value = skills.get(skill, 0)
-            await interaction2.response.send_modal(EditSkillValueModal(self.char_id, skill, current_value))
-
+        
+        # Create a view with buttons for different skill operations
+        view = SkillManagementView(character, self.editor_id, self.char_id)
         await interaction.response.send_message(
-            "Select a skill to edit:",
-            view=PaginatedSelectView(skill_options, on_skill_selected, interaction.user.id, prompt="Select a skill to edit:"),
+            "Choose how you want to manage skills:",
+            view=view,
             ephemeral=True
         )
 
@@ -731,4 +727,186 @@ class FateSelectSkillButton(ui.Button):
             "Select a skill for your roll:",
             view=PaginatedSelectView(skill_options, on_skill_selected, interaction.user.id, prompt="Select a skill:"),
             ephemeral=True
+        )
+
+class SkillManagementView(ui.View):
+    def __init__(self, character, editor_id, char_id):
+        super().__init__(timeout=120)
+        self.character = character
+        self.editor_id = editor_id
+        self.char_id = char_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.editor_id:
+            await interaction.response.send_message("You can't edit this character.", ephemeral=True)
+            return False
+        return True
+
+    @ui.button(label="Edit Existing Skill", style=discord.ButtonStyle.primary, row=0)
+    async def edit_existing_skill(self, interaction: discord.Interaction, button: ui.Button):
+        skills = self.character.skills if self.character.skills else {}
+        if not skills:
+            await interaction.response.edit_message(
+                content="This character doesn't have any skills yet. Add some first!",
+                view=None
+            )
+            return
+
+        skill_options = [SelectOption(label=k, value=k) for k in sorted(skills.keys())]
+
+        async def on_skill_selected(view, interaction2, skill):
+            current_value = skills.get(skill, 0)
+            await interaction2.response.send_modal(EditSkillValueModal(self.char_id, skill, current_value))
+
+        await interaction.response.edit_message(
+            content="Select a skill to edit:",
+            view=PaginatedSelectView(
+                skill_options, 
+                on_skill_selected, 
+                interaction.user.id, 
+                prompt="Select a skill to edit:"
+            )
+        )
+
+    @ui.button(label="Add New Skill", style=discord.ButtonStyle.success, row=0)
+    async def add_new_skill(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(AddSkillModal(self.char_id))
+
+    @ui.button(label="Remove Skill", style=discord.ButtonStyle.danger, row=0)
+    async def remove_skill(self, interaction: discord.Interaction, button: ui.Button):
+        skills = self.character.skills if self.character.skills else {}
+        if not skills:
+            await interaction.response.edit_message(
+                content="This character doesn't have any skills to remove.",
+                view=None
+            )
+            return
+
+        skill_options = [SelectOption(label=k, value=k) for k in sorted(skills.keys())]
+
+        async def on_skill_selected(view, interaction2, skill):
+            # Remove the selected skill
+            skills = self.character.skills
+            if skill in skills:
+                del skills[skill]
+                self.character.skills = skills
+                repo.set_character(interaction2.guild.id, self.character, system=SYSTEM)
+                embed = FateSheet().format_full_sheet(self.character)
+                view = FateSheetEditView(interaction2.user.id, self.char_id)
+                await interaction2.response.edit_message(
+                    content=f"✅ Removed skill: **{skill}**",
+                    embed=embed,
+                    view=view
+                )
+            else:
+                await interaction2.response.edit_message(
+                    content=f"❌ Skill not found: {skill}",
+                    view=None
+                )
+
+        await interaction.response.edit_message(
+            content="Select a skill to remove:",
+            view=PaginatedSelectView(
+                skill_options, 
+                on_skill_selected, 
+                interaction.user.id, 
+                prompt="Select a skill to remove:"
+            )
+        )
+
+    @ui.button(label="Bulk Edit Skills", style=discord.ButtonStyle.secondary, row=1)
+    async def bulk_edit_skills(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(BulkEditSkillsModal(self.char_id))
+
+    @ui.button(label="Cancel", style=discord.ButtonStyle.secondary, row=1)
+    async def cancel(self, interaction: discord.Interaction, button: ui.Button):
+        character = get_character(interaction.guild.id, self.char_id)
+        embed = FateSheet().format_full_sheet(character)
+        view = FateSheetEditView(interaction.user.id, self.char_id)
+        await interaction.response.edit_message(
+            content="Operation cancelled.",
+            embed=embed,
+            view=view
+        )
+
+class AddSkillModal(ui.Modal, title="Add New Skill"):
+    skill_name = ui.TextInput(label="Skill Name", required=True, max_length=50)
+    skill_value = ui.TextInput(label="Skill Value (-3 to 6)", required=True, default="0", max_length=2)
+
+    def __init__(self, char_id: str):
+        super().__init__()
+        self.char_id = char_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        character = get_character(interaction.guild.id, self.char_id)
+        
+        # Validate skill value
+        try:
+            value_int = int(self.skill_value.value.strip())
+            if value_int < -3 or value_int > 6:
+                await interaction.response.send_message("❌ Skill value must be between -3 and 6.", ephemeral=True)
+                return
+        except ValueError:
+            await interaction.response.send_message("❌ Please enter a valid integer for skill value.", ephemeral=True)
+            return
+        
+        # Add the new skill
+        skills = character.skills
+        skill_name = self.skill_name.value.strip()
+        
+        if not skill_name:
+            await interaction.response.send_message("❌ Skill name cannot be empty.", ephemeral=True)
+            return
+            
+        if skill_name in skills:
+            await interaction.response.send_message(f"❌ Skill '{skill_name}' already exists. Use edit instead.", ephemeral=True)
+            return
+            
+        skills[skill_name] = value_int
+        character.skills = skills
+        repo.set_character(interaction.guild.id, character, system=SYSTEM)
+        
+        embed = FateSheet().format_full_sheet(character)
+        view = FateSheetEditView(interaction.user.id, self.char_id)
+        await interaction.response.edit_message(
+            content=f"✅ Added new skill: **{skill_name}** (+{value_int if value_int >= 0 else value_int})",
+            embed=embed,
+            view=view
+        )
+
+class BulkEditSkillsModal(ui.Modal, title="Bulk Edit Skills"):
+    def __init__(self, char_id: str):
+        super().__init__()
+        self.char_id = char_id
+        
+        # Get current skills to show as default
+        character = get_character(None, char_id)  # We don't have guild_id here, but we have char_id
+        skills = character.skills if character and character.skills else {}
+        
+        self.skills_text = ui.TextInput(
+            label="Skills (format: Skill1:2,Skill2:1,Skill3:-1)",
+            style=discord.TextStyle.paragraph,
+            required=False,
+            default=", ".join(f"{k}:{v}" for k, v in skills.items()),
+            max_length=1000
+        )
+        self.add_item(self.skills_text)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        character = get_character(interaction.guild.id, self.char_id)
+        skills_dict = FateCharacter.parse_and_validate_skills(self.skills_text.value)
+        
+        if not skills_dict:
+            skills_dict = {}  # Allow clearing all skills
+
+        # Replace all skills with the new set
+        character.skills = skills_dict
+        repo.set_character(interaction.guild.id, character, system=SYSTEM)
+        
+        embed = FateSheet().format_full_sheet(character)
+        view = FateSheetEditView(interaction.user.id, self.char_id)
+        await interaction.response.edit_message(
+            content="✅ Skills updated!",
+            embed=embed,
+            view=view
         )
