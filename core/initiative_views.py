@@ -166,8 +166,9 @@ class GenericInitiativeView(BasePinnedInitiativeView):
             self.add_item(ui.Button(label="Set Order", style=discord.ButtonStyle.secondary, custom_id="set_initiative_order"))
             return
             
-        self.gm_ids = repo.get_gm_ids(guild_id)
-        self.allowed_ids = list(self.gm_ids) # Only GM can start initiative
+        # Store the guild so we can fetch members with the GM role later
+        self.guild = None
+        self.allowed_ids = []  # Will be populated in initialize_if_needed
         
         if not initiative.is_started:
             self.add_item(SetOrderButton(self))
@@ -189,10 +190,11 @@ class GenericInitiativeView(BasePinnedInitiativeView):
             if not success:
                 await interaction.response.send_message("❌ No active initiative in this channel.", ephemeral=True)
                 return False
-                
-            # Set up allowed users
-            self.gm_ids = repo.get_gm_ids(interaction.guild.id)
-            self.allowed_ids = list(self.gm_ids)
+            
+            # Set up allowed users - get GM IDs using the role
+            self.guild = interaction.guild
+            gm_ids = await repo.get_gm_ids(interaction.guild)
+            self.allowed_ids = list(gm_ids)
             
             if self.initiative.is_started:
                 current_participant = next((p for p in self.initiative.participants 
@@ -225,7 +227,8 @@ class GenericInitiativeView(BasePinnedInitiativeView):
             )
             
             # Check if the user is allowed to interact
-            is_gm = str(interaction.user.id) in repo.get_gm_ids(self.guild_id)
+            gm_ids = await repo.get_gm_ids(interaction.guild)
+            is_gm = str(interaction.user.id) in gm_ids
             is_current_participant = False
             
             if self.initiative.current:
@@ -257,9 +260,12 @@ class GenericInitiativeView(BasePinnedInitiativeView):
             
         # For the Set Order button, only GMs can use it
         component_id = interaction.data.get("custom_id", "")
-        if component_id == "set_initiative_order" and str(interaction.user.id) not in self.gm_ids:
-            await interaction.response.send_message("❌ Only GMs can set the initiative order.", ephemeral=True)
-            return False
+        if component_id == "set_initiative_order":
+            # Check if user has GM role
+            gm_ids = await repo.get_gm_ids(interaction.guild)
+            if str(interaction.user.id) not in gm_ids:
+                await interaction.response.send_message("❌ Only GMs can set the initiative order.", ephemeral=True)
+                return False
             
         # Normal interaction check for fully initialized view
         return str(interaction.user.id) in self.allowed_ids
@@ -428,9 +434,10 @@ class PopcornInitiativeView(BasePinnedInitiativeView):
             self.add_item(EmptyPersistentSelect(self, "first_picker", "Pick who goes first..."))
             self.add_item(EmptyPersistentSelect(self, "next_picker", "Pick who goes next..."))
             return
-            
-        self.gm_ids = repo.get_gm_ids(guild_id)
-        self.allowed_ids = list(self.gm_ids)  # GMs are always allowed
+        
+        # Store the guild so we can fetch members with the GM role later
+        self.guild = None
+        self.allowed_ids = []  # Will be populated in initialize_if_needed
         
         # If there's a current participant, find their owner_id 
         if initiative.current:
@@ -468,8 +475,9 @@ class PopcornInitiativeView(BasePinnedInitiativeView):
                 return False
                 
             # Set up allowed users
-            self.gm_ids = repo.get_gm_ids(interaction.guild.id)
-            self.allowed_ids = list(self.gm_ids)
+            self.guild = interaction.guild
+            gm_ids = await repo.get_gm_ids(interaction.guild)
+            self.allowed_ids = list(gm_ids)
             
             if self.initiative.current:
                 current_participant = next((p for p in self.initiative.participants 
@@ -502,7 +510,8 @@ class PopcornInitiativeView(BasePinnedInitiativeView):
             )
             
             # Check if the user is allowed to interact
-            is_gm = str(interaction.user.id) in self.gm_ids
+            gm_ids = await repo.get_gm_ids(interaction.guild)
+            is_gm = str(interaction.user.id) in gm_ids
             is_current_participant = False
             
             if self.initiative.current:
@@ -603,7 +612,8 @@ class SetOrderButton(ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         # Check if the user is a GM
-        if str(interaction.user.id) not in self.parent_view.gm_ids:
+        gm_ids = await repo.get_gm_ids(interaction.guild)
+        if str(interaction.user.id) not in gm_ids:
             await interaction.response.send_message("❌ Only GMs can set the initiative order.", ephemeral=True)
             return
             

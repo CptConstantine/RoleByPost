@@ -32,7 +32,7 @@ class ReminderCommands(commands.Cog):
         message: str = "Please remember to post your actions!",
         delay: str = "24h"
     ):
-        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only GMs can send reminders.", ephemeral=True)
             return
             
@@ -92,7 +92,7 @@ class ReminderCommands(commands.Cog):
         message: str = "This is a reminder!"
     ):
         # Check if the user has permission to use this command
-        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ You do not have permission to use this command.", ephemeral=True)
             return
         
@@ -131,7 +131,7 @@ class ReminderCommands(commands.Cog):
         enabled: bool = None, 
         delay: str = None
     ):
-        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only GMs can manage automatic reminders.", ephemeral=True)
             return
         
@@ -250,7 +250,7 @@ class ReminderCommands(commands.Cog):
             inline=False
         )
         
-        if repo.is_gm(interaction.guild.id, interaction.user.id):
+        if await repo.has_gm_permission(interaction.guild.id, interaction.user):
             embed.set_footer(text="As a GM, you can change these settings with /reminder setauto")
         else:
             embed.set_footer(text="You can opt out with /reminder auto_optout true")

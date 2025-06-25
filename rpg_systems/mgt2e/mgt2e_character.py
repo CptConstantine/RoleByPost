@@ -499,8 +499,7 @@ class MGT2ESheetEditView(ui.View):
     async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
         character = get_character(interaction.guild.id, self.char_id)
         # Only allow owner or GM
-        if (interaction.user.id != int(character.owner_id) and
-            not repo.is_gm(interaction.guild.id, interaction.user.id)):
+        if (interaction.user.id != int(character.owner_id) and not await repo.has_gm_permission(interaction.guild.id, interaction.user)):
             await interaction.response.send_message("❌ Only the owner or a GM can edit notes.", ephemeral=True)
             return
         notes = "\n".join(character.notes) if character and character.notes else ""

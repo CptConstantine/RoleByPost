@@ -4,17 +4,11 @@ conn = sqlite3.connect('data/bot.db')
 cur = conn.cursor()
 
 cur.execute("""
-CREATE TABLE IF NOT EXISTS gms (
-    guild_id TEXT NOT NULL,
-    user_id TEXT NOT NULL,
-    PRIMARY KEY (guild_id, user_id)
-)
-""")
-
-cur.execute("""
 CREATE TABLE IF NOT EXISTS server_settings (
     guild_id TEXT PRIMARY KEY,
-    system TEXT
+    system TEXT,
+    gm_role_id TEXT,
+    player_role_id TEXT
 )
 """)
 

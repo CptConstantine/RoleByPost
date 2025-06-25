@@ -1,7 +1,10 @@
+import logging
 import sqlite3
 import json
 import uuid
 import time
+
+import discord
 from core.models import BaseCharacter
 import core.factories as factories
 
@@ -13,29 +16,92 @@ def get_db():
     return sqlite3.connect(DB_FILE)
 
 
-def is_gm(guild_id, user_id):
+def set_gm_role(guild_id, role_id):
     with get_db() as conn:
-        cur = conn.execute("SELECT 1 FROM gms WHERE guild_id = ? AND user_id = ?", (str(guild_id), str(user_id)))
-        return cur.fetchone() is not None
-
-
-def set_gm(guild_id, user_id):
-    with get_db() as conn:
-        conn.execute("INSERT OR IGNORE INTO gms (guild_id, user_id) VALUES (?, ?)", (str(guild_id), str(user_id)))
+        conn.execute(
+            "INSERT OR IGNORE INTO server_settings (guild_id) VALUES (?)",
+            (str(guild_id),)
+        )
+        conn.execute(
+            "UPDATE server_settings SET gm_role_id = ? WHERE guild_id = ?",
+            (str(role_id), str(guild_id))
+        )
         conn.commit()
 
 
-def get_gm_ids(guild_id):
+def set_player_role(guild_id, role_id):
     with get_db() as conn:
-        cur = conn.execute("SELECT user_id FROM gms WHERE guild_id = ?", (str(guild_id),))
-        return [row[0] for row in cur.fetchall()]
+        conn.execute(
+            "INSERT OR IGNORE INTO server_settings (guild_id) VALUES (?)",
+            (str(guild_id),)
+        )
+        conn.execute(
+            "UPDATE server_settings SET player_role_id = ? WHERE guild_id = ?",
+            (str(role_id), str(guild_id))
+        )
+        conn.commit()
+
+
+def get_gm_role_id(guild_id):
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT gm_role_id FROM server_settings WHERE guild_id = ?",
+            (str(guild_id),)
+        )
+        row = cur.fetchone()
+        return row[0] if row and row[0] else None
+
+
+def get_player_role_id(guild_id):
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT player_role_id FROM server_settings WHERE guild_id = ?",
+            (str(guild_id),)
+        )
+        row = cur.fetchone()
+        return row[0] if row and row[0] else None
+
+
+async def has_gm_permission(guild_id, member):
+    if not member:
+        return False
+        
+    gm_role_id = get_gm_role_id(guild_id)
+    if not gm_role_id:
+        return False
+        
+    for role in member.roles:
+        if str(role.id) == str(gm_role_id):
+            return True
+            
+    return False
+
+
+async def has_player_permission(guild_id, member):
+    is_gm = await has_gm_permission(guild_id, member)
+    if is_gm:
+        return True
+        
+    player_role_id = get_player_role_id(guild_id)
+    if not player_role_id or not member:
+        return False
+        
+    for role in member.roles:
+        if str(role.id) == str(player_role_id):
+            return True
+            
+    return False
 
 
 def set_system(guild_id, system):
     with get_db() as conn:
         conn.execute(
-            "INSERT OR REPLACE INTO server_settings (guild_id, system) VALUES (?, ?)",
-            (str(guild_id), system)
+            "INSERT OR IGNORE INTO server_settings (guild_id) VALUES (?)",
+            (str(guild_id),)
+        )
+        conn.execute(
+            "UPDATE server_settings SET system = ? WHERE guild_id = ?",
+            (str(system), str(guild_id))
         )
         conn.commit()
 
@@ -185,30 +251,64 @@ def get_all_characters(guild_id, system=None):
             characters.append(CharacterClass.from_dict(character_dict))
     return characters
 
+async def get_gm_ids(guild: discord.Guild):
+    """Get IDs of all users with GM permissions based on the GM role"""
+    gm_ids = []
+    
+    # Get the GM role ID from server settings
+    gm_role_id = get_gm_role_id(guild.id)
+    if not gm_role_id:
+        return gm_ids
+        
+    # Get all members with the GM role
+    try:
+        # Try to get the role object
+        gm_role = discord.utils.get(guild.roles, id=int(gm_role_id))
+        
+        if gm_role:
+            # Get all members with this role
+            for member in guild.members:
+                if gm_role in member.roles:
+                    gm_ids.append(str(member.id))
+    except Exception as e:
+        logging.error(f"Error getting GM IDs from role: {e}")
+
+    return gm_ids
 
 def get_non_gm_active_characters(guild_id):
     """
-    Returns a list of active character objects for users who are not GMs in the given guild.
+    Get all active characters for a guild that are not owned by a GM.
     """
     with get_db() as conn:
-        # Get all GM user_ids for this guild
-        cur = conn.execute(
-            "SELECT user_id FROM gms WHERE guild_id = ?",
-            (str(guild_id),)
-        )
-        gm_ids = set(str(row[0]) for row in cur.fetchall())
+        cur = conn.execute("""
+            SELECT c.id, c.system, c.name, c.owner_id, c.entity_type, c.system_specific_data, c.notes, c.avatar_url
+            FROM characters c
+            JOIN active_characters ac ON c.id = ac.char_id
+            WHERE c.guild_id = ? AND ac.guild_id = ?
+        """, (str(guild_id), str(guild_id)))
+        rows = cur.fetchall()
 
-        # Get all active characters where user_id is not a GM
-        cur = conn.execute(
-            "SELECT user_id, char_id FROM active_characters WHERE guild_id = ?",
-            (str(guild_id),)
-        )
-        non_gm_active = [
-            (str(row[0]), row[1]) for row in cur.fetchall() if str(row[0]) not in gm_ids
-        ]
+        if not rows:
+            return []
 
-    # Return the character objects
-    return [get_character_by_id(guild_id, char_id) for user_id, char_id in non_gm_active if get_character_by_id(guild_id, char_id) is not None]
+        gm_ids = set(get_gm_ids(guild_id))
+        characters = []
+        for row in rows:
+            id, system, name, owner_id, entity_type, system_specific_data, notes, avatar_url = row
+            if str(owner_id) in gm_ids:
+                continue  # Skip GM-owned characters
+            
+            character = build_character(
+                id=id,
+                name=name,
+                owner_id=owner_id,
+                is_npc=entity_type == "npc",
+                notes=json.loads(notes) or [],
+                avatar_url=avatar_url
+            )
+            characters.append(character)
+
+        return characters
 
 
 def set_default_skills(guild_id, system, skills_dict):

@@ -62,7 +62,7 @@ class CharacterCommands(commands.Cog):
     @app_commands.describe(npc_name="The name of the new NPC")
     async def create_npc(self, interaction: discord.Interaction, npc_name: str):
         await interaction.response.defer(ephemeral=True)
-        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.followup.send("❌ Only GMs can create NPCs.", ephemeral=True)
             return
             
@@ -102,7 +102,7 @@ class CharacterCommands(commands.Cog):
                 await interaction.response.send_message("❌ Character not found.", ephemeral=True)
                 return
 
-        if character.is_npc and not repo.is_gm(interaction.guild.id, interaction.user.id):
+        if character.is_npc and not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only the GM can view NPCs.", ephemeral=True)
             return
         
@@ -126,7 +126,7 @@ class CharacterCommands(commands.Cog):
                 return
         else:
             character = repo.get_character(interaction.guild.id, char_name) if char_name else None
-            if character and character.is_npc and not repo.is_gm(interaction.guild.id, interaction.user.id):
+            if character and character.is_npc and not await repo.has_gm_permission(interaction.guild.id, interaction.user):
                 await interaction.followup.send("❌ Only the GM can export NPCs.", ephemeral=True)
                 return
             elif not character.is_npc:
@@ -142,7 +142,7 @@ class CharacterCommands(commands.Cog):
             await interaction.followup.send("❌ Character not found.", ephemeral=True)
             return
             
-        if character.is_npc and not repo.is_gm(interaction.guild.id, interaction.user.id):
+        if character.is_npc and not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.followup.send("❌ Only the GM can export NPCs.", ephemeral=True)
             return
             
@@ -198,7 +198,7 @@ class CharacterCommands(commands.Cog):
         character = CharacterClass(character_dict)
         character.apply_defaults(is_npc=is_npc, guild_id=interaction.guild.id)
         
-        if character.is_npc and not repo.is_gm(interaction.guild.id, interaction.user.id):
+        if character.is_npc and not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.followup.send("❌ Only GMs can import NPCs.", ephemeral=True)
             return
             
@@ -212,7 +212,7 @@ class CharacterCommands(commands.Cog):
     )
     @app_commands.autocomplete(char_name=pc_name_gm_autocomplete)
     async def transfer(self, interaction: discord.Interaction, char_name: str, new_owner: discord.Member):
-        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only GMs can transfer characters.", ephemeral=True)
             return
             

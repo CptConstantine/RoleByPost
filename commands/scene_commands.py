@@ -47,7 +47,7 @@ class SceneCommands(commands.Cog):
     @scene_group.command(name="create", description="Create a new scene")
     @app_commands.describe(name="Name for the new scene")
     async def scene_create(self, interaction: discord.Interaction, name: str):
-        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only GMs can create scenes.", ephemeral=True)
             return
             
@@ -68,7 +68,7 @@ class SceneCommands(commands.Cog):
     @app_commands.describe(scene_name="Name of the scene to switch to")
     @app_commands.autocomplete(scene_name=scene_name_autocomplete)
     async def scene_switch(self, interaction: discord.Interaction, scene_name: str):
-        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only GMs can switch scenes.", ephemeral=True)
             return
             
@@ -83,7 +83,7 @@ class SceneCommands(commands.Cog):
     @scene_group.command(name="list", description="List all scenes")
     async def scene_list(self, interaction: discord.Interaction):
         scenes = repo.get_scenes(interaction.guild.id)
-        is_gm = repo.is_gm(interaction.guild.id, interaction.user.id)
+        is_gm = await repo.has_gm_permission(interaction.guild.id, interaction.user)
         
         if not scenes:
             message = "No scenes have been created yet."
@@ -113,7 +113,7 @@ class SceneCommands(commands.Cog):
     @app_commands.describe(scene_name="Name of the scene to delete")
     @app_commands.autocomplete(scene_name=scene_name_autocomplete)
     async def scene_delete(self, interaction: discord.Interaction, scene_name: str):
-        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only GMs can delete scenes.", ephemeral=True)
             return
             
@@ -137,7 +137,7 @@ class SceneCommands(commands.Cog):
     )
     @app_commands.autocomplete(current_name=scene_name_autocomplete)
     async def scene_rename(self, interaction: discord.Interaction, current_name: str, new_name: str):
-        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only GMs can rename scenes.", ephemeral=True)
             return
             
@@ -166,7 +166,7 @@ class SceneCommands(commands.Cog):
     @app_commands.describe(npc_name="The name of the NPC to add to the scene")
     @app_commands.autocomplete(npc_name=npc_name_autocomplete)
     async def scene_add(self, interaction: discord.Interaction, npc_name: str):
-        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only GMs can manage the scene.", ephemeral=True)
             return
             
@@ -195,7 +195,7 @@ class SceneCommands(commands.Cog):
     @app_commands.describe(npc_name="The name of the NPC to remove from the scene")
     @app_commands.autocomplete(npc_name=npcs_in_scene_autocomplete)
     async def scene_remove(self, interaction: discord.Interaction, npc_name: str):
-        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only GMs can manage the scene.", ephemeral=True)
             return
             
@@ -223,7 +223,7 @@ class SceneCommands(commands.Cog):
 
     @scene_group.command(name="clear", description="Clear all NPCs from the current scene.")
     async def scene_clear(self, interaction: discord.Interaction):
-        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only GMs can manage the scene.", ephemeral=True)
             return
             
@@ -243,7 +243,7 @@ class SceneCommands(commands.Cog):
         active_scene = repo.get_active_scene(interaction.guild.id)
         if not active_scene:
             # For GMs, suggest creating a scene. For players, just inform them there's no scene.
-            if repo.is_gm(interaction.guild.id, interaction.user.id):
+            if await repo.has_gm_permission(interaction.guild.id, interaction.user):
                 await interaction.response.send_message(
                     "❌ No active scene. Create one with `/scene create` first.", 
                     ephemeral=True
@@ -255,7 +255,7 @@ class SceneCommands(commands.Cog):
         system = repo.get_system(interaction.guild.id)
         sheet = factories.get_specific_sheet(system)
         npc_ids = repo.get_scene_npc_ids(interaction.guild.id)
-        is_gm = repo.is_gm(interaction.guild.id, interaction.user.id)
+        is_gm = await repo.has_gm_permission(interaction.guild.id, interaction.user)
         
         lines = []
         for npc_id in npc_ids:

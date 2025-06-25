@@ -16,7 +16,7 @@ async def process_narration(message):
     # Check for GM narration first
     if content.startswith("gm::"):
         # Make sure user is a GM
-        if not repo.is_gm(guild_id, user_id):
+        if not await repo.has_gm_permission(guild_id, message.author):
             await message.reply("❌ Only GMs can use GM narration.", delete_after=10)
             try:
                 await message.delete()
@@ -46,7 +46,7 @@ async def process_narration(message):
         
     elif content.startswith("npc::"):
         # Make sure user is a GM
-        if not repo.is_gm(guild_id, user_id):
+        if not await repo.has_gm_permission(guild_id, message.author):
             await message.reply("❌ Only GMs can speak as NPCs.", delete_after=10)
             try:
                 await message.delete()

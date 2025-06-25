@@ -39,37 +39,35 @@ class SetupCommands(commands.Cog):
 
     @setup_group.command(
         name="gmrole",
-        description="Set all members of a Discord role as GMs for the server. You must be an Admin."
+        description="Set a Discord role as the GM role for the server. You must be an Admin."
     )
-    @app_commands.describe(role="The Discord role whose members will be set as GMs")
+    @app_commands.describe(role="The Discord role to set as the GM role")
     async def setup_gmrole(self, interaction: discord.Interaction, role: discord.Role):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Only admins can set GMs.", ephemeral=True)
+            await interaction.response.send_message("❌ Only admins can set the GM role.", ephemeral=True)
             return
-        count = 0
-        for member in role.members:
-            repo.set_gm(interaction.guild.id, member.id)
-            count += 1
+        
+        repo.set_gm_role(interaction.guild.id, role.id)
+        
         await interaction.response.send_message(
-            f"✅ Set {count} members of role `{role.name}` as GMs.",
+            f"✅ Set role `{role.name}` as the GM role. Members with this role now have GM permissions.",
             ephemeral=True
         )
 
     @setup_group.command(
         name="playerrole",
-        description="Set all members of a Discord role as players for the server. You must be an Admin."
+        description="Set a Discord role as the player role for the server. You must be an Admin."
     )
-    @app_commands.describe(role="The Discord role whose members will be set as players")
+    @app_commands.describe(role="The Discord role to set as the player role")
     async def setup_playerrole(self, interaction: discord.Interaction, role: discord.Role):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Only admins can set players.", ephemeral=True)
+            await interaction.response.send_message("❌ Only admins can set the player role.", ephemeral=True)
             return
-        count = 0
-        for member in role.members:
-            repo.set_player(interaction.guild.id, member.id)
-            count += 1
+        
+        repo.set_player_role(interaction.guild.id, role.id)
+        
         await interaction.response.send_message(
-            f"✅ Set {count} members of role `{role.name}` as players.",
+            f"✅ Set role `{role.name}` as the player role. Members with this role now have player permissions.",
             ephemeral=True
         )
 
@@ -90,7 +88,7 @@ class SetupCommands(commands.Cog):
     @setup_group.command(name="defaultskillsfile", description="Set default skills for this server's system with a .txt file (one skill per line).")
     @app_commands.describe(file="A .txt file with skills, one per line or Skill:Value per line")
     async def setup_defaultskillsfile(self, interaction: discord.Interaction, file: discord.Attachment):
-        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only GMs can set default skills.", ephemeral=True)
             return
         if not file.filename.endswith('.txt'):
@@ -133,7 +131,7 @@ class SetupCommands(commands.Cog):
     @setup_group.command(name="defaultskills", description="Set default skills for this server's system via text.")
     @app_commands.describe(skills="Skill list, e.g. Admin:0, Gun Combat:1, Pilot:2")
     async def setup_defaultskills(self, interaction: discord.Interaction, skills: str):
-        if not repo.is_gm(interaction.guild.id, interaction.user.id):
+        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only GMs can set default skills.", ephemeral=True)
             return
         system = repo.get_system(interaction.guild.id)
