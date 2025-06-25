@@ -19,16 +19,16 @@ CREATE TABLE IF NOT EXISTS server_settings (
 """)
 
 cur.execute("""
-CREATE TABLE IF NOT EXISTS characters (
+CREATE TABLE characters (
     id TEXT PRIMARY KEY,
     guild_id TEXT NOT NULL,
     system TEXT,
     name TEXT,
     owner_id TEXT,
-    is_npc BOOLEAN,
+    entity_type TEXT NOT NULL,
     system_specific_data TEXT,
     notes TEXT DEFAULT '[]',
-    avatar_url TEXT DEFAULT '',
+    avatar_url TEXT DEFAULT ''
 )
 """)
 
@@ -137,6 +137,21 @@ CREATE TABLE IF NOT EXISTS auto_reminder_optouts (
     PRIMARY KEY (guild_id, user_id)
 )
 """)
+
+# Index for characters table - fast lookup by guild_id and name
+cur.execute("CREATE INDEX IF NOT EXISTS idx_character_guild_name ON characters(guild_id, name)")
+
+# Index for characters table - fast lookup by guild_id and owner_id
+cur.execute("CREATE INDEX IF NOT EXISTS idx_character_guild_owner ON characters(guild_id, owner_id)")
+
+# Index for scene lookup
+cur.execute("CREATE INDEX IF NOT EXISTS idx_scenes_guild_active ON scenes(guild_id, is_active)")
+
+# Index for fast reminders lookup
+cur.execute("CREATE INDEX IF NOT EXISTS idx_reminders_timestamp ON reminders(timestamp)")
+
+# Index for initiative lookup
+cur.execute("CREATE INDEX IF NOT EXISTS idx_initiative_active ON initiative(guild_id, is_active)")
 
 conn.commit()
 conn.close()

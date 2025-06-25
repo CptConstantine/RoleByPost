@@ -125,8 +125,44 @@ class RollModifiers(ABC):
 
     def __repr__(self):
         return f"RollModifiers(modifiers={self.modifiers})"
+    
+class BaseEntity(BaseRpgObj):
+    """
+    Abstract base class for a "thing".
+    """
+    def __init__(self, data: Dict[str, Any]):
+        self.data = data
 
-class BaseCharacter(BaseRpgObj):
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "BaseRpgObj":
+        """Deserialize an entity from a dict."""
+        return cls(data)
+
+    @property
+    def entity_type(self) -> str:
+        return self.data.get("entity_type")
+
+    @entity_type.setter
+    def entity_type(self, value: str):
+        self.data["entity_type"] = value
+
+    @property
+    def name(self) -> str:
+        return self.data.get("name")
+
+    @name.setter
+    def name(self, value: str):
+        self.data["name"] = value
+    
+    @property
+    def avatar_url(self):
+        return self.data.get("avatar_url")
+    
+    @avatar_url.setter
+    def avatar_url(self, url):
+        self.data["avatar_url"] = url
+
+class BaseCharacter(BaseEntity):
     """
     Abstract base class for a character (PC or NPC).
     System-specific character classes should inherit from this and implement all methods.
@@ -142,28 +178,12 @@ class BaseCharacter(BaseRpgObj):
             raise NotImplementedError("SYSTEM_SPECIFIC_NPC must be defined in the subclass.")
 
     @property
-    def name(self) -> str:
-        return self.data.get("name")
-
-    @name.setter
-    def name(self, value: str):
-        self.data["name"] = value
-
-    @property
     def is_npc(self) -> bool:
-        return self.data.get("is_npc", False)
+        return self.data.get("entity_type") == "npc"
 
     @is_npc.setter
     def is_npc(self, value: bool):
-        self.data["is_npc"] = value
-    
-    @property
-    def avatar_url(self):
-        return self.data.get("avatar_url")
-    
-    @avatar_url.setter
-    def avatar_url(self, url):
-        self.data["avatar_url"] = url
+        self.data["entity_type"] = "npc" if value else "pc"
 
     @staticmethod
     def create_base_character(id, name, owner_id, is_npc=False, notes=None, avatar_url=None, **additional_fields):
@@ -186,7 +206,7 @@ class BaseCharacter(BaseRpgObj):
             "id": str(id),
             "name": name,
             "owner_id": str(owner_id),
-            "is_npc": bool(is_npc),
+            "entity_type": "npc" if is_npc else "pc",
             "notes": notes or [],
             "avatar_url": avatar_url
         }

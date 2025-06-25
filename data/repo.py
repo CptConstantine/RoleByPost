@@ -74,7 +74,7 @@ def set_character(guild_id, character: BaseCharacter, system=None):
     with get_db() as conn:
         conn.execute("""
             INSERT OR REPLACE INTO characters
-            (id, guild_id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url)
+            (id, guild_id, system, name, owner_id, entity_type, system_specific_data, notes, avatar_url)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             str(character.id),
@@ -82,7 +82,7 @@ def set_character(guild_id, character: BaseCharacter, system=None):
             system,
             character.name,
             str(character.owner_id),
-            bool(character.is_npc),
+            character.entity_type,
             json.dumps(system_specific_data),
             json.dumps(notes),
             character.avatar_url
@@ -95,13 +95,13 @@ def get_character(guild_id, char_name):
     Load a character from the database and return an instance of the system-specific Character class.
     """
     with get_db() as conn:
-        cur = conn.execute("SELECT id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url FROM characters WHERE guild_id = ? AND name = ?", (str(guild_id), str(char_name)))
+        cur = conn.execute("SELECT id, system, name, owner_id, entity_type, system_specific_data, notes, avatar_url FROM characters WHERE guild_id = ? AND name = ?", (str(guild_id), str(char_name)))
         row = cur.fetchone()
         if not row:
             return None
-        id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url = row
+        id, system, name, owner_id, entity_type, system_specific_data, notes, avatar_url = row
 
-        character = build_character(id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url)
+        character = build_character(id, system, name, owner_id, entity_type == "npc", system_specific_data, notes, avatar_url)
         character
         return character
 
@@ -110,13 +110,13 @@ def get_character_by_id(guild_id, char_id):
     Load a character from the database and return an instance of the system-specific Character class.
     """
     with get_db() as conn:
-        cur = conn.execute("SELECT id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url FROM characters WHERE guild_id = ? AND id = ?", (str(guild_id), str(char_id)))
+        cur = conn.execute("SELECT id, system, name, owner_id, entity_type, system_specific_data, notes, avatar_url FROM characters WHERE guild_id = ? AND id = ?", (str(guild_id), str(char_id)))
         row = cur.fetchone()
         if not row:
             return None
-        id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url = row
+        id, system, name, owner_id, entity_type, system_specific_data, notes, avatar_url = row
 
-        character = build_character(id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url)
+        character = build_character(id, system, name, owner_id, entity_type == "npc", system_specific_data, notes, avatar_url)
         return character
 
 def build_character(id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url):
@@ -150,12 +150,12 @@ def get_all_characters(guild_id, system=None):
     with get_db() as conn:
         if system:
             cur = conn.execute(
-                "SELECT id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url FROM characters WHERE guild_id = ? AND system = ?",
+                "SELECT id, system, name, owner_id, entity_type, system_specific_data, notes, avatar_url FROM characters WHERE guild_id = ? AND system = ?",
                 (str(guild_id), system)
             )
         else:
             cur = conn.execute(
-                "SELECT id, system, name, owner_id, is_npc, system_specific_data, notes, avatar_url FROM characters WHERE guild_id = ?",
+                "SELECT id, system, name, owner_id, entity_type, system_specific_data, notes, avatar_url FROM characters WHERE guild_id = ?",
                 (str(guild_id),)
             )
         rows = cur.fetchall()
@@ -163,9 +163,9 @@ def get_all_characters(guild_id, system=None):
         if not rows:
             return []
         for row in rows:
-            id, system_val, name, owner_id, is_npc, system_specific_data, notes, avatar_url = row
+            id, system_val, name, owner_id, entity_type, system_specific_data, notes, avatar_url = row
             CharacterClass = factories.get_specific_character(system_val)
-            system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC if is_npc else CharacterClass.SYSTEM_SPECIFIC_CHARACTER
+            system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC if entity_type == "npc" else CharacterClass.SYSTEM_SPECIFIC_CHARACTER
             system_specific = json.loads(system_specific_data)
             
             # Use the helper method
@@ -173,7 +173,7 @@ def get_all_characters(guild_id, system=None):
                 id=id,
                 name=name,
                 owner_id=owner_id,
-                is_npc=is_npc,
+                is_npc=entity_type == "npc",
                 notes=json.loads(notes) or [],
                 avatar_url=avatar_url
             )
