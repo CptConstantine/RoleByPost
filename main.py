@@ -5,7 +5,7 @@ import discord
 from discord.ext import commands
 from commands.narration import process_narration
 from data import repo
-from commands import character_commands, initiative_commands, reminder_commands, roll_commands, scene_commands, setup_commands
+from commands import character_commands, initiative_commands, reminder_commands, roll_commands, scene_commands, setup_commands, recap_commands
 
 dotenv.load_dotenv()
 
@@ -25,6 +25,7 @@ async def setup_hook():
     await initiative_commands.setup_initiative_commands(bot)
     await roll_commands.setup_roll_commands(bot)
     await reminder_commands.setup_reminder_commands(bot)
+    await recap_commands.setup_recap_commands(bot)
     
     # Register persistent views
     from core.initiative_views import GenericInitiativeView, PopcornInitiativeView

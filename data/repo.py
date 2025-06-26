@@ -773,3 +773,134 @@ def update_last_message_time(guild_id, user_id, timestamp):
             (str(guild_id), str(user_id), timestamp)
         )
         conn.commit()
+
+def set_openai_api_key(guild_id, api_key):
+    """Store the OpenAI API key for a guild"""
+    with get_db() as conn:
+        # Make sure server_settings entry exists
+        conn.execute(
+            "INSERT OR IGNORE INTO server_settings (guild_id) VALUES (?)",
+            (str(guild_id),)
+        )
+        
+        # Update the OpenAI API key
+        conn.execute(
+            "UPDATE server_settings SET openai_api_key = ? WHERE guild_id = ?",
+            (api_key, str(guild_id))
+        )
+        conn.commit()
+
+def get_openai_api_key(guild_id):
+    """Get the OpenAI API key for a guild"""
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT openai_api_key FROM server_settings WHERE guild_id = ?",
+            (str(guild_id),)
+        )
+        row = cur.fetchone()
+        return row[0] if row and row[0] else None
+
+def set_auto_recap(guild_id, enabled, channel_id, days_interval, days_to_include):
+    """Configure automatic recaps for a guild"""
+    with get_db() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO auto_recaps 
+            (guild_id, enabled, channel_id, days_interval, days_to_include, last_recap_time) 
+            VALUES (?, ?, ?, ?, ?, COALESCE((SELECT last_recap_time FROM auto_recaps WHERE guild_id = ?), ?))
+            """,
+            (str(guild_id), int(enabled), str(channel_id), days_interval, days_to_include, str(guild_id), time.time())
+        )
+        conn.commit()
+
+def get_auto_recap_settings(guild_id):
+    """Get automatic recap settings for a guild"""
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT enabled, channel_id, days_interval, days_to_include, last_recap_time FROM auto_recaps WHERE guild_id = ?",
+            (str(guild_id),)
+        )
+        row = cur.fetchone()
+        if row:
+            return {
+                "enabled": bool(row[0]),
+                "channel_id": row[1],
+                "days_interval": row[2],
+                "days_to_include": row[3],
+                "last_recap_time": row[4]
+            }
+        else:
+            # Default settings
+            return {
+                "enabled": False,
+                "channel_id": None,
+                "days_interval": 7,
+                "days_to_include": 7,
+                "last_recap_time": None
+            }
+
+def get_all_auto_recap_guilds():
+    """Get all guild IDs with auto recap enabled"""
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT guild_id FROM auto_recaps WHERE enabled = 1"
+        )
+        return [row[0] for row in cur.fetchall()]
+
+def get_last_recap_time(guild_id):
+    """Get the timestamp of the last automatic recap"""
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT last_recap_time FROM auto_recaps WHERE guild_id = ?",
+            (str(guild_id),)
+        )
+        row = cur.fetchone()
+        return row[0] if row and row[0] else None
+
+def update_last_recap_time(guild_id, timestamp):
+    """Update the timestamp of the last automatic recap"""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE auto_recaps SET last_recap_time = ? WHERE guild_id = ?",
+            (timestamp, str(guild_id))
+        )
+        conn.commit()
+
+def update_auto_recap_pause_state(guild_id, paused):
+    """Update the pause state for automatic recaps"""
+    with get_db() as conn:
+        # Update the pause state
+        conn.execute(
+            "UPDATE auto_recaps SET paused = ? WHERE guild_id = ?",
+            (int(paused), str(guild_id))
+        )
+        conn.commit()
+
+def get_auto_recap_settings(guild_id):
+    """Get automatic recap settings for a guild"""
+    with get_db() as conn:
+        # Get settings with paused state
+        cur = conn.execute(
+            "SELECT enabled, channel_id, days_interval, days_to_include, last_recap_time, paused FROM auto_recaps WHERE guild_id = ?",
+            (str(guild_id),)
+        )
+        row = cur.fetchone()
+        if row:
+            return {
+                "enabled": bool(row[0]),
+                "channel_id": row[1],
+                "days_interval": row[2],
+                "days_to_include": row[3],
+                "last_recap_time": row[4],
+                "paused": bool(row[5]) if len(row) > 5 else False
+            }
+        else:
+            # Default settings
+            return {
+                "enabled": False,
+                "channel_id": None,
+                "days_interval": 7,
+                "days_to_include": 7,
+                "last_recap_time": None,
+                "paused": False
+            }
