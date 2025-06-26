@@ -21,6 +21,298 @@ class RecapCommands(commands.Cog):
         # Add periodic cleanup task (runs once a day)
         bot.loop.create_task(self._periodic_cleanup())
     
+    recap_group = app_commands.Group(name="recap", description="Commands for AI story recaps")
+    
+    @recap_group.command(
+        name="generate",
+        description="Generate a summary of recent game events"
+    )
+    @app_commands.describe(
+        days="Number of days to include in the recap (default: 7)",
+        private="Whether to show the recap only to you (default: False)"
+    )
+    async def recap_generate(
+        self, 
+        interaction: discord.Interaction, 
+        days: int = 7,
+        private: bool = False
+    ):
+        # Check if API key is configured
+        api_key = repo.get_openai_api_key(interaction.guild.id)
+        if not api_key:
+            await interaction.response.send_message("❌ No API key has been set. A GM must set one with `/recap setkey`.", ephemeral=True)
+            return
+            
+        await interaction.response.defer(ephemeral=private)
+        
+        # Gather messages
+        messages = await self._gather_story_messages(interaction.channel, days)
+        if not messages:
+            await interaction.followup.send(f"❌ No story content found in the last {days} days.", ephemeral=private)
+            return
+            
+        try:
+            # Generate the recap
+            summary = await self._generate_summary(messages, api_key)
+            
+            # Create embed
+            embed = discord.Embed(
+                title=f"📜 Story Recap - Past {days} Days",
+                description=summary,
+                color=discord.Color.blue()
+            )
+            embed.set_footer(text=f"Generated {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}")
+            
+            await interaction.followup.send(embed=embed, ephemeral=private)
+        except Exception as e:
+            await interaction.followup.send(f"❌ Error generating recap: {str(e)}", ephemeral=True)
+    
+    @recap_group.command(
+        name="setauto",
+        description="GM: Set up automatic story recaps"
+    )
+    @app_commands.describe(
+        enabled="Whether automatic recaps are enabled",
+        channel="Channel to post recaps in (defaults to current channel)",
+        days_interval="How often to post recaps (in days, default: 7)",
+        days_to_include="How many days of history to include (default: 7)"
+    )
+    async def recap_setauto(
+        self,
+        interaction: discord.Interaction,
+        enabled: bool = None,
+        channel: discord.TextChannel = None,
+        days_interval: int = 7,
+        days_to_include: int = 7
+    ):
+        # Check if user has GM permissions
+        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+            await interaction.response.send_message("❌ Only GMs can configure automatic recaps.", ephemeral=True)
+            return
+        
+        # Check if API key is configured
+        api_key = repo.get_openai_api_key(interaction.guild.id)
+        if not api_key and enabled:
+            await interaction.response.send_message("❌ No API key has been set. Please set one with `/recap setkey` first.", ephemeral=True)
+            return
+            
+        # If channel is not specified, use current channel
+        if channel is None:
+            channel = interaction.channel
+            
+        # Get current settings
+        current_settings = repo.get_auto_recap_settings(interaction.guild.id)
+        
+        # Update settings if provided
+        if enabled is not None:
+            # Save to DB
+            repo.set_auto_recap(
+                interaction.guild.id,
+                enabled,
+                channel.id if enabled else current_settings.get("channel_id"),
+                days_interval,
+                days_to_include
+            )
+            
+            # If enabling, schedule the task. If disabling, cancel any existing task
+            if enabled:
+                # Schedule the task
+                if interaction.guild.id in self.recap_tasks:
+                    self.recap_tasks[interaction.guild.id].cancel()
+                self._schedule_guild_recap(interaction.guild.id)
+                await interaction.response.send_message(
+                    f"✅ Automatic recaps enabled. A recap will be posted to {channel.mention} every {days_interval} days, including {days_to_include} days of history.",
+                    ephemeral=True
+                )
+            else:
+                # Cancel the task if it exists
+                if interaction.guild.id in self.recap_tasks:
+                    self.recap_tasks[interaction.guild.id].cancel()
+                    del self.recap_tasks[interaction.guild.id]
+                await interaction.response.send_message("✅ Automatic recaps disabled.", ephemeral=True)
+            return
+            
+        # If no parameters were provided, show current settings
+        if current_settings and current_settings.get("enabled", False):
+            channel_id = current_settings.get("channel_id")
+            channel_mention = f"<#{channel_id}>" if channel_id else "default channel"
+            interval = current_settings.get("days_interval", 7)
+            days_count = current_settings.get("days_to_include", 7)
+            
+            # Calculate next recap time
+            last_recap = current_settings.get("last_recap_time", 0)
+            if last_recap:
+                next_recap = last_recap + (interval * 86400)
+                next_recap_str = f"<t:{int(next_recap)}:R>"
+            else:
+                next_recap_str = "soon"
+            
+            await interaction.response.send_message(
+                f"✅ Automatic recaps are enabled.\n"
+                f"• Posting to: {channel_mention}\n"
+                f"• Frequency: Every {interval} days\n"
+                f"• Including: {days_count} days of history\n"
+                f"• Next recap: {next_recap_str}",
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message("❌ Automatic recaps are currently disabled.", ephemeral=True)
+
+    @recap_group.command(
+        name="setkey",
+        description="GM: Set the OpenAI API key used for generating recaps"
+    )
+    @app_commands.describe(
+        api_key="Your OpenAI API key (will be stored securely)"
+    )
+    async def recap_setkey(
+        self,
+        interaction: discord.Interaction,
+        api_key: str
+    ):
+        # Check if user has GM permissions
+        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+            await interaction.response.send_message("❌ Only GMs can set the API key.", ephemeral=True)
+            return
+        
+        # Simple validation - just check if it starts with the usual pattern
+        if not api_key.startswith(("sk-", "org-")):
+            await interaction.response.send_message("❌ The API key format doesn't look right. It should start with 'sk-'.", ephemeral=True)
+            return
+            
+        # Store the API key
+        repo.set_openai_api_key(interaction.guild.id, api_key)
+        
+        await interaction.response.send_message("✅ API key set successfully. You can now use recap commands.", ephemeral=True)
+    
+    @recap_group.command(
+        name="autonow",
+        description="GM: Force an automatic recap to be generated now"
+    )
+    async def auto_recap_now(self, interaction: discord.Interaction):
+        # Check if user has GM permissions
+        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+            await interaction.response.send_message("❌ Only GMs can force recaps.", ephemeral=True)
+            return
+            
+        # Check if auto recaps are enabled
+        settings = repo.get_auto_recap_settings(interaction.guild.id)
+        if not settings or not settings.get("enabled", False):
+            await interaction.response.send_message("❌ Automatic recaps are not enabled for this server.", ephemeral=True)
+            return
+        
+        # Check if API key is configured
+        api_key = repo.get_openai_api_key(interaction.guild.id)
+        if not api_key:
+            await interaction.response.send_message("❌ No API key has been set. Please set one with `/recap setkey` first.", ephemeral=True)
+            return
+            
+        await interaction.response.send_message("Generating automatic recap now...", ephemeral=True)
+        
+        # Cancel existing task if it exists
+        guild_id = str(interaction.guild.id)
+        if guild_id in self.recap_tasks:
+            self.recap_tasks[guild_id].cancel()
+            del self.recap_tasks[guild_id]
+            
+        # Create a new task to run immediately
+        task = self.bot.loop.create_task(
+            self._post_scheduled_recap(
+                guild_id,
+                settings.get("channel_id"),
+                settings.get("days_to_include", 7),
+                0  # Run immediately
+            )
+        )
+        self.recap_tasks[guild_id] = task
+    
+    @recap_group.command(
+        name="autostatus",
+        description="Check the status of automatic story recaps for this server"
+    )
+    async def recap_autostatus(self, interaction: discord.Interaction):
+        """Show the current automatic recap settings for this server"""
+        settings = repo.get_auto_recap_settings(interaction.guild.id)
+        api_key_set = repo.get_openai_api_key(interaction.guild.id) is not None
+        
+        # Create embed
+        embed = discord.Embed(
+            title="📜 Automatic Story Recap Settings",
+            color=discord.Color.blue()
+        )
+        
+        # Main settings section
+        enabled = settings.get("enabled", False)
+        paused = settings.get("paused", False)
+        
+        # Format the interval
+        days_interval = settings.get("days_interval", 7)
+        days_to_include = settings.get("days_to_include", 7)
+        
+        # Calculate next recap time if enabled
+        next_recap_str = "Not scheduled"
+        if enabled and not paused:
+            last_recap_time = settings.get("last_recap_time", 0)
+            if last_recap_time:
+                next_recap_time = last_recap_time + (days_interval * 86400)
+                next_recap_str = f"<t:{int(next_recap_time)}:R>"
+            else:
+                next_recap_str = "Soon"
+        
+        # Status section
+        status_value = []
+        if not api_key_set:
+            status_value.append("⚠️ **API Key:** Not set (required for recaps)")
+        else:
+            status_value.append("✅ **API Key:** Set")
+        
+        status_value.append(f"**Enabled:** {'✅' if enabled else '❌'}")
+        if enabled and paused:
+            status_value.append("⏸️ **Status:** Paused due to inactivity")
+        
+        embed.add_field(
+            name="Status",
+            value="\n".join(status_value),
+            inline=False
+        )
+        
+        # Configuration details
+        if enabled or api_key_set:
+            config_value = []
+            
+            # Channel info
+            channel_id = settings.get("channel_id")
+            if channel_id:
+                channel_mention = f"<#{channel_id}>"
+                config_value.append(f"**Channel:** {channel_mention}")
+            else:
+                config_value.append("**Channel:** Not set")
+            
+            # Schedule info
+            config_value.append(f"**Frequency:** Every {days_interval} days")
+            config_value.append(f"**History:** {days_to_include} days of messages")
+            config_value.append(f"**Next Recap:** {next_recap_str}")
+            
+            # Activity check info
+            activity_check = settings.get("check_activity", True)
+            config_value.append(f"**Activity Checks:** {'✅ Enabled' if activity_check else '❌ Disabled'}")
+            
+            embed.add_field(
+                name="Configuration",
+                value="\n".join(config_value),
+                inline=False
+            )
+        
+        # Add footer with commands based on user permissions
+        if await repo.has_gm_permission(interaction.guild.id, interaction.user):
+            footer_text = "GM Commands: /recap setauto, /recap setkey, /recap autonow"
+        else:
+            footer_text = "Only GMs can modify automatic recap settings"
+            
+        embed.set_footer(text=footer_text)
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     async def _startup_recovery(self):
         """Recover and reschedule all automatic recaps when the bot starts up"""
         # Wait until the bot is fully ready before scheduling recap tasks
@@ -221,211 +513,6 @@ class RecapCommands(commands.Cog):
                 logging.info(f"Unpaused recaps for guild {guild_id} as it's active again")
         except Exception as e:
             logging.error(f"Error unpausing recaps for guild {guild_id}: {e}")
-    
-    recap_group = app_commands.Group(name="recap", description="Commands for AI story recaps")
-    
-    @recap_group.command(
-        name="generate",
-        description="Generate a summary of recent game events"
-    )
-    @app_commands.describe(
-        days="Number of days to include in the recap (default: 7)",
-        private="Whether to show the recap only to you (default: False)"
-    )
-    async def recap_generate(
-        self, 
-        interaction: discord.Interaction, 
-        days: int = 7,
-        private: bool = False
-    ):
-        # Check if API key is configured
-        api_key = repo.get_openai_api_key(interaction.guild.id)
-        if not api_key:
-            await interaction.response.send_message("❌ No API key has been set. A GM must set one with `/recap setkey`.", ephemeral=True)
-            return
-            
-        await interaction.response.defer(ephemeral=private)
-        
-        # Gather messages
-        messages = await self._gather_story_messages(interaction.channel, days)
-        if not messages:
-            await interaction.followup.send(f"❌ No story content found in the last {days} days.", ephemeral=private)
-            return
-            
-        try:
-            # Generate the recap
-            summary = await self._generate_summary(messages, api_key)
-            
-            # Create embed
-            embed = discord.Embed(
-                title=f"📜 Story Recap - Past {days} Days",
-                description=summary,
-                color=discord.Color.blue()
-            )
-            embed.set_footer(text=f"Generated {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}")
-            
-            await interaction.followup.send(embed=embed, ephemeral=private)
-        except Exception as e:
-            await interaction.followup.send(f"❌ Error generating recap: {str(e)}", ephemeral=True)
-    
-    @recap_group.command(
-        name="autostatus",
-        description="GM: Set up automatic story recaps"
-    )
-    @app_commands.describe(
-        enabled="Whether automatic recaps are enabled",
-        channel="Channel to post recaps in (defaults to current channel)",
-        days_interval="How often to post recaps (in days, default: 7)",
-        days_to_include="How many days of history to include (default: 7)"
-    )
-    async def recap_autostatus(
-        self,
-        interaction: discord.Interaction,
-        enabled: bool = None,
-        channel: discord.TextChannel = None,
-        days_interval: int = 7,
-        days_to_include: int = 7
-    ):
-        # Check if user has GM permissions
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
-            await interaction.response.send_message("❌ Only GMs can configure automatic recaps.", ephemeral=True)
-            return
-        
-        # Check if API key is configured
-        api_key = repo.get_openai_api_key(interaction.guild.id)
-        if not api_key and enabled:
-            await interaction.response.send_message("❌ No API key has been set. Please set one with `/recap setkey` first.", ephemeral=True)
-            return
-            
-        # If channel is not specified, use current channel
-        if channel is None:
-            channel = interaction.channel
-            
-        # Get current settings
-        current_settings = repo.get_auto_recap_settings(interaction.guild.id)
-        
-        # Update settings if provided
-        if enabled is not None:
-            # Save to DB
-            repo.set_auto_recap(
-                interaction.guild.id,
-                enabled,
-                channel.id if enabled else current_settings.get("channel_id"),
-                days_interval,
-                days_to_include
-            )
-            
-            # If enabling, schedule the task. If disabling, cancel any existing task
-            if enabled:
-                # Schedule the task
-                if interaction.guild.id in self.recap_tasks:
-                    self.recap_tasks[interaction.guild.id].cancel()
-                self._schedule_guild_recap(interaction.guild.id)
-                await interaction.response.send_message(
-                    f"✅ Automatic recaps enabled. A recap will be posted to {channel.mention} every {days_interval} days, including {days_to_include} days of history.",
-                    ephemeral=True
-                )
-            else:
-                # Cancel the task if it exists
-                if interaction.guild.id in self.recap_tasks:
-                    self.recap_tasks[interaction.guild.id].cancel()
-                    del self.recap_tasks[interaction.guild.id]
-                await interaction.response.send_message("✅ Automatic recaps disabled.", ephemeral=True)
-            return
-            
-        # If no parameters were provided, show current settings
-        if current_settings and current_settings.get("enabled", False):
-            channel_id = current_settings.get("channel_id")
-            channel_mention = f"<#{channel_id}>" if channel_id else "default channel"
-            interval = current_settings.get("days_interval", 7)
-            days_count = current_settings.get("days_to_include", 7)
-            
-            # Calculate next recap time
-            last_recap = current_settings.get("last_recap_time", 0)
-            if last_recap:
-                next_recap = last_recap + (interval * 86400)
-                next_recap_str = f"<t:{int(next_recap)}:R>"
-            else:
-                next_recap_str = "soon"
-            
-            await interaction.response.send_message(
-                f"✅ Automatic recaps are enabled.\n"
-                f"• Posting to: {channel_mention}\n"
-                f"• Frequency: Every {interval} days\n"
-                f"• Including: {days_count} days of history\n"
-                f"• Next recap: {next_recap_str}",
-                ephemeral=True
-            )
-        else:
-            await interaction.response.send_message("❌ Automatic recaps are currently disabled.", ephemeral=True)
-
-    @recap_group.command(
-        name="setkey",
-        description="GM: Set the OpenAI API key used for generating recaps"
-    )
-    @app_commands.describe(
-        api_key="Your OpenAI API key (will be stored securely)"
-    )
-    async def recap_setkey(
-        self,
-        interaction: discord.Interaction,
-        api_key: str
-    ):
-        # Check if user has GM permissions
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
-            await interaction.response.send_message("❌ Only GMs can set the API key.", ephemeral=True)
-            return
-        
-        # Simple validation - just check if it starts with the usual pattern
-        if not api_key.startswith(("sk-", "org-")):
-            await interaction.response.send_message("❌ The API key format doesn't look right. It should start with 'sk-'.", ephemeral=True)
-            return
-            
-        # Store the API key
-        repo.set_openai_api_key(interaction.guild.id, api_key)
-        
-        await interaction.response.send_message("✅ API key set successfully. You can now use recap commands.", ephemeral=True)
-    
-    @recap_group.command(
-        name="forcenow",
-        description="GM: Force an automatic recap to be generated now"
-    )
-    async def force_recap_now(self, interaction: discord.Interaction):
-        # Check if user has GM permissions
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
-            await interaction.response.send_message("❌ Only GMs can force recaps.", ephemeral=True)
-            return
-            
-        # Check if auto recaps are enabled
-        settings = repo.get_auto_recap_settings(interaction.guild.id)
-        if not settings or not settings.get("enabled", False):
-            await interaction.response.send_message("❌ Automatic recaps are not enabled for this server.", ephemeral=True)
-            return
-        
-        # Check if API key is configured
-        api_key = repo.get_openai_api_key(interaction.guild.id)
-        if not api_key:
-            await interaction.response.send_message("❌ No API key has been set. Please set one with `/recap setkey` first.", ephemeral=True)
-            return
-            
-        await interaction.response.send_message("Generating automatic recap now...", ephemeral=True)
-        
-        # Cancel existing task if it exists
-        guild_id = str(interaction.guild.id)
-        if guild_id in self.recap_tasks:
-            self.recap_tasks[guild_id].cancel()
-            del self.recap_tasks[guild_id]
-            
-        # Create a new task to run immediately
-        task = self.bot.loop.create_task(
-            self._post_scheduled_recap(
-                guild_id,
-                settings.get("channel_id"),
-                settings.get("days_to_include", 7),
-                0  # Run immediately
-            )
-        )
-        self.recap_tasks[guild_id] = task
     
     async def _gather_story_messages(self, channel, days):
         """Gather messages from the last X days that contain story content"""

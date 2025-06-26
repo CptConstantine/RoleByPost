@@ -24,6 +24,11 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
   - Supports standard dice notation (e.g., `2d6+3`) and Fate/Fudge dice (`4df+1`).
   - System-specific UI for modifying rolls with skills and attributes.
 
+- **Story Recaps**
+  - AI-powered summaries of recent gameplay to help players catch up.
+  - On-demand recaps for any timeframe.
+  - Automatic scheduled recaps to keep everyone in the loop.
+
 - **Reminders**  
   - GMs can remind specific users or roles to post, with a custom message and delay (e.g., "in 2d" or "in 12h").
   - Automatic reminders when users are mentioned but haven't responded.
@@ -61,10 +66,10 @@ The following are the commands that are currently available.
   Set the RPG system for your server. You must be an Admin in the server.
 
 - `/setup gmrole [role]`  
-  Set all members of a Discord role as GMs for the server. You must be an Admin.
+  Set a Discord role as the GM role for the server. Anyone with this role will have GM permissions. You must be an Admin.
 
 - `/setup playerrole [role]`  
-  Set all members of a Discord role as players for the server. You must be an Admin.
+  Set a Discord role as the player role for the server. Anyone with this role will be considered a player. You must be an Admin.
   
 - `/setup defaultskillsfile [.txt file]` or `/setup defaultskills [skill1:0, skill2:0, skill3:1, etc.]`  
   (GM only) Set default skills via command or file upload. Skills are validated per system (if the system has skills).
@@ -149,6 +154,23 @@ The following are the commands that are currently available.
 - `/initiative default [type]`  
   Set the default initiative type for this server.
 
+### Story Recaps
+
+- `/recap generate [days] [private]`  
+  Generate a summary of recent game events. Specify how many days to include and whether the recap should be private.
+
+- `/recap setkey [api_key]`  
+  (GM only) Set the OpenAI API key used for generating recaps. Required for all recap functionality.
+
+- `/recap setauto [enabled] [channel] [days_interval] [days_to_include]`  
+  (GM only) Configure automatic story recaps. Enable or disable them, set which channel they post to, how often they run, and how many days of history they include.
+
+- `/recap autostatus`  
+  Check the current automatic recap settings for this server, including next scheduled recap time.
+
+- `/recap autonow`  
+  (GM only) Force an automatic recap to be generated immediately.
+
 ### Reminders
 
 - `/reminder send [user] [role] [message] [delay]`  
@@ -201,7 +223,6 @@ For more detailed help, use `/character narration`.
 ### Top Priority
 
 - Add ability for players to manage multiple characters (for companions, minions, hirelings, etc.) and optionally speak as them for narration
-- User can provide an OpenAI API key to gain access to commands that use AI (summarize recent posts, ask rules questions)
 - Inventory system to track equipment
 
 ### Secondary Priority
