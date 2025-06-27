@@ -6,6 +6,9 @@ from discord.ext import commands
 from commands.narration import process_narration
 from data import repo
 from commands import character_commands, initiative_commands, reminder_commands, roll_commands, scene_commands, setup_commands, recap_commands
+from core.scene_views import GenericSceneView, EmptySceneButton
+from rpg_systems.fate.fate_scene_view import FateSceneView
+from rpg_systems.mgt2e.mgt2e_scene_view import MGT2ESceneView
 
 dotenv.load_dotenv()
 
@@ -33,6 +36,9 @@ async def setup_hook():
     # Register empty instances of the initiative views for persistence
     bot.add_view(GenericInitiativeView()) 
     bot.add_view(PopcornInitiativeView())
+    bot.add_view(GenericSceneView())
+    bot.add_view(FateSceneView())
+    bot.add_view(MGT2ESceneView())
 
     # Sync the command tree
     await bot.tree.sync()

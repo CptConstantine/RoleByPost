@@ -1,6 +1,6 @@
-from core import initiative_types, initiative_views
-from rpg_systems.fate import fate_character
-from rpg_systems.mgt2e import mgt2e_character
+from core import initiative_types, initiative_views, scene_views
+from rpg_systems.fate import fate_character, fate_scene_view
+from rpg_systems.mgt2e import mgt2e_character, mgt2e_scene_view
 from rpg_systems.generic import generic_character
 
 def get_specific_character(system: str):
@@ -78,3 +78,12 @@ def get_specific_roll_formula_view(system: str, roll_formula_obj, difficulty: in
         return generic_character.GenericRollModifiersView(roll_formula_obj, difficulty)
     else:
         raise ValueError(f"Unknown system: {system}")
+    
+def get_specific_scene_view(system, guild_id=None, channel_id=None, scene_id=None, message_id=None):
+    """Get the appropriate scene view for the given system"""
+    if system == "fate":
+        return fate_scene_view.FateSceneView(guild_id, channel_id, scene_id, message_id)
+    elif system == "mgt2e":
+        return mgt2e_scene_view.MGT2ESceneView(guild_id, channel_id, scene_id, message_id)
+    else:
+        return scene_views.GenericSceneView(guild_id, channel_id, scene_id, message_id)

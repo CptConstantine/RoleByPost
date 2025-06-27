@@ -3,6 +3,7 @@ import sqlite3
 conn = sqlite3.connect('data/bot.db')
 cur = conn.cursor()
 
+# Existing tables
 cur.execute("""
 CREATE TABLE IF NOT EXISTS server_settings (
     guild_id TEXT PRIMARY KEY,
@@ -72,7 +73,7 @@ CREATE TABLE IF NOT EXISTS server_initiative_defaults (
 )
 """)
 
-# New table for scenes
+# Scenes tables
 cur.execute("""
 CREATE TABLE IF NOT EXISTS scenes (
     guild_id TEXT NOT NULL,
@@ -84,7 +85,6 @@ CREATE TABLE IF NOT EXISTS scenes (
 )
 """)
 
-# Modified scene_notes table with scene_id
 cur.execute("""
 CREATE TABLE IF NOT EXISTS scene_notes (
     guild_id TEXT NOT NULL,
@@ -94,7 +94,6 @@ CREATE TABLE IF NOT EXISTS scene_notes (
 )
 """)
 
-# Modified scene_npcs table with scene_id
 cur.execute("""
 CREATE TABLE IF NOT EXISTS scene_npcs (
     guild_id TEXT NOT NULL,
@@ -132,6 +131,73 @@ CREATE TABLE IF NOT EXISTS auto_reminder_optouts (
 )
 """)
 
+# Table for automatic recaps
+cur.execute("""
+CREATE TABLE IF NOT EXISTS auto_recaps (
+    guild_id TEXT PRIMARY KEY,
+    enabled BOOLEAN NOT NULL DEFAULT 0,
+    channel_id TEXT,
+    days_interval INTEGER NOT NULL DEFAULT 7,
+    days_to_include INTEGER NOT NULL DEFAULT 7,
+    last_recap_time REAL,
+    paused BOOLEAN NOT NULL DEFAULT 0,
+    check_activity BOOLEAN NOT NULL DEFAULT 1
+)
+""")
+
+# Table for OpenAI API keys
+cur.execute("""
+CREATE TABLE IF NOT EXISTS api_keys (
+    guild_id TEXT PRIMARY KEY,
+    openai_key TEXT
+)
+""")
+
+# NEW TABLES FOR PINNED SCENE VIEWS
+
+# Table for pinned scene messages
+cur.execute("""
+CREATE TABLE IF NOT EXISTS pinned_scene_messages (
+    guild_id TEXT NOT NULL,
+    scene_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    PRIMARY KEY (guild_id, scene_id, channel_id)
+)
+""")
+
+# Table for FATE-specific scene aspects
+cur.execute("""
+CREATE TABLE IF NOT EXISTS fate_scene_aspects (
+    guild_id TEXT NOT NULL,
+    scene_id TEXT NOT NULL,
+    aspects TEXT,
+    PRIMARY KEY (guild_id, scene_id)
+)
+""")
+
+# Table for FATE-specific scene zones
+cur.execute("""
+CREATE TABLE IF NOT EXISTS fate_scene_zones (
+    guild_id TEXT NOT NULL,
+    scene_id TEXT NOT NULL,
+    zones TEXT,
+    PRIMARY KEY (guild_id, scene_id)
+)
+""")
+
+# Table for MGT2E-specific scene environment
+cur.execute("""
+CREATE TABLE IF NOT EXISTS mgt2e_scene_environment (
+    guild_id TEXT NOT NULL,
+    scene_id TEXT NOT NULL,
+    environment TEXT,
+    PRIMARY KEY (guild_id, scene_id)
+)
+""")
+
+# Indexes for performance
+
 # Index for characters table - fast lookup by guild_id and name
 cur.execute("CREATE INDEX IF NOT EXISTS idx_character_guild_name ON characters(guild_id, name)")
 
@@ -146,6 +212,9 @@ cur.execute("CREATE INDEX IF NOT EXISTS idx_reminders_timestamp ON reminders(tim
 
 # Index for initiative lookup
 cur.execute("CREATE INDEX IF NOT EXISTS idx_initiative_active ON initiative(guild_id, is_active)")
+
+# NEW INDEX for pinned scene messages
+cur.execute("CREATE INDEX IF NOT EXISTS idx_pinned_scene_channel ON pinned_scene_messages(guild_id, channel_id)")
 
 conn.commit()
 conn.close()

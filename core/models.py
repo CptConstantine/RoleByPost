@@ -186,7 +186,7 @@ class BaseCharacter(BaseEntity):
         self.data["entity_type"] = "npc" if value else "pc"
 
     @staticmethod
-    def create_base_character(id, name, owner_id, is_npc=False, notes=None, avatar_url=None, **additional_fields):
+    def create_base_character(id, name, owner_id, is_npc=False, notes=None, avatar_url=None, system_specific_fields=None):
         """
         Helper method to create a standardized character dictionary.
         
@@ -212,8 +212,9 @@ class BaseCharacter(BaseEntity):
         }
         
         # Add any additional fields
-        for key, value in additional_fields.items():
-            character[key] = value
+        if system_specific_fields:
+            for key, value in system_specific_fields.items():
+                character[key] = value
             
         return character
 

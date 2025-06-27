@@ -137,6 +137,12 @@ The following are the commands that are currently available.
 - `/scene clear`  
   (GM only) Clear all NPCs from the current active scene.
 
+- `/scene pin`  
+  (GM only) Pin the current scene to the channel for easy reference. The pin automatically updates when scenes change.
+
+- `/scene off`  
+  (GM only) Disable scene pinning and remove all pinned scene messages.
+
 ### Initiative
 
 - `/initiative start [type] [scene]`  
