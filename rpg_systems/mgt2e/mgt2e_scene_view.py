@@ -3,12 +3,21 @@ from discord import ui
 from discord.ext import commands
 from core import factories
 from data import repo
-from core.scene_views import BasePinnableSceneView, SceneNotesButton
+from core.scene_views import BasePinnableSceneView, PlaceholderPersistentButton, SceneNotesButton
 
 SYSTEM = "mgt2e"
 
 class MGT2ESceneView(BasePinnableSceneView):
     """Mongoose Traveller 2E scene view with environmental details"""
+    def __init__(self, guild_id: int = None, scene_id: int = None, is_gm: bool = False, message_id: int = None):
+        super().__init__(guild_id, scene_id, is_gm, message_id)
+        
+        if not self.is_initialized:
+            # For persistent view registration, add placeholder buttons with the correct custom_ids
+            self.add_item(PlaceholderPersistentButton("edit_scene_notes"))
+            self.add_item(PlaceholderPersistentButton("edit_environment"))
+            self.add_item(PlaceholderPersistentButton("manage_npcs"))
+            return
     
     async def create_scene_content(self):
         # Get scene info

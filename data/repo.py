@@ -1,3 +1,4 @@
+from ast import List
 import logging
 import sqlite3
 import json
@@ -7,6 +8,7 @@ import time
 import discord
 from core.models import BaseCharacter
 import core.factories as factories
+from rpg_systems.fate.fate_models import Aspect
 
 
 DB_FILE = 'data/bot.db'
@@ -965,7 +967,7 @@ def get_all_pinned_scene_messages(guild_id):
 
 
 # Fate-specific scene data functions
-def get_fate_scene_aspects(guild_id, scene_id):
+def get_fate_scene_aspects(guild_id, scene_id) -> list[Aspect]:
     """Get aspects for a Fate scene"""
     with get_db() as conn:
         cur = conn.execute(
@@ -973,44 +975,54 @@ def get_fate_scene_aspects(guild_id, scene_id):
             (str(guild_id), str(scene_id))
         )
         row = cur.fetchone()
+        aspects = []
         if row and row[0]:
             try:
                 aspects_data = json.loads(row[0])
                 
                 # Handle possible legacy format (list of strings)
                 if aspects_data and isinstance(aspects_data[0], str):
-                    # Convert to new format
-                    return [{"name": name, "description": "", "is_hidden": False} for name in aspects_data]
-                return aspects_data
+                    # Convert to Aspect objects
+                    for name in aspects_data:
+                        aspects.append(Aspect(name=name, description="", is_hidden=False, free_invokes=0))
+                else:
+                    # Convert dictionaries to Aspect objects
+                    for aspect_dict in aspects_data:
+                        aspects.append(Aspect(
+                            name=aspect_dict.get("name", ""),
+                            description=aspect_dict.get("description", ""),
+                            is_hidden=aspect_dict.get("is_hidden", False),
+                            free_invokes=aspect_dict.get("free_invokes", 0)
+                        ))
             except json.JSONDecodeError:
-                return []
-        return []
+                pass
+        return aspects
 
 
-def set_fate_scene_aspects(guild_id, scene_id, aspects):
-    """Set aspects for a Fate scene"""
+def set_fate_scene_aspects(guild_id, scene_id, aspects: list[Aspect]):
+    """
+    Set aspects for a Fate scene
+    
+    Parameters:
+        guild_id: The ID of the guild
+        scene_id: The ID of the scene
+        aspects: A list of Aspect objects
+    """
+    # Ensure all items are Aspect objects
+    if not all(isinstance(aspect, Aspect) for aspect in aspects):
+        raise TypeError("All items in aspects parameter must be Aspect objects")
+        
+    # Convert Aspect objects to dictionaries for storage
+    aspect_dicts = [aspect.to_dict() for aspect in aspects]
+    
     with get_db() as conn:
-        # Ensure aspects are in the correct format
-        normalized_aspects = []
-        for aspect in aspects:
-            if isinstance(aspect, str):
-                # Convert simple string to dictionary format
-                normalized_aspects.append({
-                    "name": aspect,
-                    "description": "",
-                    "is_hidden": False
-                })
-            else:
-                # Already in dictionary format
-                normalized_aspects.append(aspect)
-                
         conn.execute(
             """
             INSERT OR REPLACE INTO fate_scene_aspects
             (guild_id, scene_id, aspects) 
             VALUES (?, ?, ?)
             """,
-            (str(guild_id), str(scene_id), json.dumps(normalized_aspects))
+            (str(guild_id), str(scene_id), json.dumps(aspect_dicts))
         )
         conn.commit()
         

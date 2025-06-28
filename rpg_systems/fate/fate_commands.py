@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from data import repo
-from rpg_systems.fate.fate_scene_view import FateSceneView, EditSceneAspectsModal
+from rpg_systems.fate.fate_models import Aspect
 
 class FateCommands(commands.Cog):
     def __init__(self, bot):
@@ -45,39 +45,13 @@ class FateCommands(commands.Cog):
         
         # 1. Get scene aspects
         scene_aspects = repo.get_fate_scene_aspects(interaction.guild.id, active_scene['id']) or []
+        
+        # Format aspect strings
         aspect_lines = []
-        
-        # Check format and convert if necessary
-        scene_aspect_list = []
         for aspect in scene_aspects:
-            if isinstance(aspect, str):
-                # Legacy format
-                scene_aspect_list.append({
-                    "name": aspect,
-                    "description": "",
-                    "is_hidden": False
-                })
-            else:
-                scene_aspect_list.append(aspect)
-        
-        # Add scene aspects to the list
-        for aspect in scene_aspect_list:
-            name = aspect.get("name", "")
-            description = aspect.get("description", "")
-            is_hidden = aspect.get("is_hidden", False)
-            
-            # Skip hidden aspects for non-GMs
-            if is_hidden and not is_gm:
-                continue
-                
-            line = f"**{name}**"
-            if is_hidden:
-                line = f"*{line} (hidden)*"
-                
-            if description:
-                line += f": {description}"
-                
-            aspect_lines.append(line)
+            aspect_str = aspect.get_full_aspect_string(is_gm=is_gm)
+            if aspect_str:  # Skip empty strings (hidden aspects for non-GMs)
+                aspect_lines.append(aspect_str)
         
         if aspect_lines:
             embed.add_field(
@@ -104,24 +78,12 @@ class FateCommands(commands.Cog):
                 
             # Get aspect data for this NPC
             character_aspects = []
-            if hasattr(npc, 'aspects') and npc.aspects:
+            if npc.aspects:
+                # Format each aspect string
                 for aspect in npc.aspects:
-                    name = aspect.get("name", "")
-                    description = aspect.get("description", "")
-                    is_hidden = aspect.get("is_hidden", False)
-                    
-                    # Skip hidden aspects for non-GMs
-                    if is_hidden and not is_gm:
-                        continue
-                    
-                    aspect_text = name
-                    if is_hidden:
-                        aspect_text = f"*{aspect_text} (hidden)*"
-                        
-                    if description:
-                        aspect_text += f": {description}"
-                        
-                    character_aspects.append(aspect_text)
+                    aspect_str = aspect.get_full_aspect_string(is_gm=is_gm)
+                    if aspect_str:  # Skip empty strings (hidden aspects for non-GMs)
+                        character_aspects.append(aspect_str)
                     
             if character_aspects:
                 npc_aspects_by_character[npc.name] = character_aspects
@@ -136,7 +98,6 @@ class FateCommands(commands.Cog):
                 )
         
         # 4. Get player character aspects
-        # Get all active PCs in the guild
         pc_aspects_by_character = {}
         
         # Get all characters for the guild that aren't NPCs
@@ -144,27 +105,14 @@ class FateCommands(commands.Cog):
         for character in all_characters:
             # Get aspect data for this PC
             character_aspects = []
-            if hasattr(character, 'aspects') and character.aspects:
+            if character.aspects:
+                # Format each aspect string
                 for aspect in character.aspects:
-                    name = aspect.get("name", "")
-                    description = aspect.get("description", "")
-                    is_hidden = aspect.get("is_hidden", False)
-                    
-                    # Skip hidden aspects for non-GMs if this isn't the PC's owner
+                    # Check if this user owns the character
                     is_owner = character.owner_id == interaction.user.id
-                    
-                    if is_hidden and not (is_gm or is_owner):
-                        continue
-                    
-                    aspect_text = name
-                    if is_hidden:
-                        # Mark as hidden only in the display
-                        aspect_text = f"*{aspect_text} (hidden)*"
-                        
-                    if description:
-                        aspect_text += f": {description}"
-                        
-                    character_aspects.append(aspect_text)
+                    aspect_str = aspect.get_full_aspect_string(is_gm=is_gm, is_owner=is_owner)
+                    if aspect_str:  # Skip empty strings (hidden aspects for non-GMs/non-owners)
+                        character_aspects.append(aspect_str)
                     
             if character_aspects:
                 pc_aspects_by_character[character.name] = character_aspects

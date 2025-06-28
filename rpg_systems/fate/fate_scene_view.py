@@ -3,14 +3,25 @@ import discord
 from discord import ui
 from discord.ext import commands
 from data import repo
-from core.scene_views import BasePinnableSceneView, SceneNotesButton
+from core.scene_views import BasePinnableSceneView, PlaceholderPersistentButton, SceneNotesButton
 from core import factories
+from rpg_systems.fate.fate_models import Aspect
 
 SYSTEM = "fate"
 
 class FateSceneView(BasePinnableSceneView):
     """Fate-specific scene view with aspects and zones"""
     
+    def __init__(self, guild_id: int = None, scene_id: int = None, is_gm: bool = False, message_id: int = None):
+        super().__init__(guild_id, scene_id, is_gm, message_id)
+        
+        if not self.is_initialized:
+            # For persistent view registration, add placeholder buttons with the correct custom_ids
+            self.add_item(PlaceholderPersistentButton("edit_aspects"))
+            self.add_item(PlaceholderPersistentButton("edit_zones"))
+            self.add_item(PlaceholderPersistentButton("manage_npcs"))
+            return
+
     async def create_scene_content(self):
         # Get scene info
         scene = repo.get_scene_by_id(self.guild_id, self.scene_id)
@@ -38,22 +49,8 @@ class FateSceneView(BasePinnableSceneView):
         notes = repo.get_scene_notes(self.guild_id, self.scene_id)
         
         # Get Fate-specific scene data
-        scene_aspects_raw = repo.get_fate_scene_aspects(self.guild_id, self.scene_id) or []
+        scene_aspects = repo.get_fate_scene_aspects(self.guild_id, self.scene_id) or []
         scene_zones = repo.get_fate_scene_zones(self.guild_id, self.scene_id) or []
-        
-        # Convert scene aspects to the new format if they're still in string format
-        scene_aspects = []
-        for aspect in scene_aspects_raw:
-            if isinstance(aspect, str):
-                # Old format - simple string
-                scene_aspects.append({
-                    "name": aspect,
-                    "description": "",
-                    "is_hidden": False
-                })
-            else:
-                # New format - already a dict
-                scene_aspects.append(aspect)
         
         # Create embed
         embed = discord.Embed(
@@ -69,19 +66,14 @@ class FateSceneView(BasePinnableSceneView):
         if scene_aspects:
             description += "**Scene Aspects:**\n"
             hidden_aspect_count = 0
+            
             for aspect in scene_aspects:
-                name = aspect.get("name", "")
-                is_hidden = aspect.get("is_hidden", False)
-                
-                if is_hidden and not self.is_gm:
-                    # Count hidden aspects without revealing there's a specific hidden aspect
-                    hidden_aspect_count += 1
+                aspect_str = aspect.get_short_aspect_string(is_gm=self.is_gm)
+                if aspect_str:
+                    description += f"• {aspect_str}\n"
                 else:
-                    # Show the aspect, marking hidden ones with italics for GMs
-                    if is_hidden and self.is_gm:
-                        description += f"• *{name} (hidden)*\n"
-                    else:
-                        description += f"• {name}\n"
+                    # This is a hidden aspect that non-GMs can't see
+                    hidden_aspect_count += 1
             
             # After listing visible aspects, add a generic note about hidden aspects if any exist
             if hidden_aspect_count > 0 and not self.is_gm:
@@ -114,15 +106,12 @@ class FateSceneView(BasePinnableSceneView):
         return embed, content
         
     def build_view_components(self):
-        # Add buttons based on permissions
-        self.clear_items()  # Clear any existing buttons
-        
-        # Only show buttons to GMs
-        if self.is_gm:
-            self.add_item(SceneNotesButton(self))
-            self.add_item(EditSceneAspectsButton(self))
-            self.add_item(EditZonesButton(self))
-            self.add_item(ManageNPCsButton(self))
+        # Add all buttons regardless of GM status - the interaction_check will handle permissions
+        self.clear_items()
+        self.add_item(SceneNotesButton(self))
+        self.add_item(EditSceneAspectsButton(self))
+        self.add_item(EditZonesButton(self))
+        self.add_item(ManageNPCsButton(self))
 
 
 class EditSceneAspectsButton(ui.Button):
@@ -144,7 +133,7 @@ class EditZonesButton(ui.Button):
     def __init__(self, parent_view: FateSceneView):
         super().__init__(label="Edit Zones", style=discord.ButtonStyle.secondary, custom_id="edit_zones", row=0)
         self.parent_view = parent_view
-        
+
     async def callback(self, interaction: discord.Interaction):
         # Check if user has GM role
         if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
@@ -244,7 +233,22 @@ class ManageNPCsSelect(discord.ui.Select):
         for npc_id in to_remove:
             repo.remove_scene_npc(interaction.guild.id, npc_id, self.parent_view.scene_id)
     
-        # Always update the view
+        # Check if this is the active scene before updating pins
+        scene = repo.get_scene_by_id(interaction.guild.id, self.parent_view.scene_id)
+    
+        # Only update all pinned instances if this is the active scene
+        if scene and scene["is_active"]:
+            # Find any SceneCommands cog instance to use its update method
+            scene_cog = None
+            for cog in interaction.client.cogs.values():
+                if isinstance(cog, commands.Cog) and hasattr(cog, "_update_all_pinned_scenes"):
+                    scene_cog = cog
+                    break
+        
+            # Update all pinned scenes with this scene ID
+            if scene_cog:
+                await scene_cog._update_all_pinned_scenes(interaction.guild, self.parent_view.scene_id)
+    
         await self.parent_view.update_view(interaction)
 
 
@@ -265,31 +269,28 @@ class EditSceneAspectsModal(discord.ui.Modal, title="Edit Scene Aspects"):
         # Get current aspects
         current_aspects = repo.get_fate_scene_aspects(parent_view.guild_id, parent_view.scene_id) or []
         
-        # Convert aspects to format suitable for editing
+        # Convert aspects to format suitable for editing in text field
         aspect_lines = []
         for aspect in current_aspects:
-            if isinstance(aspect, str):
-                # Legacy format
-                aspect_lines.append(aspect)
+            # Format for editing in text area
+            if aspect.is_hidden:
+                aspect_lines.append(f"*{aspect.name}*")
             else:
-                # New format with metadata
-                name = aspect.get("name", "")
-                is_hidden = aspect.get("is_hidden", False)
+                aspect_lines.append(aspect.name)
                 
-                if is_hidden:
-                    aspect_lines.append(f"*{name}*")
-                else:
-                    aspect_lines.append(name)
+            # If we have free invokes, add them in a bracket
+            if aspect.free_invokes > 0:
+                aspect_lines[-1] += f" [{aspect.free_invokes}]"
         
         current_text = "\n".join(aspect_lines)
         
         self.aspects = discord.ui.TextInput(
-            label="Scene Aspects (one per line, * for hidden)",
+            label="Aspects (* for hidden, [#] for invokes)",
             style=discord.TextStyle.paragraph,
             required=False,
             max_length=1000,
             default=current_text,
-            placeholder="High Concept\n*A Secret Aspect*"
+            placeholder="High Concept\n*A Secret Aspect*\nTrapped in Darkness [2]"
         )
         self.add_item(self.aspects)
 
@@ -298,23 +299,39 @@ class EditSceneAspectsModal(discord.ui.Modal, title="Edit Scene Aspects"):
         aspect_lines = [line.strip() for line in self.aspects.value.splitlines()]
         aspect_lines = [line for line in aspect_lines if line]
         
-        # Convert to the new format
+        # Convert to Aspect objects
         aspects = []
         for line in aspect_lines:
+            # Check if this aspect has free invokes
+            free_invokes = 0
+            invoke_match = line.strip().split('[')
+            if len(invoke_match) > 1 and invoke_match[1].endswith(']'):
+                try:
+                    # Extract the number from [#]
+                    invoke_str = invoke_match[1].rstrip(']')
+                    free_invokes = int(invoke_str)
+                    # Remove the [#] part from the line
+                    line = invoke_match[0].strip()
+                except ValueError:
+                    # If we can't parse the number, assume it's part of the name
+                    pass
+            
             # Check if this aspect is marked as hidden (with asterisks)
             if line.startswith("*") and line.endswith("*"):
                 name = line[1:-1].strip()
-                aspects.append({
-                    "name": name,
-                    "description": "",
-                    "is_hidden": True
-                })
+                aspects.append(Aspect(
+                    name=name,
+                    description="",
+                    is_hidden=True,
+                    free_invokes=free_invokes
+                ))
             else:
-                aspects.append({
-                    "name": line,
-                    "description": "",
-                    "is_hidden": False
-                })
+                aspects.append(Aspect(
+                    name=line,
+                    description="",
+                    is_hidden=False,
+                    free_invokes=free_invokes
+                ))
         
         # Update aspects in DB
         repo.set_fate_scene_aspects(self.parent_view.guild_id, self.parent_view.scene_id, aspects)

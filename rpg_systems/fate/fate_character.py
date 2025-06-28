@@ -1,11 +1,12 @@
 import random
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 import discord
 from discord import ui, SelectOption
 from core.models import BaseCharacter, BaseSheet, RollModifiers
 from core.shared_views import FinalizeRollButton, PaginatedSelectView, EditNameModal, EditNotesModal, RollModifiersView
 from core.utils import get_character, roll_formula
 from data import repo
+from rpg_systems.fate.fate_models import Aspect
 
 SYSTEM = "fate"
 
@@ -67,54 +68,22 @@ class FateCharacter(BaseCharacter):
         self.data["skills"] = value
 
     @property
-    def aspects(self) -> List[Dict[str, Any]]:
-        """Get aspects as list of dictionaries with name, description, is_hidden properties"""
-        aspects_data = self.data.get("aspects", [])
-        
-        # Handle migration from old format (list of strings) to new format (list of dicts)
-        if aspects_data and isinstance(aspects_data[0], str):
-            # Convert old format to new format
-            hidden_aspects = self.data.get("hidden_aspects", [])
-            new_aspects = []
-            for idx, name in enumerate(aspects_data):
-                new_aspects.append({
-                    "name": name,
-                    "description": "",
-                    "is_hidden": idx in hidden_aspects
-                })
-            # Store the migrated data
-            self.data["aspects"] = new_aspects
-            # Remove the old hidden_aspects field
-            if "hidden_aspects" in self.data:
-                del self.data["hidden_aspects"]
-            return new_aspects
-        
-        return aspects_data
+    def aspects(self) -> List[Aspect]:
+        """Get aspects as list of Aspect objects"""
+        aspect_dicts = self.data.get("aspects", [])
+        return [Aspect.from_dict(aspect_dict) for aspect_dict in aspect_dicts]
 
     @aspects.setter
-    def aspects(self, value: List[Dict[str, Any]]):
-        """Set aspects as list of dictionaries"""
-        self.data["aspects"] = value
-
-    # Keep the hidden_aspects property for backward compatibility but deprecate it
-    @property
-    def hidden_aspects(self) -> List[int]:
-        """DEPRECATED: Use the is_hidden property in each aspect instead"""
-        # For backward compatibility, generate from the new format
-        aspects = self.aspects
-        hidden_indices = []
-        for idx, aspect in enumerate(aspects):
-            if aspect.get("is_hidden", False):
-                hidden_indices.append(idx)
-        return hidden_indices
-
-    @hidden_aspects.setter
-    def hidden_aspects(self, value: List[int]):
-        """DEPRECATED: Convert to the new format using is_hidden property"""
-        aspects = self.aspects
-        for idx, aspect in enumerate(aspects):
-            aspect["is_hidden"] = idx in value
-        self.aspects = aspects
+    def aspects(self, value: List[Union[Aspect, Dict[str, Any]]]):
+        """Set aspects from a list of Aspect objects or dictionaries"""
+        aspect_dicts = []
+        for item in value:
+            if isinstance(item, Aspect):
+                aspect_dicts.append(item.to_dict())
+            else:
+                # Assume it's already a dictionary
+                aspect_dicts.append(item)
+        self.data["aspects"] = aspect_dicts
 
     @property
     def fate_points(self) -> int:
@@ -270,16 +239,7 @@ class FateSheet(BaseSheet):
         if aspects:
             aspect_lines = []
             for aspect in aspects:
-                name = aspect.get("name", "")
-                description = aspect.get("description", "")
-                is_hidden = aspect.get("is_hidden", False)
-                
-                # Format each aspect
-                line = f"- {'*' if is_hidden else ''}{name}"
-                if is_hidden:
-                    line += "*"
-                    
-                aspect_lines.append(line)
+                aspect_lines.append(aspect.get_short_aspect_string(is_owner=True))
                 
             embed.add_field(name="Aspects", value="\n".join(aspect_lines), inline=False)
         else:
@@ -335,29 +295,13 @@ class FateSheet(BaseSheet):
         return embed
 
     def format_npc_scene_entry(self, npc: FateCharacter, is_gm: bool):
-        aspects = npc.aspects
+        # Get the character's aspects
         aspect_lines = []
-        
-        for aspect in aspects:
-            name = aspect.get("name", "")
-            description = aspect.get("description", "")
-            is_hidden = aspect.get("is_hidden", False)
-            
-            if is_hidden and not is_gm:
-                # Hidden aspect and not GM, just show "hidden"
-                aspect_lines.append("*hidden*")
-            elif is_hidden and is_gm:
-                # Hidden aspect but GM can see it
-                if description:
-                    aspect_lines.append(f"*{name}: {description}*")
-                else:
-                    aspect_lines.append(f"*{name}*")
-            else:
-                # Not hidden, show to everyone
-                if description:
-                    aspect_lines.append(f"{name}: {description}")
-                else:
-                    aspect_lines.append(name)
+        for aspect in npc.aspects:
+            # Use the Aspect.get_short_aspect_string method for consistent formatting
+            aspect_str = aspect.get_short_aspect_string(is_gm=is_gm)
+            if aspect_str:  # Skip empty strings (hidden aspects for non-GMs)
+                aspect_lines.append(aspect_str)
                     
         aspect_str = "\n".join(aspect_lines) if aspect_lines else "_No aspects set_"
         lines = [f"**{npc.name}**\n{aspect_str}"]
@@ -374,7 +318,7 @@ class FateSheet(BaseSheet):
                 lines.append(f"**Stunts:** {', '.join(stunt_names)}")
         
         return "\n".join(lines)
-    
+
     def roll(self, character: FateCharacter, *, skill=None, attribute=None):
         if not skill:
             return "❌ Please specify a skill."
@@ -481,14 +425,14 @@ class EditAspectsView(ui.View):
         self.clear_items()
         if self.aspects:
             current_aspect = self.aspects[self.page]
-            aspect_name = current_aspect.get("name", "")
-            is_hidden = current_aspect.get("is_hidden", False)
+            aspect_name = current_aspect.name
+            is_hidden = current_aspect.is_hidden
             
             label = f"{self.page + 1}/{len(self.aspects)}: {aspect_name[:30]}"
             self.add_item(ui.Button(label=label, disabled=True, row=0))
             
             # Add view description button if there is a description
-            if current_aspect.get("description", ""):
+            if current_aspect.description:  # Changed from description key access
                 self.add_item(ui.Button(label="📖 View Description", style=discord.ButtonStyle.primary, row=0, custom_id="view_desc"))
             
             # Navigation buttons
@@ -530,8 +474,8 @@ class EditAspectsView(ui.View):
                 self.page = min(self.max_page, self.page + 1)
             elif cid == "view_desc":
                 current_aspect = self.aspects[self.page]
-                name = current_aspect.get("name", "")
-                description = current_aspect.get("description", "")
+                name = current_aspect.name
+                description = current_aspect.description
                 await interaction.response.send_message(
                     f"**{name}**\n{description}", 
                     ephemeral=True
@@ -547,7 +491,7 @@ class EditAspectsView(ui.View):
                 self.page = max(0, self.page - 1)
             elif cid == "toggle_hidden":
                 current_aspect = self.aspects[self.page]
-                current_aspect["is_hidden"] = not current_aspect.get("is_hidden", False)
+                current_aspect.is_hidden = not current_aspect.is_hidden
                 self.char.aspects = self.aspects
                 repo.set_character(interaction.guild.id, self.char, system=SYSTEM)
             elif cid == "add":
@@ -570,14 +514,14 @@ class EditAspectsView(ui.View):
         return callback
 
 class EditAspectModal(ui.Modal, title="Edit Aspect"):
-    def __init__(self, char_id: str, index: int, aspect: Dict[str, Any]):
+    def __init__(self, char_id: str, index: int, aspect: Aspect):
         super().__init__()
         self.char_id = char_id
         self.index = index
         
         self.name_field = ui.TextInput(
             label="Aspect Name",
-            default=aspect.get("name", ""),
+            default=aspect.name,
             max_length=100,
             required=True
         )
@@ -585,12 +529,21 @@ class EditAspectModal(ui.Modal, title="Edit Aspect"):
         
         self.description_field = ui.TextInput(
             label="Description (optional)",
-            default=aspect.get("description", ""),
+            default=aspect.description,
             style=discord.TextStyle.paragraph,
             max_length=500,
             required=False
         )
         self.add_item(self.description_field)
+        
+        # Add free invokes field
+        self.free_invokes_field = ui.TextInput(
+            label="Free Invokes (number)",
+            default=str(aspect.free_invokes),
+            max_length=2,
+            required=False
+        )
+        self.add_item(self.free_invokes_field)
 
     async def on_submit(self, interaction: discord.Interaction):
         character = get_character(interaction.guild.id, self.char_id)
@@ -600,8 +553,16 @@ class EditAspectModal(ui.Modal, title="Edit Aspect"):
             return
         
         # Update the aspect with new values
-        aspects[self.index]["name"] = self.name_field.value.strip()
-        aspects[self.index]["description"] = self.description_field.value.strip()
+        aspects[self.index].name = self.name_field.value.strip()
+        aspects[self.index].description = self.description_field.value.strip()
+        
+        # Handle the free invokes value
+        try:
+            free_invokes = int(self.free_invokes_field.value.strip() or "0")
+            aspects[self.index].free_invokes = max(0, free_invokes)  # Ensure non-negative
+        except ValueError:
+            # If conversion fails, default to 0
+            aspects[self.index].free_invokes = 0
         
         # Save changes
         character.aspects = aspects
@@ -631,17 +592,46 @@ class AddAspectModal(ui.Modal, title="Add Aspect"):
             required=False
         )
         self.add_item(self.description_field)
+        
+        # Add free invokes field
+        self.free_invokes_field = ui.TextInput(
+            label="Free Invokes (number)",
+            default="0",
+            max_length=2,
+            required=False
+        )
+        self.add_item(self.free_invokes_field)
+        
+        # Add hidden checkbox (simulated with text field since modal doesn't have checkboxes)
+        self.is_hidden_field = ui.TextInput(
+            label="Hidden? (yes/no)",
+            default="no",
+            max_length=3,
+            required=False
+        )
+        self.add_item(self.is_hidden_field)
 
     async def on_submit(self, interaction: discord.Interaction):
         character = get_character(interaction.guild.id, self.char_id)
         aspects = character.aspects
         
-        # Create new aspect with the provided data
-        new_aspect = {
-            "name": self.name_field.value.strip(),
-            "description": self.description_field.value.strip(),
-            "is_hidden": False  # Default to visible
-        }
+        # Process the free invokes input
+        try:
+            free_invokes = int(self.free_invokes_field.value.strip() or "0")
+            free_invokes = max(0, free_invokes)  # Ensure non-negative
+        except ValueError:
+            free_invokes = 0
+            
+        # Process the is_hidden input
+        is_hidden = self.is_hidden_field.value.lower().strip() in ["yes", "y", "true", "1"]
+        
+        # Create new aspect as an Aspect object
+        new_aspect = Aspect(
+            name=self.name_field.value.strip(),
+            description=self.description_field.value.strip(),
+            is_hidden=is_hidden,
+            free_invokes=free_invokes
+        )
         
         aspects.append(new_aspect)
         character.aspects = aspects

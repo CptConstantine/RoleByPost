@@ -23,7 +23,7 @@ class BasePinnableSceneView(ABC, discord.ui.View):
         # Skip adding buttons during persistent view registration
         if not self.is_initialized:
             # For persistent view registration, add a placeholder button with the correct custom_id
-            self.add_item(EmptySceneButton("edit_scene_notes"))
+            self.add_item(PlaceholderPersistentButton("edit_scene_notes"))
             return
             
         # Build the view components according to the specific system
@@ -314,7 +314,7 @@ class BasePinnableSceneView(ABC, discord.ui.View):
         return True
 
 
-class EmptySceneButton(discord.ui.Button):
+class PlaceholderPersistentButton(discord.ui.Button):
     """Empty button for persistent view registration"""
     def __init__(self, custom_id):
         super().__init__(label="...", custom_id=custom_id, style=discord.ButtonStyle.secondary)
@@ -333,7 +333,6 @@ class EmptySceneButton(discord.ui.Button):
                 
         # Update the view with a newly initialized one
         await self.view.update_view(interaction)
-        await interaction.response.defer()
 
 
 class GenericSceneView(BasePinnableSceneView):
