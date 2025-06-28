@@ -1132,3 +1132,60 @@ def get_pcs_by_guild(guild_id) -> BaseCharacter:
             pc = CharacterClass.from_dict(character_dict)
             pcs.append(pc)
         return pcs
+    
+# Add these functions to the existing repo.py file
+
+def get_homebrew_rules(guild_id):
+    """
+    Retrieve all homebrew rules for a guild.
+    
+    Args:
+        guild_id: Discord guild ID
+        
+    Returns:
+        dict: Dictionary mapping rule names to rule text
+    """
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT rule_name, rule_text FROM homebrew_rules WHERE guild_id = ?",
+            (str(guild_id),)
+        )
+        rows = cur.fetchall()
+        return {row[0]: row[1] for row in rows}
+
+def set_homebrew_rule(guild_id, rule_name, rule_text):
+    """
+    Add or update a homebrew rule for a guild.
+    
+    Args:
+        guild_id: Discord guild ID
+        rule_name: Identifier for the rule
+        rule_text: The rule content
+    """
+    with get_db() as conn:
+        conn.execute(
+            """INSERT OR REPLACE INTO homebrew_rules 
+               (guild_id, rule_name, rule_text, created_at, updated_at) 
+               VALUES (?, ?, ?, datetime('now'), datetime('now'))""",
+            (str(guild_id), rule_name, rule_text)
+        )
+        conn.commit()
+
+def remove_homebrew_rule(guild_id, rule_name):
+    """
+    Remove a homebrew rule from a guild.
+    
+    Args:
+        guild_id: Discord guild ID
+        rule_name: Name of the rule to remove
+        
+    Returns:
+        bool: True if a rule was removed, False if not found
+    """
+    with get_db() as conn:
+        cur = conn.execute(
+            "DELETE FROM homebrew_rules WHERE guild_id = ? AND rule_name = ?",
+            (str(guild_id), rule_name)
+        )
+        conn.commit()
+        return cur.rowcount > 0

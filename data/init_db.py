@@ -196,25 +196,26 @@ CREATE TABLE IF NOT EXISTS mgt2e_scene_environment (
 )
 """)
 
+cur.execute("""
+CREATE TABLE IF NOT EXISTS homebrew_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    rule_name TEXT NOT NULL,
+    rule_text TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(guild_id, rule_name)
+)
+""")
+
 # Indexes for performance
-
-# Index for characters table - fast lookup by guild_id and name
 cur.execute("CREATE INDEX IF NOT EXISTS idx_character_guild_name ON characters(guild_id, name)")
-
-# Index for characters table - fast lookup by guild_id and owner_id
 cur.execute("CREATE INDEX IF NOT EXISTS idx_character_guild_owner ON characters(guild_id, owner_id)")
-
-# Index for scene lookup
 cur.execute("CREATE INDEX IF NOT EXISTS idx_scenes_guild_active ON scenes(guild_id, is_active)")
-
-# Index for fast reminders lookup
 cur.execute("CREATE INDEX IF NOT EXISTS idx_reminders_timestamp ON reminders(timestamp)")
-
-# Index for initiative lookup
 cur.execute("CREATE INDEX IF NOT EXISTS idx_initiative_active ON initiative(guild_id, is_active)")
-
-# NEW INDEX for pinned scene messages
 cur.execute("CREATE INDEX IF NOT EXISTS idx_pinned_scene_channel ON pinned_scene_messages(guild_id, channel_id)")
+cur.execute("CREATE INDEX IF NOT EXISTS idx_homebrew_rules_guild ON homebrew_rules(guild_id)")
 
 conn.commit()
 conn.close()

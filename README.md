@@ -29,6 +29,10 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
   - On-demand recaps for any timeframe.
   - Automatic scheduled recaps to keep everyone in the loop.
 
+- **Rules Management**
+  - Ask an AI about the rules of the game system you are using.
+  - GM can add homebrew rules that are used in the context of each query.
+
 - **Reminders**  
   - GMs can remind specific users or roles to post, with a custom message and delay (e.g., "in 2d" or "in 12h").
   - Automatic reminders when users are mentioned but haven't responded.
@@ -146,19 +150,19 @@ The following are the commands that are currently available.
 ### Initiative
 
 - `/initiative start [type] [scene]`  
-  Start initiative in the current channel. Scene and type are optional.
+  (GM only) Start initiative in the current channel. Scene and type are optional.
 
 - `/initiative end`  
-  End initiative in the current channel.
+  (GM only) End initiative in the current channel.
 
 - `/initiative add [name]`  
-  Add a PC or NPC to the current initiative.
+  (GM only) Add a PC or NPC to the current initiative.
 
 - `/initiative remove [name]`  
-  Remove a PC or NPC from the current initiative.
+  (GM only) Remove a PC or NPC from the current initiative.
 
 - `/initiative default [type]`  
-  Set the default initiative type for this server.
+  (GM only) Set the default initiative type for this server.
 
 ### Story Recaps
 
@@ -193,6 +197,20 @@ The following are the commands that are currently available.
 
 - `/reminder autostatus`  
   Check the current automatic reminder settings for this server.
+
+### Rules Questions
+
+- `/rules question [prompt]`  
+  Ask a question about the rules of your current RPG system. Uses AI to provide answers based on the system and any homebrew rules set by the GM.
+
+- `/rules homebrew [rule_name] [rule_text]`  
+  (GM only) Add or update a homebrew rule for the server. These rules are used as context when answering rules questions.
+
+- `/rules homebrewlist`  
+  View all homebrew rules and clarifications for this server.
+
+- `/rules homebrewremove [rule_name]`  
+  (GM only) Remove a homebrew rule from the server.
 
 ### Character Speech and Narration
 

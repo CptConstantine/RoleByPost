@@ -4,7 +4,7 @@ from discord.ext import commands
 from discord import app_commands
 import datetime
 import json
-import aiohttp
+import openai
 import time
 import logging
 from data import repo
@@ -573,32 +573,22 @@ class RecapCommands(commands.Cog):
             {"role": "user", "content": f"Here are the recent posts from our play-by-post RPG game. Please provide a coherent, well-structured summary of the main story events:\n\n{messages_text}"}
         ]
         
-        # Make API request
+        # Make API request using OpenAI client library
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    "https://api.openai.com/v1/chat/completions",
-                    headers={
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {api_key}"
-                    },
-                    json={
-                        "model": "gpt-3.5-turbo",
-                        "messages": prompt,
-                        "max_tokens": 1000
-                    }
-                ) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        raise Exception(f"API error ({response.status}): {error_text}")
-                        
-                    data = await response.json()
-                    summary = data['choices'][0]['message']['content']
-                    return summary
+            client = openai.OpenAI(api_key=api_key)
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=prompt,
+                max_tokens=1000,
+                temperature=0.7
+            )
+            
+            return response.choices[0].message.content.strip()
+            
         except Exception as e:
             logging.error(f"Error calling OpenAI API: {str(e)}")
-            raise
-    
+            raise Exception(f"OpenAI API error: {str(e)}")
+
     def _schedule_guild_recap(self, guild_id):
         """Schedule a recap task for a specific guild"""
         try:
