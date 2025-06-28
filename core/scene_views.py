@@ -2,13 +2,14 @@ from abc import ABC, abstractmethod
 import logging
 import discord
 from discord import ui
+from discord.ext import commands
 from data import repo
 from core import factories
 
-class BasePinnedSceneView(ABC, discord.ui.View):
+class BasePinnableSceneView(ABC, discord.ui.View):
     """
-    Base class for scene views that use a single pinned message.
-    Handles common functionality for pinning and updating messages.
+    Base class for scene views that can be pinned.
+    Handles common functionality for creating, pinning, updating, and unpinning messages.
     """
     def __init__(self, guild_id=None, channel_id=None, scene_id=None, message_id=None):
         # Always use timeout=None for persistent views
@@ -36,7 +37,7 @@ class BasePinnedSceneView(ABC, discord.ui.View):
         Should be implemented by subclasses.
         """
         pass
-        
+    
     async def initialize_if_needed(self, interaction):
         """Initialize the view if it was loaded as a persistent view"""
         if not self.is_initialized:
@@ -60,7 +61,10 @@ class BasePinnedSceneView(ABC, discord.ui.View):
         return False
     
     async def get_scene_message(self, interaction):
-        """Get the scene message if it exists in the database or create a new one"""
+        """
+        Get the scene message if it exists or create a new one without pinning.
+        This is the base method for displaying scene content.
+        """
         try:
             # Check if we have a stored message ID
             if self.message_id:
@@ -85,19 +89,54 @@ class BasePinnedSceneView(ABC, discord.ui.View):
             # Create the initial content
             embed, content = await self.create_scene_content()
             
-            # Send and pin the new message
+            # Send the message without pinning
             message = await channel.send(content=content, embed=embed, view=self)
-            await message.pin()
             self.message_id = str(message.id)
             
-            # Store the message ID in the database
-            repo.set_scene_message_id(self.guild_id, self.scene_id, self.channel_id, message.id)
+            # Store the message ID in the database - this doesn't mean it's pinned,
+            # just that we're tracking this message for this scene in this channel
+            #repo.set_scene_message_id(self.guild_id, self.scene_id, self.channel_id, message.id)
+            
+            return message
+        except Exception as e:
+            logging.error(f"Error creating scene message: {e}")
+            await interaction.response.send_message(
+                "❌ Failed to create scene view.",
+                ephemeral=True
+            )
+            return None
+    
+    async def pin_message(self, interaction):
+        """
+        Pin the scene message to the channel.
+        This should only be called from /scene pin command for active scenes.
+        """
+        try:
+            # Check if the scene is active - only active scenes can be pinned
+            scene = repo.get_scene_by_id(self.guild_id, self.scene_id)
+            if not scene or not scene["is_active"]:
+                await interaction.followup.send(
+                    "❌ Only the active scene can be pinned.",
+                    ephemeral=True
+                )
+                return None
+            
+            # Get or create the scene message
+            message = await self.get_scene_message(interaction)
+            if not message:
+                return None
+                
+            # Pin the message
+            await message.pin()
+            
+            # Store the message ID in the pinned messages database
+            repo.set_pinned_scene_message_id(self.guild_id, self.scene_id, self.channel_id, message.id)
             
             # Send a temporary message indicating the scene has been pinned
-            temp_msg = await channel.send("📌 Scene view has been pinned. You can always find the current scene at the top of the channel.")
+            temp_msg = await interaction.channel.send("📌 Scene view has been pinned. You can always find the current scene at the top of the channel.")
             
             # Delete the pin notification sent by Discord
-            async for msg in channel.history(limit=10):
+            async for msg in interaction.channel.history(limit=10):
                 if msg.type == discord.MessageType.pins_add:
                     await msg.delete()
                     break
@@ -107,15 +146,15 @@ class BasePinnedSceneView(ABC, discord.ui.View):
             
             return message
         except discord.Forbidden:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "⚠️ I don't have permission to pin messages. Scene view won't be pinned.",
                 ephemeral=True
             )
             return None
         except Exception as e:
-            logging.error(f"Error creating scene message: {e}")
-            await interaction.response.send_message(
-                "❌ Failed to create pinned scene view.",
+            logging.error(f"Error pinning scene message: {e}")
+            await interaction.followup.send(
+                "❌ Failed to pin scene view.",
                 ephemeral=True
             )
             return None
@@ -131,8 +170,11 @@ class BasePinnedSceneView(ABC, discord.ui.View):
         """
         pass
             
-    async def update_scene_message(self, interaction, content=None, embed=None, view=None):
-        """Update the scene message instead of sending a new one"""
+    async def update_pinned_message(self, interaction, content=None, embed=None, view=None):
+        """
+        Update a pinned scene message if it exists.
+        This should be called when scene content changes and there's a pinned message.
+        """
         message = await self.get_scene_message(interaction)
         if not message:
             return None
@@ -162,30 +204,88 @@ class BasePinnedSceneView(ABC, discord.ui.View):
                     ephemeral=True
                 )
             return None
-        
+            
     async def update_view(self, interaction):
-        """Update the scene view with current state"""
-        embed, content = await self.create_scene_content()
+        """
+        Update both the ephemeral view and pinned message (if active scene).
+        Both should always be updated for active scenes.
+        """
+        # Check if this scene is active
+        scene = repo.get_scene_by_id(self.guild_id, self.scene_id)
+        is_active = scene and scene["is_active"]
         
-        # Create a new view of the appropriate type
+        # Get the current content
+        #embed, content = await self.create_scene_content()
+        
+        # For active scenes, update all pinned messages through the scene commands cog
+        if is_active:
+            # Find any SceneCommands cog instance to use its update method
+            scene_cog = None
+            for cog in interaction.client.cogs.values():
+                if isinstance(cog, commands.Cog) and hasattr(cog, "_update_all_pinned_scenes"):
+                    scene_cog = cog
+                    break
+            
+            # Update all pinned scenes with this scene ID
+            if scene_cog:
+                await scene_cog._update_all_pinned_scenes(interaction.guild, self.scene_id)
+        
+        # Always update the ephemeral view for the current user
+        # Create a view with proper GM permissions for the ephemeral message
         system = repo.get_system(self.guild_id)
-        new_view = factories.get_specific_scene_view(
-            system,
+        ephemeral_view = factories.get_specific_scene_view(
+            system=system,
             guild_id=self.guild_id, 
             channel_id=self.channel_id, 
             scene_id=self.scene_id,
             message_id=self.message_id
         )
+        ephemeral_view.is_gm = await repo.has_gm_permission(interaction.guild.id, interaction.user)
+        ephemeral_view.build_view_components()
         
-        # Check if user is GM for the new view
-        new_view.is_gm = await repo.has_gm_permission(interaction.guild.id, interaction.user)
+        # Create embed with scene content for the ephemeral response
+        ephemeral_embed, ephemeral_content = await ephemeral_view.create_scene_content()
         
-        # Rebuild the view components
-        new_view.build_view_components()
-        
-        # Update the message
-        await self.update_scene_message(interaction, content=content, embed=embed, view=new_view)
-        
+        # Update the ephemeral message for the current user
+        if not interaction.response.is_done():
+            await interaction.response.edit_message(
+                content=ephemeral_content, 
+                embed=ephemeral_embed, 
+                view=ephemeral_view
+            )
+    
+    async def unpin_message(self, interaction):
+        """
+        Unpin the scene message from the channel.
+        This should be called from /scene off or when switching active scenes.
+        """
+        try:
+            message = await self.get_scene_message(interaction)
+            if not message:
+                return False
+                
+            # Unpin the message
+            await message.unpin()
+            
+            # Update the message to show it's no longer active
+            await message.edit(
+                content="🛑 **SCENE TRACKING DISABLED** 🛑",
+                embed=discord.Embed(
+                    title="Scene Tracking Disabled",
+                    description="Scene tracking has been turned off. This message is no longer being updated.",
+                    color=discord.Color.darker_grey()
+                ),
+                view=None
+            )
+            
+            # Remove the message from the pinned messages database
+            repo.clear_scene_pins(self.guild_id)
+            
+            return True
+        except Exception as e:
+            logging.error(f"Error unpinning scene message: {e}")
+            return False
+    
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         # Allow the bot itself
         if interaction.user.id == interaction.client.user.id:
@@ -200,13 +300,17 @@ class BasePinnedSceneView(ABC, discord.ui.View):
                 
         # Update the is_gm flag
         self.is_gm = await repo.has_gm_permission(interaction.guild.id, interaction.user)
-                
-        # For the scene notes button, only GMs can use it
+            
+        # For GM-only buttons, check permissions
         component_id = interaction.data.get("custom_id", "")
-        if component_id == "edit_scene_notes" and not self.is_gm:
-            await interaction.response.send_message("❌ Only GMs can edit scene notes.", ephemeral=True)
+        
+        # List of GM-only buttons - add any other GM-only buttons here
+        gm_only_buttons = ["edit_scene_notes", "edit_aspects", "edit_zones", "manage_npcs", "edit_environment"]
+        
+        if component_id in gm_only_buttons and not self.is_gm:
+            await interaction.response.send_message("❌ Only GMs can use this feature.", ephemeral=True)
             return False
-                
+            
         return True
 
 
@@ -232,7 +336,7 @@ class EmptySceneButton(discord.ui.Button):
         await interaction.response.defer()
 
 
-class GenericSceneView(BasePinnedSceneView):
+class GenericSceneView(BasePinnableSceneView):
     """Generic implementation of pinned scene view"""
     
     async def create_scene_content(self):
@@ -291,7 +395,7 @@ class GenericSceneView(BasePinnedSceneView):
 
 
 class SceneNotesButton(ui.Button):
-    def __init__(self, parent_view: BasePinnedSceneView):
+    def __init__(self, parent_view: BasePinnableSceneView):
         super().__init__(label="Edit Scene Notes", style=discord.ButtonStyle.primary, custom_id="edit_scene_notes", row=0)
         self.parent_view = parent_view
 
@@ -306,7 +410,7 @@ class SceneNotesButton(ui.Button):
 
 
 class SceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
-    def __init__(self, parent_view: BasePinnedSceneView):
+    def __init__(self, parent_view: BasePinnableSceneView):
         super().__init__()
         self.parent_view = parent_view
         
@@ -326,8 +430,19 @@ class SceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
         # Update notes in DB
         repo.set_scene_notes(self.parent_view.guild_id, self.notes.value, self.parent_view.scene_id)
         
-        # Update the pinned message
-        await self.parent_view.update_view(interaction)
+        # Find any SceneCommands cog instance to use its update method
+        scene_cog = None
+        for cog in interaction.client.cogs.values():
+            if isinstance(cog, commands.Cog) and hasattr(cog, "_update_all_pinned_scenes"):
+                scene_cog = cog
+                break
+        
+        # Update all pinned scenes with this scene ID - ensures hidden aspects stay hidden
+        if scene_cog:
+            await scene_cog._update_all_pinned_scenes(interaction.guild, self.parent_view.scene_id)
+        else:
+            # Fallback to the basic update if we can't find the cog
+            await self.parent_view.update_view(interaction)
         
         # Send confirmation
         await interaction.response.send_message("✅ Scene notes updated.", ephemeral=True)

@@ -12,10 +12,10 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
   - Import/export characters as JSON files for easy transfer between servers.
 
 - **Scene Management**  
-  - Create and manage multiple scenes.
-  - Switch between scenes to organize different locations or encounters.
-  - Add or remove NPCs from scenes.
-  - View a summary of all NPCs in a scene.
+  - Create and manage multiple scenes and keep track of NPCs and notes
+  - Switch between scenes to organize different locations or encounters
+  - System-specific scene details (Fate aspects, Traveller environmental conditions)
+  - Pin scenes to channels for easy reference by all players
 
 - **Customizable Skills**  
   - GMs can set default skill lists per server and system, via .txt file upload.
@@ -114,10 +114,10 @@ The following are the commands that are currently available.
   (GM only) Create a new scene with the given name.
 
 - `/scene list`  
-  View all available scenes with an indicator for the active one.
+  (GM only) View all available scenes.
 
 - `/scene switch [scene_name]`  
-  (GM only) Switch to a different scene.
+  (GM only) Switch to a different scene. This automatically unpins any old scene messages and pins the new scene to the current channel.
 
 - `/scene rename [current_name] [new_name]`  
   (GM only) Rename an existing scene.
@@ -125,14 +125,14 @@ The following are the commands that are currently available.
 - `/scene delete [scene_name]`  
   (GM only) Delete a scene and all its associated data.
 
-- `/scene view`  
-  View the current active scene.
+- `/scene view [scene_name]`  
+  View any scene (active or inactive). If no scene name is provided, shows the current active scene.
   
-- `/scene add [npc name]`  
-  (GM only) Add an NPC to the current active scene.
+- `/scene addnpc [npc name] [scene_name]`  
+  (GM only) Add an NPC to a scene. If scene_name is not provided, adds to the active scene.
 
-- `/scene remove [npc name]`  
-  (GM only) Remove an NPC from the current active scene.
+- `/scene removenpc [npc name] [scene_name]`  
+  (GM only) Remove an NPC from a scene. If scene_name is not provided, removes from the active scene.
 
 - `/scene clear`  
   (GM only) Clear all NPCs from the current active scene.

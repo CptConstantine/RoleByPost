@@ -6,7 +6,9 @@ from discord.ext import commands
 from commands.narration import process_narration
 from data import repo
 from commands import character_commands, initiative_commands, reminder_commands, roll_commands, scene_commands, setup_commands, recap_commands
-from core.scene_views import GenericSceneView, EmptySceneButton
+from rpg_systems.fate import fate_commands
+from core.initiative_views import GenericInitiativeView, PopcornInitiativeView
+from core.scene_views import GenericSceneView
 from rpg_systems.fate.fate_scene_view import FateSceneView
 from rpg_systems.mgt2e.mgt2e_scene_view import MGT2ESceneView
 
@@ -29,9 +31,8 @@ async def setup_hook():
     await roll_commands.setup_roll_commands(bot)
     await reminder_commands.setup_reminder_commands(bot)
     await recap_commands.setup_recap_commands(bot)
-    
-    # Register persistent views
-    from core.initiative_views import GenericInitiativeView, PopcornInitiativeView
+    # System-specific commands
+    await fate_commands.setup_fate_commands(bot)
     
     # Register empty instances of the initiative views for persistence
     bot.add_view(GenericInitiativeView()) 

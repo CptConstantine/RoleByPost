@@ -31,19 +31,19 @@ class FateCharacter(BaseCharacter):
         "Will": 0
     }
     SYSTEM_SPECIFIC_CHARACTER = {
+        "refresh": 3,  
         "fate_points": 3,
         "skills": {},
-        "aspects": [],
-        "hidden_aspects": [],
+        "aspects": [],  # This will now hold objects, not strings
         "stress": {"physical": [False, False], "mental": [False, False]},
         "consequences": ["Mild: None", "Moderate: None", "Severe: None"],
         "stunts": {}  # Added stunts as a dictionary: {name: description}
     }
     SYSTEM_SPECIFIC_NPC = {
+        "refresh": 0,
         "fate_points": 0,
         "skills": {},
-        "aspects": [],
-        "hidden_aspects": [],
+        "aspects": [],  # This will now hold objects, not strings
         "stress": {"physical": [False, False], "mental": [False, False]},
         "consequences": ["Mild: None"],
         "stunts": {}  # Added stunts for NPCs too
@@ -67,20 +67,54 @@ class FateCharacter(BaseCharacter):
         self.data["skills"] = value
 
     @property
-    def aspects(self) -> List[str]:
-        return self.data.get("aspects", [])
+    def aspects(self) -> List[Dict[str, Any]]:
+        """Get aspects as list of dictionaries with name, description, is_hidden properties"""
+        aspects_data = self.data.get("aspects", [])
+        
+        # Handle migration from old format (list of strings) to new format (list of dicts)
+        if aspects_data and isinstance(aspects_data[0], str):
+            # Convert old format to new format
+            hidden_aspects = self.data.get("hidden_aspects", [])
+            new_aspects = []
+            for idx, name in enumerate(aspects_data):
+                new_aspects.append({
+                    "name": name,
+                    "description": "",
+                    "is_hidden": idx in hidden_aspects
+                })
+            # Store the migrated data
+            self.data["aspects"] = new_aspects
+            # Remove the old hidden_aspects field
+            if "hidden_aspects" in self.data:
+                del self.data["hidden_aspects"]
+            return new_aspects
+        
+        return aspects_data
 
     @aspects.setter
-    def aspects(self, value: List[str]):
+    def aspects(self, value: List[Dict[str, Any]]):
+        """Set aspects as list of dictionaries"""
         self.data["aspects"] = value
 
+    # Keep the hidden_aspects property for backward compatibility but deprecate it
     @property
     def hidden_aspects(self) -> List[int]:
-        return self.data.get("hidden_aspects", [])
+        """DEPRECATED: Use the is_hidden property in each aspect instead"""
+        # For backward compatibility, generate from the new format
+        aspects = self.aspects
+        hidden_indices = []
+        for idx, aspect in enumerate(aspects):
+            if aspect.get("is_hidden", False):
+                hidden_indices.append(idx)
+        return hidden_indices
 
     @hidden_aspects.setter
     def hidden_aspects(self, value: List[int]):
-        self.data["hidden_aspects"] = value
+        """DEPRECATED: Convert to the new format using is_hidden property"""
+        aspects = self.aspects
+        for idx, aspect in enumerate(aspects):
+            aspect["is_hidden"] = idx in value
+        self.aspects = aspects
 
     @property
     def fate_points(self) -> int:
@@ -89,6 +123,14 @@ class FateCharacter(BaseCharacter):
     @fate_points.setter
     def fate_points(self, value: int):
         self.data["fate_points"] = value
+
+    @property
+    def refresh(self) -> int:
+        return self.data.get("refresh", 0)
+
+    @refresh.setter
+    def refresh(self, value: int):
+        self.data["refresh"] = value
 
     @property
     def stress(self) -> Dict[str, list]:
@@ -221,19 +263,24 @@ class FateRollModifiers(RollModifiers):
 
 class FateSheet(BaseSheet):
     def format_full_sheet(self, character: FateCharacter) -> discord.Embed:
-        # Use the property .name instead of get_name()
         embed = discord.Embed(title=f"{character.name}", color=discord.Color.purple())
 
         # --- Aspects ---
         aspects = character.aspects
-        hidden_aspects = character.hidden_aspects
         if aspects:
             aspect_lines = []
-            for idx, aspect in enumerate(aspects):
-                if idx in hidden_aspects:
-                    aspect_lines.append(f"- *{aspect}*")
-                else:
-                    aspect_lines.append(f"- {aspect}")
+            for aspect in aspects:
+                name = aspect.get("name", "")
+                description = aspect.get("description", "")
+                is_hidden = aspect.get("is_hidden", False)
+                
+                # Format each aspect
+                line = f"- {'*' if is_hidden else ''}{name}"
+                if is_hidden:
+                    line += "*"
+                    
+                aspect_lines.append(line)
+                
             embed.add_field(name="Aspects", value="\n".join(aspect_lines), inline=False)
         else:
             embed.add_field(name="Aspects", value="None", inline=False)
@@ -266,9 +313,10 @@ class FateSheet(BaseSheet):
         else:
             embed.add_field(name="Consequences", value="None", inline=False)
 
-        # --- Fate Points ---
+        # --- Fate Points / Refresh ---
         fp = character.fate_points
-        embed.add_field(name="Fate Points", value=str(fp), inline=True)
+        refresh = character.refresh
+        embed.add_field(name="Fate Points", value=f"{fp}/{refresh}", inline=True)
 
         # --- Stunts ---
         stunts = character.stunts
@@ -288,15 +336,33 @@ class FateSheet(BaseSheet):
 
     def format_npc_scene_entry(self, npc: FateCharacter, is_gm: bool):
         aspects = npc.aspects
-        hidden = npc.hidden_aspects
         aspect_lines = []
-        for idx, aspect in enumerate(aspects):
-            if idx in hidden:
-                aspect_lines.append(f"*{aspect}*" if is_gm else "*hidden*")
+        
+        for aspect in aspects:
+            name = aspect.get("name", "")
+            description = aspect.get("description", "")
+            is_hidden = aspect.get("is_hidden", False)
+            
+            if is_hidden and not is_gm:
+                # Hidden aspect and not GM, just show "hidden"
+                aspect_lines.append("*hidden*")
+            elif is_hidden and is_gm:
+                # Hidden aspect but GM can see it
+                if description:
+                    aspect_lines.append(f"*{name}: {description}*")
+                else:
+                    aspect_lines.append(f"*{name}*")
             else:
-                aspect_lines.append(aspect)
+                # Not hidden, show to everyone
+                if description:
+                    aspect_lines.append(f"{name}: {description}")
+                else:
+                    aspect_lines.append(name)
+                    
         aspect_str = "\n".join(aspect_lines) if aspect_lines else "_No aspects set_"
         lines = [f"**{npc.name}**\n{aspect_str}"]
+        
+        # Rest of the method unchanged
         if is_gm and npc.notes:
             notes_display = "\n".join(npc.notes)
             lines.append(f"**Notes:** *{notes_display}*")
@@ -340,8 +406,8 @@ class FateSheetEditView(ui.View):
     async def edit_consequences(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.edit_message(content="Editing consequences:", view=EditConsequencesView(interaction.guild.id, self.editor_id, self.char_id))
 
-    @ui.button(label="Edit Fate Points", style=discord.ButtonStyle.primary, row=1)
-    async def edit_fp(self, interaction: discord.Interaction, button: ui.Button):
+    @ui.button(label="Edit Fate Points/Refresh", style=discord.ButtonStyle.primary, row=1)
+    async def edit_fate_points(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(EditFatePointsModal(self.char_id))
 
     @ui.button(label="Edit Name", style=discord.ButtonStyle.secondary, row=2)
@@ -399,7 +465,6 @@ class EditAspectsView(ui.View):
 
         self.char = None
         self.aspects = []
-        self.hidden_aspects = []
         self.max_page = 0
         self.load_data()
         self.render()
@@ -408,29 +473,44 @@ class EditAspectsView(ui.View):
         self.char = get_character(self.guild_id, self.char_id)
         if not self.char:
             self.aspects = []
-            self.hidden_aspects = []
         else:
             self.aspects = self.char.aspects
-            self.hidden_aspects = self.char.hidden_aspects
         self.max_page = max(0, len(self.aspects) - 1)
 
     def render(self):
         self.clear_items()
         if self.aspects:
-            label = f"{self.page + 1}/{len(self.aspects)}: {self.aspects[self.page][:30]}"
+            current_aspect = self.aspects[self.page]
+            aspect_name = current_aspect.get("name", "")
+            is_hidden = current_aspect.get("is_hidden", False)
+            
+            label = f"{self.page + 1}/{len(self.aspects)}: {aspect_name[:30]}"
             self.add_item(ui.Button(label=label, disabled=True, row=0))
+            
+            # Add view description button if there is a description
+            if current_aspect.get("description", ""):
+                self.add_item(ui.Button(label="📖 View Description", style=discord.ButtonStyle.primary, row=0, custom_id="view_desc"))
+            
+            # Navigation buttons
             if self.page > 0:
                 self.add_item(ui.Button(label="◀️ Prev", style=discord.ButtonStyle.secondary, row=1, custom_id="prev"))
             if self.page < self.max_page:
                 self.add_item(ui.Button(label="Next ▶️", style=discord.ButtonStyle.secondary, row=1, custom_id="next"))
+            
+            # Action buttons
             self.add_item(ui.Button(label="✏️ Edit", style=discord.ButtonStyle.primary, row=2, custom_id="edit"))
             self.add_item(ui.Button(label="🗑 Remove", style=discord.ButtonStyle.danger, row=2, custom_id="remove"))
-            is_hidden = self.page in self.hidden_aspects
+            
+            # Visibility toggle
             toggle_label = "🙈 Hide" if not is_hidden else "👁 Unhide"
             toggle_style = discord.ButtonStyle.secondary if not is_hidden else discord.ButtonStyle.success
             self.add_item(ui.Button(label=toggle_label, style=toggle_style, row=2, custom_id="toggle_hidden"))
+        
+        # Add aspect button and done button
         self.add_item(ui.Button(label="➕ Add New", style=discord.ButtonStyle.success, row=3, custom_id="add"))
         self.add_item(ui.Button(label="✅ Done", style=discord.ButtonStyle.secondary, row=3, custom_id="done"))
+        
+        # Assign callbacks
         for item in self.children:
             if isinstance(item, ui.Button) and item.custom_id:
                 item.callback = self.make_callback(item.custom_id)
@@ -438,54 +518,79 @@ class EditAspectsView(ui.View):
     def make_callback(self, cid):
         async def callback(interaction: discord.Interaction):
             if interaction.user.id != self.user_id:
-                await interaction.response.send_message("You can’t edit this character.", ephemeral=True)
+                await interaction.response.send_message("You can't edit this character.", ephemeral=True)
                 return
 
             self.char = get_character(interaction.guild.id, self.char_id)
             self.aspects = self.char.aspects
-            self.hidden_aspects = self.char.hidden_aspects
 
             if cid == "prev":
                 self.page = max(0, self.page - 1)
             elif cid == "next":
                 self.page = min(self.max_page, self.page + 1)
+            elif cid == "view_desc":
+                current_aspect = self.aspects[self.page]
+                name = current_aspect.get("name", "")
+                description = current_aspect.get("description", "")
+                await interaction.response.send_message(
+                    f"**{name}**\n{description}", 
+                    ephemeral=True
+                )
+                return
             elif cid == "edit":
                 await interaction.response.send_modal(EditAspectModal(self.char_id, self.page, self.aspects[self.page]))
                 return
             elif cid == "remove":
-                if self.page in self.hidden_aspects:
-                    self.hidden_aspects.remove(self.page)
                 del self.aspects[self.page]
                 self.char.aspects = self.aspects
-                self.char.hidden_aspects = self.hidden_aspects
                 repo.set_character(interaction.guild.id, self.char, system=SYSTEM)
                 self.page = max(0, self.page - 1)
             elif cid == "toggle_hidden":
-                if self.page in self.hidden_aspects:
-                    self.hidden_aspects.remove(self.page)
-                else:
-                    self.hidden_aspects.append(self.page)
-                self.char.hidden_aspects = self.hidden_aspects
+                current_aspect = self.aspects[self.page]
+                current_aspect["is_hidden"] = not current_aspect.get("is_hidden", False)
+                self.char.aspects = self.aspects
                 repo.set_character(interaction.guild.id, self.char, system=SYSTEM)
             elif cid == "add":
                 await interaction.response.send_modal(AddAspectModal(self.char_id))
                 return
             elif cid == "done":
-                await interaction.response.edit_message(content="✅ Done editing aspects.", embed=FateSheet().format_full_sheet(self.char), view=FateSheetEditView(interaction.user.id, self.char_id))
+                await interaction.response.edit_message(
+                    content="✅ Done editing aspects.", 
+                    embed=FateSheet().format_full_sheet(self.char), 
+                    view=FateSheetEditView(interaction.user.id, self.char_id)
+                )
                 return
 
+            # Save changes and update view
             repo.set_character(interaction.guild.id, self.char, system=SYSTEM)
             self.load_data()
             self.render()
             await interaction.response.edit_message(embed=FateSheet().format_full_sheet(self.char), view=self)
+        
         return callback
 
 class EditAspectModal(ui.Modal, title="Edit Aspect"):
-    def __init__(self, char_id: str, index: int, current: str):
+    def __init__(self, char_id: str, index: int, aspect: Dict[str, Any]):
         super().__init__()
         self.char_id = char_id
         self.index = index
-        self.add_item(ui.TextInput(label="Aspect", default=current, max_length=100))
+        
+        self.name_field = ui.TextInput(
+            label="Aspect Name",
+            default=aspect.get("name", ""),
+            max_length=100,
+            required=True
+        )
+        self.add_item(self.name_field)
+        
+        self.description_field = ui.TextInput(
+            label="Description (optional)",
+            default=aspect.get("description", ""),
+            style=discord.TextStyle.paragraph,
+            max_length=500,
+            required=False
+        )
+        self.add_item(self.description_field)
 
     async def on_submit(self, interaction: discord.Interaction):
         character = get_character(interaction.guild.id, self.char_id)
@@ -493,24 +598,59 @@ class EditAspectModal(ui.Modal, title="Edit Aspect"):
         if self.index >= len(aspects):
             await interaction.response.send_message("❌ Aspect not found.", ephemeral=True)
             return
-        aspects[self.index] = self.children[0].value.strip()
+        
+        # Update the aspect with new values
+        aspects[self.index]["name"] = self.name_field.value.strip()
+        aspects[self.index]["description"] = self.description_field.value.strip()
+        
+        # Save changes
         character.aspects = aspects
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
-        await interaction.response.edit_message(content="✅ Aspect updated.", embed=FateSheet().format_full_sheet(character), view=EditAspectsView(interaction.guild.id, interaction.user.id, self.char_id))
+        await interaction.response.edit_message(
+            content="✅ Aspect updated.", 
+            embed=FateSheet().format_full_sheet(character), 
+            view=EditAspectsView(interaction.guild.id, interaction.user.id, self.char_id)
+        )
 
 class AddAspectModal(ui.Modal, title="Add Aspect"):
     def __init__(self, char_id: str):
         super().__init__()
         self.char_id = char_id
-        self.add_item(ui.TextInput(label="New Aspect", max_length=100))
+        
+        self.name_field = ui.TextInput(
+            label="Aspect Name",
+            max_length=100,
+            required=True
+        )
+        self.add_item(self.name_field)
+        
+        self.description_field = ui.TextInput(
+            label="Description (optional)",
+            style=discord.TextStyle.paragraph,
+            max_length=500,
+            required=False
+        )
+        self.add_item(self.description_field)
 
     async def on_submit(self, interaction: discord.Interaction):
         character = get_character(interaction.guild.id, self.char_id)
         aspects = character.aspects
-        aspects.append(self.children[0].value.strip())
+        
+        # Create new aspect with the provided data
+        new_aspect = {
+            "name": self.name_field.value.strip(),
+            "description": self.description_field.value.strip(),
+            "is_hidden": False  # Default to visible
+        }
+        
+        aspects.append(new_aspect)
         character.aspects = aspects
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
-        await interaction.response.edit_message(content="✅ Aspect added.", embed=FateSheet().format_full_sheet(character), view=EditAspectsView(interaction.guild.id, interaction.user.id, self.char_id))
+        await interaction.response.edit_message(
+            content="✅ Aspect added.", 
+            embed=FateSheet().format_full_sheet(character), 
+            view=EditAspectsView(interaction.guild.id, interaction.user.id, self.char_id)
+        )
 
 class EditStressModal(ui.Modal, title="Edit Stress"):
     physical = ui.TextInput(label="Physical Stress (e.g. 1 1 0)", required=False)
@@ -529,22 +669,34 @@ class EditStressModal(ui.Modal, title="Edit Stress"):
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
         await interaction.response.edit_message(content="✅ Stress updated!", embed=FateSheet().format_full_sheet(character), view=FateSheetEditView(interaction.user.id, self.char_id))
 
-class EditFatePointsModal(ui.Modal, title="Edit Fate Points"):
+class EditFatePointsModal(ui.Modal, title="Edit Fate Points/Refresh"):
     fate_points = ui.TextInput(label="Fate Points", required=True)
+    refresh = ui.TextInput(label="Refresh", required=True)
 
     def __init__(self, char_id):
         super().__init__()
         self.char_id = char_id
+        
+        # Get current values to show as defaults
+        character = get_character(None, char_id)
+        if character:
+            self.fate_points.default = str(character.fate_points)
+            self.refresh.default = str(character.refresh)
 
     async def on_submit(self, interaction: discord.Interaction):
         character = get_character(interaction.guild.id, self.char_id)
         try:
             character.fate_points = int(self.fate_points.value)
+            character.refresh = int(self.refresh.value)
         except ValueError:
             await interaction.response.send_message("❌ Invalid number.", ephemeral=True)
             return
         repo.set_character(interaction.guild.id, character, system=SYSTEM)
-        await interaction.response.edit_message(content="✅ Fate Points updated.", embed=FateSheet().format_full_sheet(character), view=FateSheetEditView(interaction.user.id, self.char_id))
+        await interaction.response.edit_message(
+            content="✅ Fate Points and Refresh updated.", 
+            embed=FateSheet().format_full_sheet(character), 
+            view=FateSheetEditView(interaction.user.id, self.char_id)
+        )
 
 class EditConsequenceModal(ui.Modal, title="Edit Consequence"):
     def __init__(self, char_id: str, index: int, current: str):

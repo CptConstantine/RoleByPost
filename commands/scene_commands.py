@@ -85,16 +85,83 @@ class SceneCommands(commands.Cog):
         # Set the new scene as active
         repo.set_active_scene(interaction.guild.id, scene["id"])
         
-        # Update all pinned scene messages
-        await self._update_all_pinned_scenes(interaction.guild, scene["id"])
+        # Use defer to prevent the interaction from timing out
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        # Step 1: Unpin any existing pinned scene messages
+        pinned_messages = repo.get_all_pinned_scene_messages(interaction.guild.id)
         
-        await interaction.response.send_message(f"🔄 Switched to scene: **{scene_name}**", ephemeral=True)
+        for old_scene_id, channel_id, message_id in pinned_messages:
+            try:
+                # Get the channel
+                channel = interaction.guild.get_channel(int(channel_id))
+                if not channel:
+                    continue
+                    
+                # Get the message
+                try:
+                    message = await channel.fetch_message(int(message_id))
+                    if message:
+                        # Unpin the message
+                        await message.unpin()
+                        
+                        # Update the message to show it's no longer the active scene
+                        await message.edit(
+                            content="⚠️ **SCENE CHANGED** ⚠️",
+                            embed=discord.Embed(
+                                title=f"Scene Changed to: {scene_name}",
+                                description=f"This scene is no longer active. The active scene is now **{scene_name}**.",
+                                color=discord.Color.dark_gold()
+                            ),
+                            view=None
+                        )
+                except discord.NotFound:
+                    pass  # Message was deleted, just continue
+                except Exception as e:
+                    logging.error(f"Error updating old scene message: {e}")
+            except Exception as e:
+                logging.error(f"Error handling old scene message: {e}")
+        
+        # Clear all existing pins from the database
+        repo.clear_scene_pins(interaction.guild.id)
+        
+        # Step 2: Pin the new active scene in the current channel
+        system = repo.get_system(interaction.guild.id)
+        
+        # Create a new scene view for the active scene
+        view = factories.get_specific_scene_view(
+            system=system,
+            guild_id=str(interaction.guild.id),
+            channel_id=str(interaction.channel.id),
+            scene_id=scene["id"]
+        )
+        
+        # Set is_gm to False for the pinned message to ensure hidden aspects remain hidden
+        view.is_gm = False
+        view.build_view_components()
+        
+        # Create and pin the message
+        message = await view.pin_message(interaction)
+        
+        # Create response message based on old scene
+        response = f"🔄 Switched to scene: **{scene_name}**"
+        if old_scene:
+            response += f" (from **{old_scene['name']}**)"
+
+        if message:
+            response += "\n✅ The scene has been pinned to this channel."
+        
+        await interaction.followup.send(response, ephemeral=True)
 
     @scene_group.command(name="list", description="List all scenes")
     async def scene_list(self, interaction: discord.Interaction):
-        scenes = repo.get_scenes(interaction.guild.id)
         is_gm = await repo.has_gm_permission(interaction.guild.id, interaction.user)
+        if not is_gm:
+            interaction.response.send_message("This command is only available to GMs.", ephemeral=True)
+            return
         
+        scenes = repo.get_scenes(interaction.guild.id)
+
         if not scenes:
             message = "No scenes have been created yet."
             if is_gm:
@@ -117,7 +184,7 @@ class SceneCommands(commands.Cog):
         if is_gm:
             embed.set_footer(text="Use /scene switch to change the active scene")
             
-        await interaction.response.send_message(embed=embed, ephemeral=False)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @scene_group.command(name="delete", description="Delete a scene")
     @app_commands.describe(scene_name="Name of the scene to delete")
@@ -177,70 +244,121 @@ class SceneCommands(commands.Cog):
             ephemeral=True
         )
 
-    @scene_group.command(name="add", description="Add an NPC to the current scene.")
-    @app_commands.describe(npc_name="The name of the NPC to add to the scene")
-    @app_commands.autocomplete(npc_name=npc_name_autocomplete)
-    async def scene_add(self, interaction: discord.Interaction, npc_name: str):
+    @scene_group.command(name="addnpc", description="Add an NPC to a scene")
+    @app_commands.describe(
+        npc_name="The name of the NPC to add to the scene",
+        scene_name="Optional: Name of the scene to add to (defaults to active scene)"
+    )
+    @app_commands.autocomplete(
+        npc_name=npc_name_autocomplete,
+        scene_name=scene_name_autocomplete
+    )
+    async def scene_add_npc(self, interaction: discord.Interaction, npc_name: str, scene_name: str = None):
+        """
+        Add an NPC to a scene
+        
+        Parameters:
+        -----------
+        npc_name: The name of the NPC to add
+        scene_name: Optional name of the scene to add to. If not provided, adds to the active scene.
+        """
         if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
-            await interaction.response.send_message("❌ Only GMs can manage the scene.", ephemeral=True)
+            await interaction.response.send_message("❌ Only GMs can manage scenes.", ephemeral=True)
             return
             
-        active_scene = repo.get_active_scene(interaction.guild.id)
-        if not active_scene:
-            await interaction.response.send_message("❌ No active scene. Create one with `/scene create` first.", ephemeral=True)
-            return
-            
+        # Determine which scene to use
+        scene = None
+        if scene_name:
+            scene = repo.get_scene_by_name(interaction.guild.id, scene_name)
+            if not scene:
+                await interaction.response.send_message(f"❌ Scene '{scene_name}' not found.", ephemeral=True)
+                return
+        else:
+            scene = repo.get_active_scene(interaction.guild.id)
+            if not scene:
+                await interaction.response.send_message("❌ No active scene. Create one with `/scene create` first or specify a scene name.", ephemeral=True)
+                return
+        
+        # Get the NPC
         npc = repo.get_character(interaction.guild.id, npc_name)
         if not npc:
             await interaction.response.send_message("❌ NPC not found. Did you create it with `/character create npc`?", ephemeral=True)
             return
             
-        scene_npcs = repo.get_scene_npc_ids(interaction.guild.id)
+        # Check if the NPC is already in the scene
+        scene_npcs = repo.get_scene_npc_ids(interaction.guild.id, scene["id"])
         if npc.id in scene_npcs:
-            await interaction.response.send_message("⚠️ That NPC is already in the scene.", ephemeral=True)
+            await interaction.response.send_message(f"⚠️ {npc_name} is already in scene '{scene['name']}'.", ephemeral=True)
             return
             
-        repo.add_scene_npc(interaction.guild.id, npc.id)
+        # Add the NPC to the scene
+        repo.add_scene_npc(interaction.guild.id, npc.id, scene["id"])
         
-        # Update all pinned scene messages
-        await self._update_all_pinned_scenes(interaction.guild, active_scene["id"])
+        # Only update pinned messages if the scene is active
+        if scene["is_active"]:
+            await self._update_all_pinned_scenes(interaction.guild, scene["id"])
         
         await interaction.response.send_message(
-            f"✅ **{npc_name}** added to scene **{active_scene['name']}**.", 
+            f"✅ **{npc_name}** added to scene **{scene['name']}**.", 
             ephemeral=True
         )
 
-    @scene_group.command(name="remove", description="Remove an NPC from the current scene.")
-    @app_commands.describe(npc_name="The name of the NPC to remove from the scene")
-    @app_commands.autocomplete(npc_name=npcs_in_scene_autocomplete)
-    async def scene_remove(self, interaction: discord.Interaction, npc_name: str):
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
-            await interaction.response.send_message("❌ Only GMs can manage the scene.", ephemeral=True)
-            return
-            
-        active_scene = repo.get_active_scene(interaction.guild.id)
-        if not active_scene:
-            await interaction.response.send_message("❌ No active scene. Create one with `/scene create` first.", ephemeral=True)
-            return
-            
-        scene_npcs = repo.get_scene_npc_ids(interaction.guild.id)
-        npc = repo.get_character(interaction.guild.id, npc_name)
+    @scene_group.command(name="removenpc", description="Remove an NPC from a scene")
+    @app_commands.describe(
+        npc_name="The name of the NPC to remove from the scene",
+        scene_name="Optional: Name of the scene to remove from (defaults to active scene)"
+    )
+    @app_commands.autocomplete(
+        npc_name=npcs_in_scene_autocomplete,
+        scene_name=scene_name_autocomplete
+    )
+    async def scene_removenpc(self, interaction: discord.Interaction, npc_name: str, scene_name: str = None):
+        """
+        Remove an NPC from a scene
         
+        Parameters:
+        -----------
+        npc_name: The name of the NPC to remove
+        scene_name: Optional name of the scene to remove from. If not provided, removes from the active scene.
+        """
+        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+            await interaction.response.send_message("❌ Only GMs can manage scenes.", ephemeral=True)
+            return
+            
+        # Determine which scene to use
+        scene = None
+        if scene_name:
+            scene = repo.get_scene_by_name(interaction.guild.id, scene_name)
+            if not scene:
+                await interaction.response.send_message(f"❌ Scene '{scene_name}' not found.", ephemeral=True)
+                return
+        else:
+            scene = repo.get_active_scene(interaction.guild.id)
+            if not scene:
+                await interaction.response.send_message("❌ No active scene. Create one with `/scene create` first or specify a scene name.", ephemeral=True)
+                return
+    
+        # Get the NPC
+        npc = repo.get_character(interaction.guild.id, npc_name)
         if not npc:
             await interaction.response.send_message("❌ NPC not found.", ephemeral=True)
             return
             
+        # Check if the NPC is in the scene
+        scene_npcs = repo.get_scene_npc_ids(interaction.guild.id, scene["id"])
         if npc.id not in scene_npcs:
-            await interaction.response.send_message("❌ That NPC isn't in the current scene.", ephemeral=True)
+            await interaction.response.send_message(f"❌ {npc_name} isn't in scene '{scene['name']}'.", ephemeral=True)
             return
             
-        repo.remove_scene_npc(interaction.guild.id, npc.id)
+        # Remove the NPC from the scene
+        repo.remove_scene_npc(interaction.guild.id, npc.id, scene["id"])
         
-        # Update all pinned scene messages
-        await self._update_all_pinned_scenes(interaction.guild, active_scene["id"])
+        # Only update pinned messages if the scene is active
+        if scene["is_active"]:
+            await self._update_all_pinned_scenes(interaction.guild, scene["id"])
         
         await interaction.response.send_message(
-            f"🗑️ **{npc_name}** removed from scene **{active_scene['name']}**.", 
+            f"🗑️ **{npc_name}** removed from scene **{scene['name']}**.", 
             ephemeral=True
         )
 
@@ -265,49 +383,82 @@ class SceneCommands(commands.Cog):
             ephemeral=True
         )
 
-    @scene_group.command(name="view", description="View the current scene.")
-    async def scene_view(self, interaction: discord.Interaction):
-        active_scene = repo.get_active_scene(interaction.guild.id)
-        if not active_scene:
-            # For GMs, suggest creating a scene. For players, just inform them there's no scene.
-            if await repo.has_gm_permission(interaction.guild.id, interaction.user):
-                await interaction.response.send_message(
-                    "❌ No active scene. Create one with `/scene create` first.", 
-                    ephemeral=True
-                )
-            else:
-                await interaction.response.send_message("No active scene has been set up by the GM.", ephemeral=True)
-            return
+    @scene_group.command(name="view", description="View a scene (defaults to current scene if not specified)")
+    @app_commands.describe(scene_name="Optional: Name of the scene to view (defaults to active scene)")
+    @app_commands.autocomplete(scene_name=scene_name_autocomplete)
+    async def scene_view(self, interaction: discord.Interaction, scene_name: str = None):
+        """
+        View a scene - can specify a specific scene or view the current active scene
+        
+        Parameters:
+        -----------
+        scene_name: Optional name of the scene to view. If not provided, shows the active scene.
+        """
+        # If scene_name is provided, get that specific scene
+        # Otherwise, get the active scene
+        scene = None
+        
+        if scene_name:
+            scene = repo.get_scene_by_name(interaction.guild.id, scene_name)
+            if not scene:
+                await interaction.response.send_message(f"❌ Scene '{scene_name}' not found.", ephemeral=True)
+                return
+        else:
+            scene = repo.get_active_scene(interaction.guild.id)
+            if not scene:
+                # For GMs, suggest creating a scene. For players, just inform them there's no scene.
+                if await repo.has_gm_permission(interaction.guild.id, interaction.user):
+                    await interaction.response.send_message(
+                        "❌ No active scene. Create one with `/scene create` first or specify a scene name.", 
+                        ephemeral=True
+                    )
+                else:
+                    await interaction.response.send_message("No active scene has been set up by the GM.", ephemeral=True)
+                return
         
         # Create a system-specific scene view
         system = repo.get_system(interaction.guild.id)
         is_gm = await repo.has_gm_permission(interaction.guild.id, interaction.user)
         
-        # Check if there's a pinned scene in this channel
-        pinned_msg = repo.get_scene_message_info(interaction.guild.id, interaction.channel.id)
+        # Check if the active scene is pinned in this channel
+        pinned_msg = None
+        if scene["is_active"]:  # Only check for pins if viewing the active scene
+            pinned_msg = repo.get_scene_message_info(interaction.guild.id, interaction.channel.id)
         
-        # Create a new system-specific scene view with the proper components
+        # Create a system-specific scene view with the proper components
         view = factories.get_specific_scene_view(
             system=system,
             guild_id=str(interaction.guild.id),
             channel_id=str(interaction.channel.id),
-            scene_id=active_scene["id"],
+            scene_id=scene["id"],
             message_id=pinned_msg["message_id"] if pinned_msg else None
         )
         
-        # Set the GM flag and build the components
+        # Set the GM flag based on the user's permission
+        # This allows GMs to see hidden aspects in their personal view
         view.is_gm = is_gm
         view.build_view_components()
         
         # Get the embed and content
         embed, content = await view.create_scene_content()
         
-        # If there's a pinned message for this scene in this channel, mention it
-        if pinned_msg:
-            embed.set_footer(text="This scene is also pinned at the top of the channel for easy reference.")
+        # Add footer content
+        if scene["is_active"]:
+            # For active scene, mention if it's pinned
+            if pinned_msg:
+                if is_gm:
+                    embed.set_footer(text="This scene is also pinned at the top of the channel.")
+                else:
+                    embed.set_footer(text="This scene is also pinned at the top of the channel for easy reference.")
+        else:
+            # For non-active scene, add a note
+            if is_gm:
+                embed.set_footer(text=f"This is not the active scene. Use `/scene switch \"{scene['name']}\"` to make it active.")
+            else:
+                embed.set_footer(text="This is not the currently active scene.")
         
-        # Send the message with our new view
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=False)
+        # Send the message with our view - IMPORTANT: Using ephemeral=True here
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     @scene_group.command(name="pin", description="Pin the current scene to this channel")
     async def scene_pin(self, interaction: discord.Interaction):
@@ -321,10 +472,18 @@ class SceneCommands(commands.Cog):
             await interaction.response.send_message("❌ No active scene. Create one with `/scene create` first.", ephemeral=True)
             return
         
+        # Active scene is guaranteed to be active, but add an explicit check for clarity
+        if not active_scene["is_active"]:
+            await interaction.response.send_message("❌ Only the active scene can be pinned.", ephemeral=True)
+            return
+        
+        # Use defer to prevent the interaction from timing out
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
         # Get the system for this guild
         system = repo.get_system(interaction.guild.id)
         
-        # Create and pin the scene view
+        # Create the scene view
         view = factories.get_specific_scene_view(
             system=system,
             guild_id=interaction.guild.id, 
@@ -332,13 +491,19 @@ class SceneCommands(commands.Cog):
             scene_id=active_scene["id"]
         )
         
-        # Check if user is GM
-        view.is_gm = await repo.has_gm_permission(interaction.guild.id, interaction.user)
+        # IMPORTANT: Since pinned messages are always visible to all channel members,
+        # we set is_gm to False regardless of who creates it, to ensure hidden aspects are hidden
+        view.is_gm = False
         view.build_view_components()
         
-        # This will create the pinned message
-        await view.get_scene_message(interaction)
-        await interaction.response.send_message("✅ Scene pinned to this channel.", ephemeral=True)
+        # Pin the message
+        message = await view.pin_message(interaction)
+        
+        # Use followup instead of the original response
+        if message:
+            await interaction.followup.send("✅ Scene pinned to this channel.")
+        else:
+            await interaction.followup.send("❌ Failed to pin the scene. Check bot permissions.")
 
     @scene_group.command(name="off", description="Disable pinned scenes and clear all pins")
     async def scene_off(self, interaction: discord.Interaction):
@@ -393,20 +558,36 @@ class SceneCommands(commands.Cog):
         )
 
     # Helper method to update all pinned scenes after a change
-    async def _update_all_pinned_scenes(self, guild, scene_id):
-        """Update all pinned scene messages for a specific scene"""
+    async def _update_all_pinned_scenes(self, guild, scene_id=None):
+        """
+        Update all pinned scene messages for a specific scene or for all scenes if scene_id is None
+        
+        Args:
+            guild: The Discord guild object
+            scene_id: Optional scene ID to update. If None, updates all active scenes
+        """
         try:
-            # Get all pinned messages for this guild and scene
+            # Get all pinned messages for this guild
             pinned_messages = repo.get_all_pinned_scene_messages(guild.id)
-            
+            if not pinned_messages:
+                return  # No pinned messages to update
+                
             # Get the system for this guild
             system = repo.get_system(guild.id)
             
+            # If scene_id is None, get active scene
+            if scene_id is None:
+                active_scene = repo.get_active_scene(guild.id)
+                if active_scene:
+                    scene_id = active_scene["id"]
+                else:
+                    return  # No active scene to update
+        
             # Update all relevant pinned messages
             for old_scene_id, channel_id, message_id in pinned_messages:
-                if old_scene_id != str(scene_id):
+                if scene_id and old_scene_id != str(scene_id):
                     continue  # Only update messages for this scene
-                    
+                
                 try:
                     # Get the channel
                     channel = guild.get_channel(int(channel_id))
@@ -418,11 +599,12 @@ class SceneCommands(commands.Cog):
                         system=system,
                         guild_id=str(guild.id), 
                         channel_id=channel_id,
-                        scene_id=scene_id,
+                        scene_id=old_scene_id,
                         message_id=message_id
                     )
                     
-                    # Set is_gm to False for the update (safer default)
+                    # IMPORTANT: Always set is_gm to False for pinned scene updates
+                    # This ensures that hidden aspects are always hidden in public pinned messages
                     view.is_gm = False
                     view.build_view_components()
                     

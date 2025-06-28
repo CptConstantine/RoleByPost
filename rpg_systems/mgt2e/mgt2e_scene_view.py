@@ -1,12 +1,13 @@
 import discord
 from discord import ui
+from discord.ext import commands
 from core import factories
 from data import repo
-from core.scene_views import BasePinnedSceneView, SceneNotesButton
+from core.scene_views import BasePinnableSceneView, SceneNotesButton
 
 SYSTEM = "mgt2e"
 
-class MGT2ESceneView(BasePinnedSceneView):
+class MGT2ESceneView(BasePinnableSceneView):
     """Mongoose Traveller 2E scene view with environmental details"""
     
     async def create_scene_content(self):
@@ -30,7 +31,7 @@ class MGT2ESceneView(BasePinnedSceneView):
         for npc_id in npc_ids:
             npc = repo.get_character_by_id(self.guild_id, npc_id)
             if npc:
-                lines.append(sheet.format_npc_scene_entry(npc, is_gm=False))
+                lines.append(sheet.format_npc_scene_entry(npc, is_gm=self.is_gm))
                 
         # Get scene notes
         notes = repo.get_scene_notes(self.guild_id, self.scene_id)
@@ -40,8 +41,8 @@ class MGT2ESceneView(BasePinnedSceneView):
         
         # Create embed
         embed = discord.Embed(
-            title=f"🎭 Current Scene: {scene['name']}",
-            color=discord.Color.purple()
+            title=f"🎭 {('Current' if scene['is_active'] else 'Inactive')} Scene: {scene['name']}",
+            color=discord.Color.purple() if scene["is_active"] else discord.Color.dark_grey()
         )
         
         description = ""
@@ -63,17 +64,23 @@ class MGT2ESceneView(BasePinnedSceneView):
             description += "📭 No NPCs are currently in this scene."
             
         embed.description = description
-        embed.set_footer(text="Scene view is pinned and will update automatically when the scene changes.")
         
-        content = "🎭 **CURRENT SCENE** 🎭"
+        # Add appropriate footer based on scene active status
+        if scene["is_active"]:
+            embed.set_footer(text="Scene view will update automatically when the scene changes.")
+            content = "🎭 **CURRENT SCENE** 🎭"
+        else:
+            embed.set_footer(text="This is not the active scene. Use /scene switch to make it active.")
+            content = "🎭 **INACTIVE SCENE** 🎭"
         
         return embed, content
         
     def build_view_components(self):
-        if self.is_gm:
-            self.add_item(SceneNotesButton(self))
-            self.add_item(EditEnvironmentButton(self))
-            self.add_item(ManageNPCsButton(self))
+        # Add all buttons regardless of GM status - the interaction_check will handle permissions
+        self.clear_items()  # Clear any existing buttons
+        self.add_item(SceneNotesButton(self))
+        self.add_item(EditEnvironmentButton(self))
+        self.add_item(ManageNPCsButton(self))
 
 
 class EditEnvironmentButton(ui.Button):
@@ -82,7 +89,8 @@ class EditEnvironmentButton(ui.Button):
         self.parent_view = parent_view
 
     async def callback(self, interaction: discord.Interaction):
-        # Check if user has GM role
+        # Check if user has GM role - this is handled by interaction_check in base class,
+        # but we add an additional check here for safety
         if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only GMs can edit environment details.", ephemeral=True)
             return
@@ -97,7 +105,8 @@ class ManageNPCsButton(ui.Button):
         self.parent_view = parent_view
         
     async def callback(self, interaction: discord.Interaction):
-        # Check if user has GM role
+        # Check if user has GM role - this is handled by interaction_check in base class,
+        # but we add an additional check here for safety
         if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only GMs can manage NPCs.", ephemeral=True)
             return
@@ -179,23 +188,25 @@ class ManageNPCsSelect(discord.ui.Select):
             
         for npc_id in to_remove:
             repo.remove_scene_npc(interaction.guild.id, npc_id, self.parent_view.scene_id)
+    
+        # Check if this is the active scene before updating pins
+        scene = repo.get_scene_by_id(interaction.guild.id, self.parent_view.scene_id)
+    
+        # Only update all pinned instances if this is the active scene
+        if scene and scene["is_active"]:
+            # Find any SceneCommands cog instance to use its update method
+            scene_cog = None
+            for cog in interaction.client.cogs.values():
+                if isinstance(cog, commands.Cog) and hasattr(cog, "_update_all_pinned_scenes"):
+                    scene_cog = cog
+                    break
         
-        # Update the parent view
+            # Update all pinned scenes with this scene ID
+            if scene_cog:
+                await scene_cog._update_all_pinned_scenes(interaction.guild, self.parent_view.scene_id)
+    
+        # Always update the current ephemeral view for the user
         await self.parent_view.update_view(interaction)
-        
-        # Respond with a confirmation
-        added = len(to_add)
-        removed = len(to_remove)
-        message = []
-        if added:
-            message.append(f"Added {added} NPC{'s' if added > 1 else ''}")
-        if removed:
-            message.append(f"Removed {removed} NPC{'s' if removed > 1 else ''}")
-        
-        await interaction.response.send_message(
-            f"✅ {' and '.join(message)} from the scene.",
-            ephemeral=True
-        )
 
 
 class DoneButton(discord.ui.Button):
@@ -207,7 +218,7 @@ class DoneButton(discord.ui.Button):
         await interaction.response.edit_message(content="✅ NPC management complete.", view=None)
 
 
-class EditEnvironmentModal(discord.ui.Modal, title="Edit Environment Details"):
+class EditEnvironmentModal(discord.ui.Modal, title="Edit Scene Environment"):
     def __init__(self, parent_view: MGT2ESceneView):
         super().__init__()
         self.parent_view = parent_view
@@ -216,47 +227,84 @@ class EditEnvironmentModal(discord.ui.Modal, title="Edit Environment Details"):
         current_env = repo.get_mgt2e_scene_environment(parent_view.guild_id, parent_view.scene_id) or {}
         
         # Add input fields for each environmental factor
+        self.description = ui.TextInput(
+            label="Description", 
+            default=current_env.get("description", ""),
+            required=False,
+            max_length=100,
+            style=discord.TextStyle.paragraph
+        )
         self.gravity = ui.TextInput(
             label="Gravity", 
-            default=current_env.get("Gravity", ""),
+            default=current_env.get("gravity", ""),
             required=False,
             max_length=100
         )
         self.atmosphere = ui.TextInput(
             label="Atmosphere", 
-            default=current_env.get("Atmosphere", ""),
+            default=current_env.get("atmosphere", ""),
             required=False,
             max_length=100
         )
         self.temperature = ui.TextInput(
             label="Temperature", 
-            default=current_env.get("Temperature", ""),
-            required=False,
-            max_length=100
-        )
-        self.lighting = ui.TextInput(
-            label="Lighting", 
-            default=current_env.get("Lighting", ""),
+            default=current_env.get("temperature", ""),
             required=False,
             max_length=100
         )
         
+        self.add_item(self.description)
         self.add_item(self.gravity)
         self.add_item(self.atmosphere)
         self.add_item(self.temperature)
-        self.add_item(self.lighting)
 
     async def on_submit(self, interaction: discord.Interaction):
-        # Create environment dict
-        environment = {
-            "Gravity": self.gravity.value,
-            "Atmosphere": self.atmosphere.value,
-            "Temperature": self.temperature.value,
-            "Lighting": self.lighting.value
-        }
+        # Update environment data in DB
+        repo.set_mgt2e_scene_environment(self.parent_view.guild_id, self.parent_view.scene_id, {
+            "description": self.description.value,
+            "gravity": self.gravity.value,
+            "atmosphere": self.atmosphere.value,
+            "temperature": self.temperature.value
+        })
         
-        # Update environment in DB
-        repo.set_mgt2e_scene_environment(self.parent_view.guild_id, self.parent_view.scene_id, environment)
+        # Check if this is the active scene before updating pins
+        scene = repo.get_scene_by_id(interaction.guild.id, self.parent_view.scene_id)
         
-        # Update the pinned message
-        await self.parent_view.update_view(interaction)
+        # Only update pinned scenes if this is the active scene
+        if scene and scene["is_active"]:
+            # Find any SceneCommands cog instance to use its update method
+            scene_cog = None
+            for cog in interaction.client.cogs.values():
+                if isinstance(cog, commands.Cog) and hasattr(cog, "_update_all_pinned_scenes"):
+                    scene_cog = cog
+                    break
+            
+            # Update all pinned scenes with this scene ID
+            if scene_cog:
+                await scene_cog._update_all_pinned_scenes(interaction.guild, self.parent_view.scene_id)
+        
+        # Always update the user's ephemeral view with GM permissions intact
+        is_gm = await repo.has_gm_permission(interaction.guild.id, interaction.user)
+        
+        # Create a new scene view with the updated environment data
+        temp_view = factories.get_specific_scene_view(
+            system=repo.get_system(interaction.guild.id),
+            guild_id=str(interaction.guild.id),
+            channel_id=str(interaction.channel.id),
+            scene_id=self.parent_view.scene_id
+        )
+        temp_view.is_gm = is_gm
+        temp_view.build_view_components()
+        
+        # Create embed with scene content for the response
+        embed, content = await temp_view.create_scene_content()
+        
+        # If this scene is active AND there's a pinned message for it, add the footer
+        pinned_msg = None
+        if scene and scene["is_active"]:
+            pinned_msg = repo.get_scene_message_info(interaction.guild.id, interaction.channel.id)
+            if pinned_msg and pinned_msg["scene_id"] == self.parent_view.scene_id:
+                embed.set_footer(text="This scene is also pinned at the top of the channel.")
+        
+        # Update the user's view
+        await interaction.response.edit_message(embed=embed, view=temp_view)

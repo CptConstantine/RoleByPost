@@ -897,20 +897,9 @@ def get_auto_recap_settings(guild_id):
                 "paused": False
             }
         
-def set_scene_message_id(guild_id, scene_id, channel_id, message_id):
+def set_pinned_scene_message_id(guild_id, scene_id, channel_id, message_id):
     """Store the message ID for a pinned scene view"""
     with get_db() as conn:
-        # Check if the table exists
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS pinned_scene_messages (
-                guild_id TEXT NOT NULL,
-                scene_id TEXT NOT NULL,
-                channel_id TEXT NOT NULL,
-                message_id TEXT NOT NULL,
-                PRIMARY KEY (guild_id, scene_id, channel_id)
-            )
-        """)
-        
         # Store the message ID
         conn.execute(
             """
@@ -926,17 +915,6 @@ def set_scene_message_id(guild_id, scene_id, channel_id, message_id):
 def get_scene_message_info(guild_id, channel_id):
     """Get the scene ID and message ID for a pinned scene view in a channel"""
     with get_db() as conn:
-        # Check if the table exists
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS pinned_scene_messages (
-                guild_id TEXT NOT NULL,
-                scene_id TEXT NOT NULL,
-                channel_id TEXT NOT NULL,
-                message_id TEXT NOT NULL,
-                PRIMARY KEY (guild_id, scene_id, channel_id)
-            )
-        """)
-        
         cur = conn.execute(
             """
             SELECT scene_id, message_id FROM pinned_scene_messages 
@@ -976,17 +954,6 @@ def clear_scene_pins(guild_id):
 def get_all_pinned_scene_messages(guild_id):
     """Get all pinned scene messages for a guild"""
     with get_db() as conn:
-        # Check if the table exists
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS pinned_scene_messages (
-                guild_id TEXT NOT NULL,
-                scene_id TEXT NOT NULL,
-                channel_id TEXT NOT NULL,
-                message_id TEXT NOT NULL,
-                PRIMARY KEY (guild_id, scene_id, channel_id)
-            )
-        """)
-        
         cur = conn.execute(
             """
             SELECT scene_id, channel_id, message_id FROM pinned_scene_messages 
@@ -1001,46 +968,49 @@ def get_all_pinned_scene_messages(guild_id):
 def get_fate_scene_aspects(guild_id, scene_id):
     """Get aspects for a Fate scene"""
     with get_db() as conn:
-        # Check if the table exists
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS fate_scene_aspects (
-                guild_id TEXT NOT NULL,
-                scene_id TEXT NOT NULL,
-                aspects TEXT,
-                PRIMARY KEY (guild_id, scene_id)
-            )
-        """)
-        
         cur = conn.execute(
             "SELECT aspects FROM fate_scene_aspects WHERE guild_id = ? AND scene_id = ?",
             (str(guild_id), str(scene_id))
         )
         row = cur.fetchone()
         if row and row[0]:
-            return json.loads(row[0])
+            try:
+                aspects_data = json.loads(row[0])
+                
+                # Handle possible legacy format (list of strings)
+                if aspects_data and isinstance(aspects_data[0], str):
+                    # Convert to new format
+                    return [{"name": name, "description": "", "is_hidden": False} for name in aspects_data]
+                return aspects_data
+            except json.JSONDecodeError:
+                return []
         return []
-        
-        
+
+
 def set_fate_scene_aspects(guild_id, scene_id, aspects):
     """Set aspects for a Fate scene"""
     with get_db() as conn:
-        # Check if the table exists
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS fate_scene_aspects (
-                guild_id TEXT NOT NULL,
-                scene_id TEXT NOT NULL,
-                aspects TEXT,
-                PRIMARY KEY (guild_id, scene_id)
-            )
-        """)
-        
+        # Ensure aspects are in the correct format
+        normalized_aspects = []
+        for aspect in aspects:
+            if isinstance(aspect, str):
+                # Convert simple string to dictionary format
+                normalized_aspects.append({
+                    "name": aspect,
+                    "description": "",
+                    "is_hidden": False
+                })
+            else:
+                # Already in dictionary format
+                normalized_aspects.append(aspect)
+                
         conn.execute(
             """
             INSERT OR REPLACE INTO fate_scene_aspects
             (guild_id, scene_id, aspects) 
             VALUES (?, ?, ?)
             """,
-            (str(guild_id), str(scene_id), json.dumps(aspects))
+            (str(guild_id), str(scene_id), json.dumps(normalized_aspects))
         )
         conn.commit()
         
@@ -1048,16 +1018,6 @@ def set_fate_scene_aspects(guild_id, scene_id, aspects):
 def get_fate_scene_zones(guild_id, scene_id):
     """Get zones for a Fate scene"""
     with get_db() as conn:
-        # Check if the table exists
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS fate_scene_zones (
-                guild_id TEXT NOT NULL,
-                scene_id TEXT NOT NULL,
-                zones TEXT,
-                PRIMARY KEY (guild_id, scene_id)
-            )
-        """)
-        
         cur = conn.execute(
             "SELECT zones FROM fate_scene_zones WHERE guild_id = ? AND scene_id = ?",
             (str(guild_id), str(scene_id))
@@ -1071,16 +1031,6 @@ def get_fate_scene_zones(guild_id, scene_id):
 def set_fate_scene_zones(guild_id, scene_id, zones):
     """Set zones for a Fate scene"""
     with get_db() as conn:
-        # Check if the table exists
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS fate_scene_zones (
-                guild_id TEXT NOT NULL,
-                scene_id TEXT NOT NULL,
-                zones TEXT,
-                PRIMARY KEY (guild_id, scene_id)
-            )
-        """)
-        
         conn.execute(
             """
             INSERT OR REPLACE INTO fate_scene_zones
@@ -1096,16 +1046,6 @@ def set_fate_scene_zones(guild_id, scene_id, zones):
 def get_mgt2e_scene_environment(guild_id, scene_id):
     """Get environment details for a Traveller scene"""
     with get_db() as conn:
-        # Check if the table exists
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS mgt2e_scene_environment (
-                guild_id TEXT NOT NULL,
-                scene_id TEXT NOT NULL,
-                environment TEXT,
-                PRIMARY KEY (guild_id, scene_id)
-            )
-        """)
-        
         cur = conn.execute(
             "SELECT environment FROM mgt2e_scene_environment WHERE guild_id = ? AND scene_id = ?",
             (str(guild_id), str(scene_id))
@@ -1119,16 +1059,6 @@ def get_mgt2e_scene_environment(guild_id, scene_id):
 def set_mgt2e_scene_environment(guild_id, scene_id, environment):
     """Set environment details for a Traveller scene"""
     with get_db() as conn:
-        # Check if the table exists
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS mgt2e_scene_environment (
-                guild_id TEXT NOT NULL,
-                scene_id TEXT NOT NULL,
-                environment TEXT,
-                PRIMARY KEY (guild_id, scene_id)
-            )
-        """)
-        
         conn.execute(
             """
             INSERT OR REPLACE INTO mgt2e_scene_environment
@@ -1139,7 +1069,7 @@ def set_mgt2e_scene_environment(guild_id, scene_id, environment):
         )
         conn.commit()
 
-def get_npcs_by_guild(guild_id):
+def get_npcs_by_guild(guild_id) -> BaseCharacter:
     """Get all NPCs for a guild"""
     with get_db() as conn:
         cur = conn.execute(
@@ -1164,3 +1094,29 @@ def get_npcs_by_guild(guild_id):
             npc = CharacterClass.from_dict(character_dict)
             npcs.append(npc)
         return npcs
+
+def get_pcs_by_guild(guild_id) -> BaseCharacter:
+    """Get all PCs for a guild"""
+    with get_db() as conn:
+        cur = conn.execute(
+            "SELECT id, name, system, owner_id, system_specific_data, notes, avatar_url FROM characters WHERE guild_id = ? AND entity_type = 'pc'",
+            (str(guild_id),)
+        )
+        pcs = []
+        for row in cur.fetchall():
+            id, name, system, owner_id, system_specific_data, notes, avatar_url = row
+            CharacterClass = factories.get_specific_character(system)
+            system_specific = json.loads(system_specific_data) if system_specific_data else {}
+
+            character_dict = BaseCharacter.create_base_character(
+                id=id,
+                name=name,
+                owner_id=owner_id,
+                is_npc=False,
+                notes=[],
+                avatar_url=avatar_url,
+                system_specific_fields=system_specific
+            )
+            pc = CharacterClass.from_dict(character_dict)
+            pcs.append(pc)
+        return pcs
