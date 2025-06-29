@@ -156,7 +156,7 @@ class BaseEntity(BaseRpgObj):
     
     @property
     def avatar_url(self):
-        return self.data.get("avatar_url")
+        return self.data.get("avatar_url", '')
     
     @avatar_url.setter
     def avatar_url(self, url):
@@ -208,7 +208,7 @@ class BaseCharacter(BaseEntity):
             "owner_id": str(owner_id),
             "entity_type": "npc" if is_npc else "pc",
             "notes": notes or [],
-            "avatar_url": avatar_url
+            "avatar_url": avatar_url or '',
         }
         
         # Add any additional fields

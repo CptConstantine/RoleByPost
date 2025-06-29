@@ -87,7 +87,9 @@ async def process_narration(message):
                 alias = npc_name  # Use the NPC name as an alias if no alias was provided
             
             # Create a temporary character for display
-            character = BaseCharacter.create_base_character(f"temp_{npc_name.lower().replace(' ', '_')}", npc_name, user_id, is_npc=True, notes=[])
+            character_dict = BaseCharacter.create_base_character(f"temp_{npc_name.lower().replace(' ', '_')}", npc_name, user_id, is_npc=True, notes=[])
+            CharacterClass = factories.get_specific_character(repo.get_system(guild_id))
+            character = CharacterClass.from_dict(character_dict)
     else:
         return  # Not a narration command
     
@@ -150,13 +152,24 @@ async def send_character_webhook(channel, character: BaseCharacter, content, ali
         description=content,
         color=get_character_color(character)
     )
-    embed.set_thumbnail(url=character.avatar_url)
-    await webhook.send(
-        embeds=[embed],
-        username=display_name,
-        avatar_url=character.avatar_url,
-        allowed_mentions=discord.AllowedMentions(everyone=False)
-    )
+    if character.avatar_url:
+        embed.set_thumbnail(url=character.avatar_url)
+        await webhook.send(
+            embeds=[embed],
+            username=display_name,
+            avatar_url=character.avatar_url,
+            allowed_mentions=discord.AllowedMentions(everyone=False)
+        )
+    else:
+        # Use a default avatar if character has no avatar
+        #url=get_default_avatar(character)
+        #embed.set_thumbnail(url=url)
+        await webhook.send(
+            embeds=[embed],
+            username=display_name,
+            #avatar_url=url,
+            allowed_mentions=discord.AllowedMentions(everyone=False)
+        )
 
 def get_character_color(character):
     """Return a color for the character based on system and character type."""
