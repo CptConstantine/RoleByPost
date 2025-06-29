@@ -22,6 +22,27 @@ async def pc_name_gm_autocomplete(interaction: discord.Interaction, current: str
     options = [c.name for c in pcs if current.lower() in c.name.lower()]
     return [app_commands.Choice(name=name, value=name) for name in options[:25]]
 
+async def character_or_npc_autocomplete(interaction: discord.Interaction, current: str):
+    """Autocomplete for commands that can target both PCs and NPCs"""
+    all_chars = repo.get_all_characters(interaction.guild.id)
+    
+    # Check if user is GM
+    is_gm = await repo.has_gm_permission(interaction.guild.id, interaction.user)
+    
+    # Filter characters based on permissions
+    options = []
+    for c in all_chars:
+        if c.is_npc and is_gm:
+            # GMs can see all NPCs
+            options.append(c.name)
+        elif not c.is_npc and (str(c.owner_id) == str(interaction.user.id) or is_gm):
+            # Users can see their own PCs, GMs can see all PCs
+            options.append(c.name)
+    
+    # Filter by current input
+    filtered_options = [name for name in options if current.lower() in name.lower()]
+    return [app_commands.Choice(name=name, value=name) for name in filtered_options[:25]]
+
 class CharacterCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -246,15 +267,40 @@ class CharacterCommands(commands.Cog):
 
     @character_group.command(name="setavatar", description="Set your character's avatar image")
     @app_commands.describe(
-        avatar_url="URL to an image for your character's avatar"
+        avatar_url="URL to an image for your character's avatar",
+        char_name="Optional: Character/NPC name (defaults to your active character)"
     )
-    async def character_setavatar(self, interaction: discord.Interaction, avatar_url: str):
-        """Set an avatar image URL for your character"""
-        # Get the active character
-        character = repo.get_active_character(interaction.guild.id, interaction.user.id)
-        if not character:
-            await interaction.response.send_message("❌ You don't have an active character set.", ephemeral=True)
-            return
+    @app_commands.autocomplete(char_name=character_or_npc_autocomplete)
+    async def character_setavatar(self, interaction: discord.Interaction, avatar_url: str, char_name: str = None):
+        """Set an avatar image URL for your character or an NPC (if GM)"""
+        
+        # Determine which character to set avatar for
+        character = None
+        if char_name:
+            # User specified a character name
+            character = repo.get_character(interaction.guild.id, char_name)
+            if not character:
+                await interaction.response.send_message(f"❌ Character '{char_name}' not found.", ephemeral=True)
+                return
+                
+            # Check permissions
+            if character.is_npc:
+                # Only GMs can set NPC avatars
+                if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+                    await interaction.response.send_message("❌ Only GMs can set NPC avatars.", ephemeral=True)
+                    return
+            else:
+                # Only the owner can set PC avatars (unless GM)
+                is_gm = await repo.has_gm_permission(interaction.guild.id, interaction.user)
+                if str(character.owner_id) != str(interaction.user.id) and not is_gm:
+                    await interaction.response.send_message("❌ You can only set avatars for your own characters.", ephemeral=True)
+                    return
+        else:
+            # No character specified, use active character
+            character = repo.get_active_character(interaction.guild.id, interaction.user.id)
+            if not character:
+                await interaction.response.send_message("❌ You don't have an active character set. Use `/character switch` to choose one or specify a character name.", ephemeral=True)
+                return
         
         # Basic URL validation
         if not avatar_url.startswith(("http://", "https://")):
