@@ -108,7 +108,7 @@ async def myguild(ctx):
     await ctx.send(f"This server's guild_id is {ctx.guild.id}")
 
 is_deployment = os.getenv("RAILWAY_ENVIRONMENT") is not None
-log_level = logging.ERROR if is_deployment else logging.DEBUG
+log_level = logging.INFO if is_deployment else logging.DEBUG
 
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 bot.run(os.getenv("DISCORD_BOT_TOKEN"), log_handler=handler, log_level=log_level)
