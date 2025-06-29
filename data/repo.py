@@ -8,6 +8,7 @@ import time
 import discord
 from core.models import BaseCharacter
 import core.factories as factories
+from data import encryption
 from rpg_systems.fate.fate_models import Aspect
 
 
@@ -769,30 +770,58 @@ def update_last_message_time(guild_id, user_id, timestamp):
         conn.commit()
 
 def set_openai_api_key(guild_id, api_key):
-    """Store the OpenAI API key for a guild"""
+    """
+    Store an encrypted OpenAI API key for a guild.
+    
+    Args:
+        guild_id: Discord guild ID
+        api_key: Plaintext API key to encrypt and store
+    """
+    encrypted_key = encryption.encrypt_api_key(api_key)
     with get_db() as conn:
-        # Make sure server_settings entry exists
         conn.execute(
-            "INSERT OR IGNORE INTO server_settings (guild_id) VALUES (?)",
-            (str(guild_id),)
-        )
-        
-        # Update the OpenAI API key
-        conn.execute(
-            "UPDATE server_settings SET openai_api_key = ? WHERE guild_id = ?",
-            (api_key, str(guild_id))
+            "INSERT OR REPLACE INTO api_keys (guild_id, openai_key) VALUES (?, ?)",
+            (str(guild_id), encrypted_key)
         )
         conn.commit()
 
 def get_openai_api_key(guild_id):
-    """Get the OpenAI API key for a guild"""
+    """
+    Retrieve and decrypt the OpenAI API key for a guild.
+    
+    Args:
+        guild_id: Discord guild ID
+        
+    Returns:
+        str: Decrypted API key or None if not found
+    """
     with get_db() as conn:
         cur = conn.execute(
-            "SELECT openai_api_key FROM server_settings WHERE guild_id = ?",
+            "SELECT openai_key FROM api_keys WHERE guild_id = ?",
             (str(guild_id),)
         )
         row = cur.fetchone()
-        return row[0] if row and row[0] else None
+        if row and row[0]:
+            return encryption.decrypt_api_key(row[0])
+        return None
+
+def remove_openai_api_key(guild_id):
+    """
+    Remove the OpenAI API key for a guild.
+    
+    Args:
+        guild_id: Discord guild ID
+        
+    Returns:
+        bool: True if a key was removed, False if not found
+    """
+    with get_db() as conn:
+        cur = conn.execute(
+            "DELETE FROM api_keys WHERE guild_id = ?",
+            (str(guild_id),)
+        )
+        conn.commit()
+        return cur.rowcount > 0
 
 def set_auto_recap(guild_id, enabled, channel_id, days_interval, days_to_include):
     """Configure automatic recaps for a guild"""
