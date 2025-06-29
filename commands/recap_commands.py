@@ -40,7 +40,7 @@ class RecapCommands(commands.Cog):
         # Check if API key is configured
         api_key = repo.get_openai_api_key(interaction.guild.id)
         if not api_key:
-            await interaction.response.send_message("❌ No API key has been set. A GM must set one with `/recap setkey`.", ephemeral=True)
+            await interaction.response.send_message("❌ No API key has been set. A GM must set one with `/setup openai set_api_key`.", ephemeral=True)
             return
             
         await interaction.response.defer(ephemeral=private)
@@ -93,7 +93,7 @@ class RecapCommands(commands.Cog):
         # Check if API key is configured
         api_key = repo.get_openai_api_key(interaction.guild.id)
         if not api_key and enabled:
-            await interaction.response.send_message("❌ No API key has been set. Please set one with `/recap setkey` first.", ephemeral=True)
+            await interaction.response.send_message("❌ No API key has been set. Please set one with `/setup openai set_api_key` first.", ephemeral=True)
             return
             
         # If channel is not specified, use current channel
@@ -157,33 +157,6 @@ class RecapCommands(commands.Cog):
             )
         else:
             await interaction.response.send_message("❌ Automatic recaps are currently disabled.", ephemeral=True)
-
-    @recap_group.command(
-        name="setkey",
-        description="GM: Set the OpenAI API key used for generating recaps"
-    )
-    @app_commands.describe(
-        api_key="Your OpenAI API key (will be stored securely)"
-    )
-    async def recap_setkey(
-        self,
-        interaction: discord.Interaction,
-        api_key: str
-    ):
-        # Check if user has GM permissions
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
-            await interaction.response.send_message("❌ Only GMs can set the API key.", ephemeral=True)
-            return
-        
-        # Simple validation - just check if it starts with the usual pattern
-        if not api_key.startswith(("sk-", "org-")):
-            await interaction.response.send_message("❌ The API key format doesn't look right. It should start with 'sk-'.", ephemeral=True)
-            return
-            
-        # Store the API key
-        repo.set_openai_api_key(interaction.guild.id, api_key)
-        
-        await interaction.response.send_message("✅ API key set successfully. You can now use recap commands.", ephemeral=True)
     
     @recap_group.command(
         name="autonow",
@@ -204,7 +177,7 @@ class RecapCommands(commands.Cog):
         # Check if API key is configured
         api_key = repo.get_openai_api_key(interaction.guild.id)
         if not api_key:
-            await interaction.response.send_message("❌ No API key has been set. Please set one with `/recap setkey` first.", ephemeral=True)
+            await interaction.response.send_message("❌ No API key has been set. Please set one with `/setup openai set_api_key` first.", ephemeral=True)
             return
             
         await interaction.response.send_message("Generating automatic recap now...", ephemeral=True)
@@ -305,7 +278,7 @@ class RecapCommands(commands.Cog):
         
         # Add footer with commands based on user permissions
         if await repo.has_gm_permission(interaction.guild.id, interaction.user):
-            footer_text = "GM Commands: /recap setauto, /recap setkey, /recap autonow"
+            footer_text = "GM Commands: /recap setauto, /setup openai set_api_key, /recap autonow"
         else:
             footer_text = "Only GMs can modify automatic recap settings"
             

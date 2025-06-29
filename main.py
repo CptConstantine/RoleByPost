@@ -15,8 +15,25 @@ from rpg_systems.mgt2e.mgt2e_scene_view import MGT2ESceneView
 
 dotenv.load_dotenv()
 
-init_db.init_database()
-init_db.create_tables()
+# Check if we're using PostgreSQL or SQLite
+use_postgresql = os.getenv('DATABASE_URL') is not None
+
+from data.database import db_manager
+
+def initialize_database():
+    """Initialize PostgreSQL database with schema"""
+    schema_file = 'data/init_db.sql'
+    
+    with open(schema_file, 'r') as f:
+        schema_sql = f.read()
+    
+    with db_manager.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(schema_sql)
+    
+    print("PostgreSQL database schema initialized successfully.")
+
+initialize_database()
 
 intents = discord.Intents.default()
 intents.message_content = True

@@ -1,4 +1,5 @@
+python-dotenv
+psycopg2-binary
+cryptography
 discord.py
 openai
-cryptography
-python-dotenv

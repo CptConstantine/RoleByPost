@@ -78,6 +78,15 @@ The following are the commands that are currently available.
 - `/setup defaultskillsfile [.txt file]` or `/setup defaultskills [skill1:0, skill2:0, skill3:1, etc.]`  
   (GM only) Set default skills via command or file upload. Skills are validated per system (if the system has skills).
 
+- `/setup openai set_api_key [api_key]`  
+  (GM only) Set the OpenAI API key used for generating recaps and answering rules questions. Required for all AI functionality.
+
+- `/setup openai status`  
+  Check if an OpenAI API key is configured for this server and see available AI features.
+
+- `/setup status`  
+  (GM only) View comprehensive server bot configuration and statistics including roles, active scenes, character counts, feature settings, and more.
+
 ### Characters
 
 - `/character create pc [name]`  
@@ -168,9 +177,6 @@ The following are the commands that are currently available.
 
 - `/recap generate [days] [private]`  
   Generate a summary of recent game events. Specify how many days to include and whether the recap should be private.
-
-- `/recap setkey [api_key]`  
-  (GM only) Set the OpenAI API key used for generating recaps. Required for all recap functionality.
 
 - `/recap setauto [enabled] [channel] [days_interval] [days_to_include]`  
   (GM only) Configure automatic story recaps. Enable or disable them, set which channel they post to, how often they run, and how many days of history they include.
@@ -267,6 +273,7 @@ Pull requests and suggestions are welcome! Please open an issue or PR for bug fi
 
 - Developed on Python 3.12.10
 - A Discord bot token ([how to create one](https://discord.com/developers/applications))
+- PostgreSQL database server (local or hosted)
 - [python-dotenv](https://pypi.org/project/python-dotenv/) for environment variable management
 
 ### Installation for Development
@@ -282,18 +289,29 @@ Pull requests and suggestions are welcome! Please open an issue or PR for bug fi
    pip install -r requirements.txt
    ```
 
-3. **Set up your environment**
-   - Create a `.env` file in the project root:
+3. **Set up PostgreSQL database**
+   - Install PostgreSQL locally or use a hosted service
+   - Create a new database for the bot
+   - Note your connection details (host, port, database name, username, password)
+
+4. **Set up your environment**
+   - Create a `.env` file in the project root with the following variables:
      ```
      DISCORD_BOT_TOKEN=your-bot-token-here
+     DATABASE_URL=postgresql://username:password@localhost:5432/your_database_name
+     ENCRYPTION_KEY=your-encryption-key-here
      ```
+   - Replace the `DATABASE_URL` values with your actual PostgreSQL connection details
+   - For hosted databases (like Heroku Postgres), use the full connection string provided by your service
+   - You can get an encryption key by running `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
 
-4. **Initialize the database**
+5. **Initialize the database**
    ```sh
-   python data/init_db.py
+   python main.py
    ```
+   The bot will automatically create the necessary database schema on first run.
 
-5. **Run the bot**
+6. **Run the bot**
    ```sh
    python main.py
    ```

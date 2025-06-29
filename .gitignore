@@ -1,7 +1,5 @@
 .env
-data/db/bot.db
 data/dbmisc.py
-data/clear_all_tables.py
 discord.log
 # Ignore Python virtual environments
 venv/
