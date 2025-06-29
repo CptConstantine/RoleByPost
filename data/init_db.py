@@ -1,7 +1,7 @@
 import os
 import sqlite3
 
-DB_FILE = 'data/bot.db'
+DB_FILE = 'data/db/bot.db'
 
 def init_database():
     """Initialize the database - can be called multiple times safely"""

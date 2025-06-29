@@ -12,7 +12,7 @@ from data import encryption
 from rpg_systems.fate.fate_models import Aspect
 
 
-DB_FILE = 'data/bot.db'
+DB_FILE = 'data/db/bot.db'
 
 
 def get_db():
