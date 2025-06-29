@@ -6,6 +6,7 @@ from discord.ext import commands
 from commands.narration import process_narration
 from data import repo
 from commands import character_commands, initiative_commands, reminder_commands, roll_commands, scene_commands, setup_commands, recap_commands, rules_commands
+from data import init_db
 from rpg_systems.fate import fate_commands
 from core.initiative_views import GenericInitiativeView, PopcornInitiativeView
 from core.scene_views import GenericSceneView
@@ -13,6 +14,9 @@ from rpg_systems.fate.fate_scene_view import FateSceneView
 from rpg_systems.mgt2e.mgt2e_scene_view import MGT2ESceneView
 
 dotenv.load_dotenv()
+
+init_db.init_database()
+init_db.create_tables()
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -103,5 +107,8 @@ async def on_message(message: discord.Message):
 async def myguild(ctx):
     await ctx.send(f"This server's guild_id is {ctx.guild.id}")
 
+is_deployment = os.getenv("RAILWAY_ENVIRONMENT") is not None
+log_level = logging.ERROR if is_deployment else logging.DEBUG
+
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
-bot.run(os.getenv("DISCORD_BOT_TOKEN"), log_handler=handler, log_level=logging.DEBUG)
+bot.run(os.getenv("DISCORD_BOT_TOKEN"), log_handler=handler, log_level=log_level)
