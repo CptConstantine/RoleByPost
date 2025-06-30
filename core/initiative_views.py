@@ -3,7 +3,19 @@ import logging
 import discord
 from discord import ui, SelectOption
 from core.initiative_types import GenericInitiative, PopcornInitiative
-from data import repo
+from data.repositories.repository_factory import repositories
+
+async def get_gm_ids(guild: discord.Guild):
+    """Get GM user IDs from the guild"""
+    gm_role_id = repositories.server.get_gm_role_id(str(guild.id))
+    if not gm_role_id:
+        return set()
+    
+    gm_role = guild.get_role(int(gm_role_id))
+    if not gm_role:
+        return set()
+    
+    return {str(member.id) for member in gm_role.members}
 
 class BasePinnedInitiativeView(ABC, discord.ui.View):
     """
@@ -28,12 +40,12 @@ class BasePinnedInitiativeView(ABC, discord.ui.View):
         channel_id = interaction.channel.id
         
         # Get initiative data from the database
-        initiative_data = repo.get_initiative(guild_id, channel_id)
+        initiative_data = repositories.initiative.get_initiative_data(str(guild_id), str(channel_id))
         if not initiative_data or not initiative_data.get("is_active", False):
             return False
             
         # Get the message ID from the database if we don't have it
-        message_id = repo.get_initiative_message_id(guild_id, channel_id)
+        message_id = repositories.initiative.get_initiative_message_id(str(guild_id), str(channel_id))
         if not message_id:
             return False
             
@@ -62,7 +74,7 @@ class BasePinnedInitiativeView(ABC, discord.ui.View):
         
         # Get the message ID from the database if we don't have it
         if not self.message_id:
-            self.message_id = repo.get_initiative_message_id(self.guild_id, self.channel_id)
+            self.message_id = repositories.initiative.get_initiative_message_id(str(self.guild_id), str(self.channel_id))
 
         # If we have a message ID, try to fetch that message
         if self.message_id:
@@ -83,7 +95,7 @@ class BasePinnedInitiativeView(ABC, discord.ui.View):
             self.message_id = message.id
             
             # Store the message ID in the database
-            repo.set_initiative_message_id(self.guild_id, self.channel_id, message.id)
+            repositories.initiative.set_initiative_message_id(str(self.guild_id), str(self.channel_id), str(message.id))
             
             # Send a temporary message indicating the initiative has been pinned
             temp_msg = await channel.send("📌 Initiative tracking has been pinned. You can always find the current turn at the top of the channel.")
@@ -193,7 +205,7 @@ class GenericInitiativeView(BasePinnedInitiativeView):
             
             # Set up allowed users - get GM IDs using the role
             self.guild = interaction.guild
-            gm_ids = await repo.get_gm_ids(interaction.guild)
+            gm_ids = await get_gm_ids(interaction.guild)
             self.allowed_ids = list(gm_ids)
             
             if self.initiative.is_started:
@@ -227,7 +239,7 @@ class GenericInitiativeView(BasePinnedInitiativeView):
             )
             
             # Check if the user is allowed to interact
-            gm_ids = await repo.get_gm_ids(interaction.guild)
+            gm_ids = await self.get_gm_ids(interaction.guild)
             is_gm = str(interaction.user.id) in gm_ids
             is_current_participant = False
             
@@ -262,7 +274,7 @@ class GenericInitiativeView(BasePinnedInitiativeView):
         component_id = interaction.data.get("custom_id", "")
         if component_id == "set_initiative_order":
             # Check if user has GM role
-            gm_ids = await repo.get_gm_ids(interaction.guild)
+            gm_ids = await self.get_gm_ids(interaction.guild)
             if str(interaction.user.id) not in gm_ids:
                 await interaction.response.send_message("❌ Only GMs can set the initiative order.", ephemeral=True)
                 return False
@@ -273,7 +285,7 @@ class GenericInitiativeView(BasePinnedInitiativeView):
     async def handle_end_turn(self, interaction):
         """Handle the end turn button press"""
         self.initiative.advance_turn()
-        repo.update_initiative_state(self.guild_id, self.channel_id, self.initiative.to_dict())
+        repositories.initiative.update_initiative_state(str(self.guild_id), str(self.channel_id), self.initiative.to_dict())
         embed, content = await self.create_initiative_content()
         new_view = GenericInitiativeView(self.guild_id, self.channel_id, self.initiative, self.message_id)
         await self.update_initiative_message(interaction, content=content, embed=embed, view=new_view)
@@ -282,7 +294,7 @@ class GenericInitiativeView(BasePinnedInitiativeView):
         """Handle the start initiative button press"""
         self.initiative.is_started = True
         self.initiative.current_index = 0
-        repo.update_initiative_state(self.guild_id, self.channel_id, self.initiative.to_dict())
+        repositories.initiative.update_initiative_state(str(self.guild_id), str(self.channel_id), self.initiative.to_dict())
         embed, content = await self.create_initiative_content()
         new_view = GenericInitiativeView(self.guild_id, self.channel_id, self.initiative, self.message_id)
         await self.update_initiative_message(interaction, content=content, embed=embed, view=new_view)
@@ -360,7 +372,7 @@ class FirstPickerSelect(ui.Select):
         initiative.current = first_id
         initiative.remaining_in_round = [p.id for p in initiative.participants if p.id != first_id]
         # Save updated initiative state to DB
-        repo.update_initiative_state(self.parent_view.guild_id, self.parent_view.channel_id, initiative.to_dict())
+        repositories.initiative.update_initiative_state(str(self.parent_view.guild_id), str(self.parent_view.channel_id), initiative.to_dict())
         await self.parent_view.update_view(interaction)
 
 class PopcornNextSelect(ui.Select):
@@ -372,7 +384,7 @@ class PopcornNextSelect(ui.Select):
         next_id = self.values[0]
         initiative = self.parent_view.initiative
         initiative.advance_turn(next_id)
-        repo.update_initiative_state(self.parent_view.guild_id, self.parent_view.channel_id, initiative.to_dict())
+        repositories.initiative.update_initiative_state(str(self.parent_view.guild_id), str(self.parent_view.channel_id), initiative.to_dict())
         await self.parent_view.update_view(interaction)
 
 class EmptyPersistentSelect(ui.Select):
@@ -476,7 +488,7 @@ class PopcornInitiativeView(BasePinnedInitiativeView):
                 
             # Set up allowed users
             self.guild = interaction.guild
-            gm_ids = await repo.get_gm_ids(interaction.guild)
+            gm_ids = await get_gm_ids(interaction.guild)
             self.allowed_ids = list(gm_ids)
             
             if self.initiative.current:
@@ -510,7 +522,7 @@ class PopcornInitiativeView(BasePinnedInitiativeView):
             )
             
             # Check if the user is allowed to interact
-            gm_ids = await repo.get_gm_ids(interaction.guild)
+            gm_ids = await self.get_gm_ids(interaction.guild)
             is_gm = str(interaction.user.id) in gm_ids
             is_current_participant = False
             
@@ -612,8 +624,14 @@ class SetOrderButton(ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         # Check if the user is a GM
-        gm_ids = await repo.get_gm_ids(interaction.guild)
-        if str(interaction.user.id) not in gm_ids:
+        gm_role_id = repositories.server.get_gm_role_id(str(interaction.guild.id))
+        is_gm = False
+        if gm_role_id:
+            gm_role = interaction.guild.get_role(int(gm_role_id))
+            if gm_role and gm_role in interaction.user.roles:
+                is_gm = True
+        
+        if not is_gm:
             await interaction.response.send_message("❌ Only GMs can set the initiative order.", ephemeral=True)
             return
             
@@ -687,9 +705,9 @@ class SetInitiativeOrderModal(discord.ui.Modal, title="Set Initiative Order"):
             self.parent_view.initiative.current_index = 0
             
         # Save to database
-        repo.update_initiative_state(
-            self.parent_view.guild_id, 
-            self.parent_view.channel_id, 
+        repositories.initiative.update_initiative_state(
+            str(self.parent_view.guild_id), 
+            str(self.parent_view.channel_id), 
             self.parent_view.initiative.to_dict()
         )
         

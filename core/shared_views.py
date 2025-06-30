@@ -3,8 +3,8 @@ import discord
 from discord import Interaction, TextStyle, ui
 from core import factories
 from core.models import BaseCharacter, RollModifiers
-from core.utils import get_character, roll_formula
-from data import repo
+from core.utils import get_character
+from data.repositories.repository_factory import repositories
 
 class PaginatedSelectView(ui.View):
     def __init__(self, options, select_callback, user_id, prompt="Select an option:", page=0, page_size=25):
@@ -78,17 +78,17 @@ class SceneNotesButton(discord.ui.Button):
         self.guild_id = guild_id
 
     async def callback(self, interaction: discord.Interaction):
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can edit scene notes.", ephemeral=True)
             return
             
         # Get the active scene
-        active_scene = repo.get_active_scene(interaction.guild.id)
+        active_scene = repositories.scene.get_active_scene(str(interaction.guild.id))
         if not active_scene:
             await interaction.response.send_message("❌ No active scene available.", ephemeral=True)
             return
             
-        await interaction.response.send_modal(EditSceneNotesModal(interaction.guild.id, active_scene["id"]))
+        await interaction.response.send_modal(EditSceneNotesModal(interaction.guild.id, active_scene.scene_id))
 
 
 class EditSceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
@@ -96,7 +96,7 @@ class EditSceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
         super().__init__()
         self.guild_id = guild_id
         self.scene_id = scene_id
-        current_notes = repo.get_scene_notes(guild_id, scene_id) or ""
+        current_notes = repositories.scene_notes.get_scene_notes(str(guild_id), str(scene_id)) or ""
         self.notes = discord.ui.TextInput(
             label="Scene Notes",
             style=discord.TextStyle.paragraph,
@@ -107,22 +107,22 @@ class EditSceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
         self.add_item(self.notes)
 
     async def on_submit(self, interaction: discord.Interaction):
-        repo.set_scene_notes(self.guild_id, self.notes.value, self.scene_id)
+        repositories.scene_notes.set_scene_notes(str(self.guild_id), str(self.scene_id), self.notes.value)
         
         # Rebuild the scene embed and view
-        system = repo.get_system(self.guild_id)
+        system = repositories.server.get_system(str(self.guild_id))
         sheet = factories.get_specific_sheet(system)
-        npc_ids = repo.get_scene_npc_ids(self.guild_id, self.scene_id)
-        is_gm = await repo.has_gm_permission(interaction.guild.id, interaction.user)
-        active_scene = repo.get_active_scene(self.guild_id)
+        npc_ids = repositories.scene_npc.get_scene_npc_ids(str(self.guild_id), str(self.scene_id))
+        is_gm = repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        active_scene = repositories.scene.get_active_scene(str(self.guild_id))
         
         lines = []
         for npc_id in npc_ids:
-            npc = repo.get_character_by_id(self.guild_id, npc_id)
+            npc = repositories.character.get_by_id(str(npc_id))
             if npc:
                 lines.append(sheet.format_npc_scene_entry(npc, is_gm))
                 
-        notes = repo.get_scene_notes(self.guild_id, self.scene_id)
+        notes = repositories.scene_notes.get_scene_notes(str(self.guild_id), str(self.scene_id))
         description = ""
         if notes:
             description += f"**Notes:**\n{notes}\n\n"
@@ -133,7 +133,7 @@ class EditSceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
             description += "📭 No NPCs are currently in this scene."
             
         embed = discord.Embed(
-            title=f"🎭 Scene: {active_scene['name']}",
+            title=f"🎭 Scene: {active_scene.name}",
             description=description,
             color=discord.Color.purple()
         )
@@ -161,7 +161,7 @@ class EditNameModal(ui.Modal, title="Edit Character Name"):
         self.add_item(self.name_input)
 
     async def on_submit(self, interaction: Interaction):
-        character = get_character(interaction.guild.id, self.char_id)
+        character = get_character(self.char_id)
         if not character:
             await interaction.response.send_message("❌ Character not found.", ephemeral=True)
             return
@@ -170,7 +170,7 @@ class EditNameModal(ui.Modal, title="Edit Character Name"):
             await interaction.response.send_message("❌ Name cannot be empty.", ephemeral=True)
             return
         character.name = new_name
-        repo.set_character(interaction.guild.id, character, system=self.system)
+        repositories.character.upsert_character(interaction.guild.id, character, self.system)
         embed, view = self.make_view_embed(interaction.user.id, self.char_id)
         await interaction.response.edit_message(content="✅ Name updated.", embed=embed, view=view)
 
@@ -190,9 +190,9 @@ class EditNotesModal(ui.Modal, title="Edit Notes"):
         self.add_item(self.notes_field)
 
     async def on_submit(self, interaction: Interaction):
-        character = get_character(interaction.guild.id, self.char_id)
+        character = get_character(self.char_id)
         character.notes = [line for line in self.notes_field.value.splitlines() if line.strip()]
-        repo.set_character(interaction.guild.id, character, system=self.system)
+        repositories.character.upsert_character(interaction.guild.id, character, self.system)
         embed, view = self.make_view_embed(interaction.user.id, self.char_id)
         await interaction.response.edit_message(content="✅ Notes updated.", embed=embed, view=view)
 
@@ -211,7 +211,7 @@ class EditRequestedRollButton(ui.Button):
         self.difficulty = difficulty
 
     async def callback(self, interaction: discord.Interaction):
-        character = repo.get_active_character(interaction.guild.id, interaction.user.id)
+        character = repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id)
         if not character:
             await interaction.response.send_message("❌ Active character not found. Use /setactive to set your active character.", ephemeral=True)
             return
@@ -330,7 +330,7 @@ class FinalizeRollButton(discord.ui.Button):
         self.difficulty = difficulty
 
     async def callback(self, interaction: discord.Interaction):
-        character = repo.get_active_character(interaction.guild.id, interaction.user.id)
+        character = repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id)
         await character.send_roll_message(
             interaction,
             self.roll_formula_obj,

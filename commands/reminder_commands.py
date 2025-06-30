@@ -4,7 +4,8 @@ import datetime
 import discord
 from discord.ext import commands
 from discord import app_commands
-from data import repo
+from data.repositories.repository_factory import repositories
+
 
 class ReminderCommands(commands.Cog):
     def __init__(self, bot):
@@ -32,7 +33,7 @@ class ReminderCommands(commands.Cog):
         message: str = "Please remember to post your actions!",
         delay: str = "24h"
     ):
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can send reminders.", ephemeral=True)
             return
             
@@ -69,7 +70,7 @@ class ReminderCommands(commands.Cog):
             
         now = datetime.datetime.now(datetime.timezone.utc).timestamp()
         for user in targets:
-            repo.set_reminder_time(interaction.guild.id, user.id, now)
+            repositories.reminder.set_reminder_time(str(interaction.guild.id), str(user.id), now)
             self.bot.loop.create_task(self._schedule_dm_reminder(interaction.guild.id, user, message, now, delay_seconds))
             
         await interaction.response.send_message(f"⏰ Reminder{'s' if len(targets) > 1 else ''} scheduled for {delay}.", ephemeral=True)
@@ -92,7 +93,7 @@ class ReminderCommands(commands.Cog):
         message: str = "This is a reminder!"
     ):
         # Check if the user has permission to use this command
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ You do not have permission to use this command.", ephemeral=True)
             return
         
@@ -108,7 +109,7 @@ class ReminderCommands(commands.Cog):
         
         # Set the reminder in the database
         now = datetime.datetime.now(datetime.timezone.utc).timestamp()
-        repo.set_reminder_time(interaction.guild.id, user.id, now)
+        repositories.reminder.set_reminder_time(str(interaction.guild.id), str(user.id), now)
         
         # Schedule the reminder
         self.bot.loop.create_task(
@@ -131,14 +132,14 @@ class ReminderCommands(commands.Cog):
         enabled: bool = None, 
         delay: str = None
     ):
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can manage automatic reminders.", ephemeral=True)
             return
         
         # Get current settings
-        settings = repo.get_auto_reminder_settings(interaction.guild.id)
-        current_enabled = settings["enabled"]
-        current_delay = settings["delay_seconds"]
+        settings = repositories.auto_reminder_settings.get_settings(str(interaction.guild.id))
+        current_enabled = settings.enabled
+        current_delay = settings.delay_seconds
         
         # Update enabled setting if provided
         if enabled is not None:
@@ -171,7 +172,7 @@ class ReminderCommands(commands.Cog):
         
         # Save the settings using the combined method
         if enabled is not None or delay is not None:
-            repo.set_auto_reminder(interaction.guild.id, current_enabled, current_delay)
+            repositories.auto_reminder_settings.update_settings(str(interaction.guild.id), current_enabled, current_delay)
         
         # Format the current delay for display
         if formatted_delay is None:
@@ -208,7 +209,7 @@ class ReminderCommands(commands.Cog):
         opt_out="Whether to opt out of automatic reminders"
     )
     async def auto_optout(self, interaction: discord.Interaction, opt_out: bool = True):
-        repo.set_user_optout(interaction.guild.id, interaction.user.id, opt_out)
+        repositories.auto_reminder_optout.set_user_optout(str(interaction.guild.id), str(interaction.user.id), opt_out)
         status = "opted out of" if opt_out else "opted into"
         await interaction.response.send_message(f"✅ You have {status} automatic reminders.", ephemeral=True)
 
@@ -217,10 +218,10 @@ class ReminderCommands(commands.Cog):
         description="Check the current automatic reminder settings"
     )
     async def auto_status(self, interaction: discord.Interaction):
-        settings = repo.get_auto_reminder_settings(interaction.guild.id)
-        is_opted_out = repo.is_user_opted_out(interaction.guild.id, interaction.user.id)
+        settings = repositories.auto_reminder_settings.get_settings(str(interaction.guild.id))
+        is_opted_out = repositories.auto_reminder_optout.is_user_opted_out(str(interaction.guild.id), str(interaction.user.id))
         
-        delay_seconds = settings["delay_seconds"]
+        delay_seconds = settings.delay_seconds
         if delay_seconds >= 86400:
             formatted = f"{delay_seconds // 86400} day(s)"
         elif delay_seconds >= 3600:
@@ -238,7 +239,7 @@ class ReminderCommands(commands.Cog):
         embed.add_field(
             name="Server Settings",
             value=(
-                f"**Enabled:** {'✅' if settings['enabled'] else '❌'}\n"
+                f"**Enabled:** {'✅' if settings.enabled else '❌'}\n"
                 f"**Delay:** {formatted}"
             ),
             inline=False
@@ -250,7 +251,7 @@ class ReminderCommands(commands.Cog):
             inline=False
         )
         
-        if await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             embed.set_footer(text="As a GM, you can change these settings with /reminder setauto")
         else:
             embed.set_footer(text="You can opt out with /reminder auto_optout true")
@@ -280,7 +281,7 @@ class ReminderCommands(commands.Cog):
         await asyncio.sleep(delay_seconds)
         
         # Only send reminder if the user hasn't posted since the reminder was set
-        last_msg = repo.get_last_message_time(guild_id, user.id)
+        last_msg = repositories.last_message_time.get_last_message_time(str(guild_id), str(user.id))
         if not last_msg or last_msg < reminder_time:
             try:
                 await user.send(f"**Reminder from {self.bot.get_guild(guild_id).name}:** {message}")
@@ -296,12 +297,12 @@ class ReminderCommands(commands.Cog):
         user_id = mentioned_user.id
             
         # Check if automatic reminders are enabled for this server
-        settings = repo.get_auto_reminder_settings(guild_id)
-        if not settings["enabled"]:
+        settings = repositories.auto_reminder_settings.get_settings(str(guild_id))
+        if not settings.enabled:
             return
             
         # Check if the user has opted out
-        if repo.is_user_opted_out(guild_id, user_id):
+        if repositories.auto_reminder_optout.is_user_opted_out(str(guild_id), str(user_id)):
             return
             
         # Check if there's already an active reminder for this user in this guild
@@ -313,7 +314,7 @@ class ReminderCommands(commands.Cog):
             
         # Create a new reminder
         now = message.created_at.timestamp()
-        repo.set_reminder_time(guild_id, user_id, now)
+        repositories.reminder.set_reminder_time(str(guild_id), str(user_id), now)
         
         # Create task and store it in the dictionary
         task = self.bot.loop.create_task(
@@ -321,7 +322,7 @@ class ReminderCommands(commands.Cog):
                 guild_id, 
                 mentioned_user, 
                 now, 
-                settings["delay_seconds"],
+                settings.delay_seconds,
                 reminder_key
             )
         )
@@ -336,7 +337,7 @@ class ReminderCommands(commands.Cog):
             await asyncio.sleep(delay_seconds)
             
             # Only send reminder if the user hasn't posted since the reminder was set
-            last_msg = repo.get_last_message_time(guild_id, user.id)
+            last_msg = repositories.last_message_time.get_last_message_time(str(guild_id), str(user.id))
             if not last_msg or last_msg <= reminder_time:
                 try:
                     guild_name = self.bot.get_guild(guild_id).name

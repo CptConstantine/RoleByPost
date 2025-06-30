@@ -4,14 +4,13 @@ import dotenv
 import discord
 from discord.ext import commands
 from commands.narration import process_narration
-from data import repo
 from commands import character_commands, initiative_commands, reminder_commands, roll_commands, scene_commands, setup_commands, recap_commands, rules_commands
-from data import init_db
 from rpg_systems.fate import fate_commands
 from core.initiative_views import GenericInitiativeView, PopcornInitiativeView
 from core.scene_views import GenericSceneView
 from rpg_systems.fate.fate_scene_view import FateSceneView
 from rpg_systems.mgt2e.mgt2e_scene_view import MGT2ESceneView
+from data.repositories.repository_factory import repositories
 
 dotenv.load_dotenv()
 
@@ -97,7 +96,7 @@ async def on_message(message: discord.Message):
     # Update the last message time for the user
     if message.guild:
         if message.author.id != bot.user.id:
-            repo.update_last_message_time(message.guild.id, message.author.id, message.created_at.timestamp())
+            repositories.last_message_time.update_last_message_time(message.guild.id, message.author.id, message.created_at.timestamp())
         
         # Handle mentions for automatic reminders
         if message.mentions:

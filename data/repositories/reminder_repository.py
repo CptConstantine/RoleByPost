@@ -1,6 +1,6 @@
 from typing import Optional
 from .base_repository import BaseRepository
-from models import Reminder, AutoReminderSettings, AutoReminderOptout, LastMessageTime
+from data.models import Reminder, AutoReminderSettings, AutoReminderOptout, LastMessageTime
 
 class ReminderRepository(BaseRepository[Reminder]):
     def __init__(self):

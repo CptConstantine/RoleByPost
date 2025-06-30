@@ -2,7 +2,8 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import openai
-from data import repo
+from data.repositories.repository_factory import repositories
+
 from typing import Optional
 
 # Autocomplete function for homebrew rule names
@@ -18,8 +19,8 @@ async def homebrew_rule_autocomplete(interaction: discord.Interaction, current: 
         List of app_commands.Choice objects for autocomplete
     """
     try:
-        homebrew_rules = repo.get_homebrew_rules(interaction.guild.id)
-        options = [name for name in homebrew_rules.keys() if current.lower() in name.lower()]
+        homebrew_rules = repositories.homebrew.get_all_rules(str(interaction.guild.id))
+        options = [rule.rule_name for rule in homebrew_rules if current.lower() in rule.rule_name.lower()]
         return [app_commands.Choice(name=name, value=name) for name in options[:25]]
     except Exception:
         return []
@@ -51,10 +52,10 @@ class RulesCommands(commands.Cog):
             prompt: The user's rules question
         """
         # Check if API key is configured
-        api_key = repo.get_openai_api_key(interaction.guild.id)
+        api_key = repositories.api_key.get_openai_key(str(interaction.guild.id))
         if not api_key:
             await interaction.response.send_message(
-                "❌ No API key has been set. A GM must set one with `/recap setkey`.", 
+                "❌ No API key has been set. A GM must set one with `/setup openai set_api_key`.", 
                 ephemeral=True
             )
             return
@@ -63,8 +64,11 @@ class RulesCommands(commands.Cog):
         
         try:
             # Get system and homebrew context
-            system = repo.get_system(interaction.guild.id)
-            homebrew_rules = repo.get_homebrew_rules(interaction.guild.id)
+            system = repositories.server.get_system(str(interaction.guild.id))
+            homebrew_rules_entities = repositories.homebrew.get_all_rules(str(interaction.guild.id))
+            
+            # Convert to dictionary for compatibility with existing code
+            homebrew_rules = {rule.rule_name: rule.rule_text for rule in homebrew_rules_entities}
             
             # Generate response using OpenAI
             response = await self._generate_rules_response(prompt, system, homebrew_rules, api_key)
@@ -108,7 +112,7 @@ class RulesCommands(commands.Cog):
             rule_text: The actual rule content
         """
         # Check GM permissions
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message(
                 "❌ Only GMs can manage homebrew rules.", 
                 ephemeral=True
@@ -131,7 +135,7 @@ class RulesCommands(commands.Cog):
             return
         
         # Save the homebrew rule
-        repo.set_homebrew_rule(interaction.guild.id, rule_name, rule_text)
+        repositories.homebrew.upsert_rule(str(interaction.guild.id), rule_name, rule_text)
         
         await interaction.response.send_message(
             f"✅ Homebrew rule '{rule_name}' has been saved.", 
@@ -149,9 +153,9 @@ class RulesCommands(commands.Cog):
         Args:
             interaction: Discord interaction object
         """
-        homebrew_rules = repo.get_homebrew_rules(interaction.guild.id)
+        homebrew_rules_entities = repositories.homebrew.get_all_rules(str(interaction.guild.id))
         
-        if not homebrew_rules:
+        if not homebrew_rules_entities:
             await interaction.response.send_message(
                 "📚 No homebrew rules have been set for this server.", 
                 ephemeral=True
@@ -164,10 +168,10 @@ class RulesCommands(commands.Cog):
         )
         
         # Add each rule as a field (truncate if too long)
-        for rule_name, rule_text in homebrew_rules.items():
-            display_text = rule_text if len(rule_text) <= 1024 else rule_text[:1021] + "..."
+        for rule in homebrew_rules_entities:
+            display_text = rule.rule_text if len(rule.rule_text) <= 1024 else rule.rule_text[:1021] + "..."
             embed.add_field(
-                name=rule_name,
+                name=rule.rule_name,
                 value=display_text,
                 inline=False
             )
@@ -191,24 +195,21 @@ class RulesCommands(commands.Cog):
             rule_name: Name of the rule to remove
         """
         # Check GM permissions
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message(
                 "❌ Only GMs can manage homebrew rules.", 
                 ephemeral=True
             )
             return
         
-        # Check if rule exists
-        homebrew_rules = repo.get_homebrew_rules(interaction.guild.id)
-        if rule_name not in homebrew_rules:
+        # Check if rule exists and remove it
+        success = repositories.homebrew.remove_rule(str(interaction.guild.id), rule_name)
+        if not success:
             await interaction.response.send_message(
                 f"❌ No homebrew rule named '{rule_name}' found.", 
                 ephemeral=True
             )
             return
-        
-        # Remove the rule
-        repo.remove_homebrew_rule(interaction.guild.id, rule_name)
         
         await interaction.response.send_message(
             f"✅ Homebrew rule '{rule_name}' has been removed.", 

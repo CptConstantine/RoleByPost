@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List
-import json
 from datetime import datetime
 
 @dataclass

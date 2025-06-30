@@ -1,6 +1,6 @@
 from typing import Optional
 from .base_repository import BaseRepository
-from models import InitiativeTracker, ServerInitiativeDefaults
+from data.models import InitiativeTracker, ServerInitiativeDefaults
 import json
 
 class InitiativeRepository(BaseRepository[InitiativeTracker]):
@@ -32,6 +32,23 @@ class InitiativeRepository(BaseRepository[InitiativeTracker]):
         query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND channel_id = %s"
         return self.execute_query(query, (str(guild_id), str(channel_id)), fetch_one=True)
     
+    def get_initiative_data(self, guild_id: str, channel_id: str) -> Optional[dict]:
+        """Get initiative data formatted for commands"""
+        initiative_tracker = self.get_initiative(guild_id, channel_id)
+        if not initiative_tracker or not initiative_tracker.is_active:
+            return None
+        
+        return {
+            "type": initiative_tracker.type,
+            "initiative_state": json.loads(initiative_tracker.initiative_state),
+            "is_active": initiative_tracker.is_active
+        }
+    
+    def get_initiative_message_id(self, guild_id: str, channel_id: str) -> Optional[str]:
+        """Get the message ID for the initiative message"""
+        initiative_tracker = self.get_initiative(guild_id, channel_id)
+        return initiative_tracker.message_id if initiative_tracker else None
+
     def start_initiative(self, guild_id: str, channel_id: str, init_type: str, state: dict, message_id: str = None) -> None:
         """Start initiative in a channel"""
         initiative = InitiativeTracker(
@@ -43,7 +60,7 @@ class InitiativeRepository(BaseRepository[InitiativeTracker]):
             message_id=str(message_id) if message_id else None
         )
         self.save(initiative, conflict_columns=['guild_id', 'channel_id'])
-    
+
     def update_initiative_state(self, guild_id: str, channel_id: str, state: dict) -> None:
         """Update initiative state"""
         query = f"UPDATE {self.table_name} SET initiative_state = %s WHERE guild_id = %s AND channel_id = %s"
@@ -53,6 +70,11 @@ class InitiativeRepository(BaseRepository[InitiativeTracker]):
         """End initiative in a channel"""
         query = f"UPDATE {self.table_name} SET is_active = false WHERE guild_id = %s AND channel_id = %s"
         self.execute_query(query, (str(guild_id), str(channel_id)))
+
+    def set_initiative_message_id(self, guild_id: str, channel_id: str, message_id: str) -> None:
+        """Store the message ID for the initiative message"""
+        query = f"UPDATE {self.table_name} SET message_id = %s WHERE guild_id = %s AND channel_id = %s"
+        self.execute_query(query, (str(message_id), str(guild_id), str(channel_id)))
 
 class ServerInitiativeDefaultsRepository(BaseRepository[ServerInitiativeDefaults]):
     def __init__(self):

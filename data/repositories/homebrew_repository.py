@@ -1,6 +1,6 @@
 from typing import Dict, List
 from .base_repository import BaseRepository
-from models import HomebrewRule
+from data.models import HomebrewRule
 from datetime import datetime
 
 class HomebrewRepository(BaseRepository[HomebrewRule]):
@@ -25,7 +25,7 @@ class HomebrewRepository(BaseRepository[HomebrewRule]):
             updated_at=data.get('updated_at')
         )
     
-    def get_all_by_guild(self, guild_id: str) -> Dict[str, str]:
+    def get_all_rules(self, guild_id: str) -> Dict[str, str]:
         """Return dictionary mapping rule names to rule text"""
         rules = self.find_all_by_column('guild_id', str(guild_id))
         return {rule.rule_name: rule.rule_text for rule in rules}

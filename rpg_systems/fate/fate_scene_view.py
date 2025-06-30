@@ -2,10 +2,10 @@ import logging
 import discord
 from discord import ui
 from discord.ext import commands
-from data import repo
 from core.scene_views import BasePinnableSceneView, PlaceholderPersistentButton, SceneNotesButton
 from core import factories
 from rpg_systems.fate.fate_models import Aspect
+from data.repositories.repository_factory import repositories
 
 SYSTEM = "fate"
 
@@ -24,7 +24,7 @@ class FateSceneView(BasePinnableSceneView):
 
     async def create_scene_content(self):
         # Get scene info
-        scene = repo.get_scene_by_id(self.guild_id, self.scene_id)
+        scene = repositories.scene.find_by_id('scene_id', self.scene_id)
         if not scene:
             return discord.Embed(
                 title="❌ Scene Not Found",
@@ -36,26 +36,26 @@ class FateSceneView(BasePinnableSceneView):
         sheet = factories.get_specific_sheet(SYSTEM)
         
         # Get NPCs in scene
-        npc_ids = repo.get_scene_npc_ids(self.guild_id, self.scene_id)
+        npc_ids = repositories.scene_npc.get_scene_npc_ids(str(self.guild_id), str(self.scene_id))
         
         # Format scene content - standard part
         lines = []
         for npc_id in npc_ids:
-            npc = repo.get_character_by_id(self.guild_id, npc_id)
+            npc = repositories.character.get_by_id(str(npc_id))
             if npc:
                 lines.append(sheet.format_npc_scene_entry(npc, is_gm=self.is_gm))
                 
         # Get scene notes
-        notes = repo.get_scene_notes(self.guild_id, self.scene_id)
+        notes = repositories.scene_notes.get_scene_notes(str(self.guild_id), str(self.scene_id))
         
         # Get Fate-specific scene data
-        scene_aspects = repo.get_fate_scene_aspects(self.guild_id, self.scene_id) or []
-        scene_zones = repo.get_fate_scene_zones(self.guild_id, self.scene_id) or []
+        scene_aspects = repositories.fate_aspects.get_aspects(str(self.guild_id), str(self.scene_id)) or []
+        scene_zones = repositories.fate_zones.get_zones(str(self.guild_id), str(self.scene_id)) or []
         
         # Create embed
         embed = discord.Embed(
-            title=f"🎭 {('Current' if scene['is_active'] else 'Inactive')} Scene: {scene['name']}",
-            color=discord.Color.purple() if scene["is_active"] else discord.Color.dark_grey()
+            title=f"🎭 {('Current' if scene.is_active else 'Inactive')} Scene: {scene.name}",
+            color=discord.Color.purple() if scene.is_active else discord.Color.dark_grey()
         )
         
         description = ""
@@ -96,7 +96,7 @@ class FateSceneView(BasePinnableSceneView):
         embed.description = description
         
         # Add appropriate footer based on scene active status
-        if scene["is_active"]:
+        if scene.is_active:
             embed.set_footer(text="Scene view will update automatically when the scene changes.")
             content = "🎭 **CURRENT SCENE** 🎭"
         else:
@@ -121,7 +121,7 @@ class EditSceneAspectsButton(ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         # Check if user has GM role
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can edit aspects.", ephemeral=True)
             return
             
@@ -136,7 +136,7 @@ class EditZonesButton(ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         # Check if user has GM role
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can edit zones.", ephemeral=True)
             return
             
@@ -151,15 +151,15 @@ class ManageNPCsButton(ui.Button):
         
     async def callback(self, interaction: discord.Interaction):
         # Check if user has GM role
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can manage NPCs.", ephemeral=True)
             return
         
         # Get available NPCs
-        npcs = repo.get_npcs_by_guild(interaction.guild.id)
+        npcs = repositories.character.get_npcs_by_guild(str(interaction.guild.id))
         
         # Get NPCs currently in the scene
-        scene_npc_ids = repo.get_scene_npc_ids(interaction.guild.id, self.parent_view.scene_id)
+        scene_npc_ids = repositories.scene_npc.get_scene_npc_ids(str(interaction.guild.id), str(self.parent_view.scene_id))
         
         # Create selection options for NPCs
         options = []
@@ -218,7 +218,7 @@ class ManageNPCsSelect(discord.ui.Select):
         
     async def callback(self, interaction: discord.Interaction):
         # Get current NPCs in scene
-        scene_npc_ids = repo.get_scene_npc_ids(interaction.guild.id, self.parent_view.scene_id)
+        scene_npc_ids = repositories.scene_npc.get_scene_npc_ids(str(interaction.guild.id), str(self.parent_view.scene_id))
         
         # NPCs to add (selected but not in scene)
         to_add = [npc_id for npc_id in self.values if npc_id not in scene_npc_ids]
@@ -228,16 +228,16 @@ class ManageNPCsSelect(discord.ui.Select):
         
         # Perform the updates
         for npc_id in to_add:
-            repo.add_scene_npc(interaction.guild.id, npc_id, self.parent_view.scene_id)
+            repositories.scene_npc.add_npc_to_scene(str(interaction.guild.id), str(self.parent_view.scene_id), npc_id)
             
         for npc_id in to_remove:
-            repo.remove_scene_npc(interaction.guild.id, npc_id, self.parent_view.scene_id)
+            repositories.scene_npc.remove_npc_from_scene(str(interaction.guild.id), str(self.parent_view.scene_id), npc_id)
     
         # Check if this is the active scene before updating pins
-        scene = repo.get_scene_by_id(interaction.guild.id, self.parent_view.scene_id)
+        scene = repositories.scene.find_by_id('scene_id', self.parent_view.scene_id)
     
         # Only update all pinned instances if this is the active scene
-        if scene and scene["is_active"]:
+        if scene and scene.is_active:
             # Find any SceneCommands cog instance to use its update method
             scene_cog = None
             for cog in interaction.client.cogs.values():
@@ -267,7 +267,7 @@ class EditSceneAspectsModal(discord.ui.Modal, title="Edit Scene Aspects"):
         self.parent_view = parent_view
         
         # Get current aspects
-        current_aspects = repo.get_fate_scene_aspects(parent_view.guild_id, parent_view.scene_id) or []
+        current_aspects = repositories.fate_aspects.get_aspects(str(parent_view.guild_id), str(parent_view.scene_id)) or []
         
         # Convert aspects to format suitable for editing in text field
         aspect_lines = []
@@ -334,7 +334,7 @@ class EditSceneAspectsModal(discord.ui.Modal, title="Edit Scene Aspects"):
                 ))
         
         # Update aspects in DB
-        repo.set_fate_scene_aspects(self.parent_view.guild_id, self.parent_view.scene_id, aspects)
+        repositories.fate_aspects.set_aspects(str(self.parent_view.guild_id), str(self.parent_view.scene_id), aspects)
         
         # Update the view - this will now update both pinned and ephemeral messages
         await self.parent_view.update_view(interaction)
@@ -346,7 +346,7 @@ class EditZonesModal(discord.ui.Modal, title="Edit Scene Zones"):
         self.parent_view = parent_view
         
         # Get current zones
-        current_zones = repo.get_fate_scene_zones(parent_view.guild_id, parent_view.scene_id) or []
+        current_zones = repositories.fate_zones.get_zones(str(parent_view.guild_id), str(parent_view.scene_id)) or []
         current_text = "\n".join(current_zones)
         
         self.zones = discord.ui.TextInput(
@@ -364,7 +364,7 @@ class EditZonesModal(discord.ui.Modal, title="Edit Scene Zones"):
         zone_lines = [line for line in zone_lines if line]
         
         # Update zones in DB
-        repo.set_fate_scene_zones(self.parent_view.guild_id, self.parent_view.scene_id, zone_lines)
+        repositories.fate_zones.set_zones(str(self.parent_view.guild_id), str(self.parent_view.scene_id), zone_lines)
         
         # Update the view - this will now update both pinned and ephemeral messages
         await self.parent_view.update_view(interaction)

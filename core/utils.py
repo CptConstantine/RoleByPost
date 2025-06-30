@@ -1,10 +1,9 @@
 import re, random
 from core.models import BaseCharacter, RollModifiers
-from data import repo
+from data.repositories.repository_factory import repositories
 
-
-def get_character(guild_id, char_id) -> BaseCharacter:
-    character = repo.get_character_by_id(guild_id, char_id)
+def get_character(char_id) -> BaseCharacter:
+    character = repositories.character.get_by_id(str(char_id))
     return character if character else None
 
 def roll_parameters_to_dict(roll_parameters: str) -> dict:

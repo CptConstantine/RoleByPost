@@ -4,8 +4,9 @@ import discord
 from discord import SelectOption, ui
 from core.models import BaseCharacter, BaseSheet, RollModifiers
 from core.shared_views import EditNameModal, EditNotesModal, FinalizeRollButton, PaginatedSelectView, RollModifiersView
-from core.utils import get_character, roll_formula
-from data import repo
+from core.utils import roll_formula
+from data.repositories.repository_factory import repositories
+
 
 SYSTEM = "mgt2e"
 
@@ -153,7 +154,7 @@ class MGT2ECharacter(BaseCharacter):
                 # Use per-guild default if available
                 skills = None
                 if guild_id:
-                    skills = repo.get_default_skills(guild_id, "mgt2e")
+                    skills = repositories.default_skills.get_default_skills(str(guild_id), SYSTEM)
                 default_skills = dict(skills) if skills else dict(self.DEFAULT_SKILLS)
                 # Only add missing skills, don't overwrite existing ones
                 updated_skills = dict(self.skills)
@@ -296,6 +297,10 @@ class MGT2ECharacter(BaseCharacter):
             return 2
         else:
             return 3
+
+def get_character(char_id) -> MGT2ECharacter:
+    character = repositories.character.get_by_id(str(char_id))
+    return character if character else None
 
 class MGT2ERollModifiers(RollModifiers):
     """
@@ -441,19 +446,19 @@ class MGT2ESheetEditView(ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.editor_id:
-            await interaction.response.send_message("You can’t edit this character.", ephemeral=True)
+            await interaction.response.send_message("You can't edit this character.", ephemeral=True)
             return False
         return True
 
     @ui.button(label="Edit Attributes", style=discord.ButtonStyle.secondary, row=1)
     async def edit_attributes(self, interaction: discord.Interaction, button: ui.Button):
-        character = get_character(interaction.guild.id, self.char_id)
+        character = get_character(self.char_id)
         attrs = character.attributes if character else {}
         await interaction.response.send_modal(EditAttributesModal(self.char_id, attrs))
 
     @ui.button(label="Edit Skills", style=discord.ButtonStyle.secondary, row=1)
     async def edit_skills(self, interaction: discord.Interaction, button: ui.Button):
-        character = get_character(interaction.guild.id, self.char_id)
+        character = get_character(self.char_id)
         skills = character.skills if character else {}
         categories = get_skill_categories(MGT2ECharacter.DEFAULT_SKILLS)
         category_options = [SelectOption(label=cat, value=cat) for cat in sorted(categories.keys())]
@@ -485,21 +490,21 @@ class MGT2ESheetEditView(ui.View):
 
     @ui.button(label="Edit Name", style=discord.ButtonStyle.secondary, row=1)
     async def edit_name(self, interaction: discord.Interaction, button: ui.Button):
-        character = get_character(interaction.guild.id, self.char_id)
+        character = get_character(self.char_id)
         await interaction.response.send_modal(
             EditNameModal(
                 self.char_id,
                 character.name if character else "",
                 SYSTEM,
-                lambda editor_id, char_id: (MGT2ESheet().format_full_sheet(get_character(interaction.guild.id, char_id)), MGT2ESheetEditView(editor_id, char_id))
+                lambda editor_id, char_id: (MGT2ESheet().format_full_sheet(get_character(char_id)), MGT2ESheetEditView(editor_id, char_id))
             )
         )
 
     @ui.button(label="Edit Notes", style=discord.ButtonStyle.secondary, row=4)
     async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
-        character = get_character(interaction.guild.id, self.char_id)
+        character = get_character(self.char_id)
         # Only allow owner or GM
-        if (interaction.user.id != int(character.owner_id) and not await repo.has_gm_permission(interaction.guild.id, interaction.user)):
+        if (interaction.user.id != int(character.owner_id) and not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user)):
             await interaction.response.send_message("❌ Only the owner or a GM can edit notes.", ephemeral=True)
             return
         notes = "\n".join(character.notes) if character and character.notes else ""
@@ -508,7 +513,7 @@ class MGT2ESheetEditView(ui.View):
                 self.char_id,
                 notes,
                 SYSTEM,
-                lambda editor_id, char_id: (MGT2ESheet().format_full_sheet(get_character(interaction.guild.id, char_id)), MGT2ESheetEditView(editor_id, char_id))
+                lambda editor_id, char_id: (MGT2ESheet().format_full_sheet(get_character(char_id)), MGT2ESheetEditView(editor_id, char_id))
             )
         )
 
@@ -520,9 +525,9 @@ class RollButton(ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         if interaction.user.id != self.editor_id:
-            await interaction.response.send_message("You can’t roll for this character.", ephemeral=True)
+            await interaction.response.send_message("You can't roll for this character.", ephemeral=True)
             return
-        character = get_character(interaction.guild.id, self.char_id)
+        character = get_character(self.char_id)
         skills = character.skills if character else {}
         categories = get_skill_categories(skills)
         category_options = [SelectOption(label=cat, value=cat) for cat in sorted(categories.keys())]
@@ -565,7 +570,7 @@ class EditAttributesModal(ui.Modal, title="Edit Attributes"):
         self.add_item(self.attr_field)
 
     async def on_submit(self, interaction: discord.Interaction):
-        character = get_character(interaction.guild.id, self.char_id)
+        character = get_character(self.char_id)
         try:
             values = [int(x) for x in self.attr_field.value.strip().split()]
             if len(values) != 6:
@@ -581,7 +586,7 @@ class EditAttributesModal(ui.Modal, title="Edit Attributes"):
         except Exception:
             await interaction.response.send_message("❌ Please enter 6 integers separated by spaces (e.g. `8 7 6 5 4 3`).", ephemeral=True)
             return
-        repo.set_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
         embed = MGT2ESheet().format_full_sheet(character)
         view = MGT2ESheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(content="✅ Attributes updated.", embed=embed, view=view)
@@ -598,7 +603,7 @@ class EditSkillsModal(ui.Modal, title="Edit Skills"):
         self.add_item(self.skills_field)
 
     async def on_submit(self, interaction: discord.Interaction):
-        character = get_character(interaction.guild.id, self.char_id)
+        character = get_character(self.char_id)
         skills_dict = {}
         for entry in self.skills_field.value.split(","):
             if ":" in entry:
@@ -608,7 +613,7 @@ class EditSkillsModal(ui.Modal, title="Edit Skills"):
                 except ValueError:
                     continue
         character.skills = skills_dict  # Use property setter
-        repo.set_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
         embed = MGT2ESheet().format_full_sheet(character)
         view = MGT2ESheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(content="✅ Skills updated!", embed=embed, view=view)
@@ -629,7 +634,7 @@ class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
         self.add_item(self.value_field)
 
     async def on_submit(self, interaction: discord.Interaction):
-        character = get_character(interaction.guild.id, self.char_id)
+        character = get_character(self.char_id)
         value = self.value_field.value.strip()
         try:
             skills = character.skills  # Use property
@@ -682,7 +687,7 @@ class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
             await interaction.response.send_message(f"❌ Please enter a number or 'untrained'. Error: {str(e)}", ephemeral=True)
             return
             
-        repo.set_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
         embed = MGT2ESheet().format_full_sheet(character)
         view = MGT2ESheetEditView(interaction.user.id, self.char_id)
         
@@ -701,7 +706,7 @@ class MGT2ERollModifiersView(RollModifiersView):
     """
     def __init__(self, roll_formula_obj: MGT2ERollModifiers, difficulty: int = None):
         self.character = None
-        super().__init__(roll_formula_obj, difficulty)
+        super().__init__(roll_formula_obj, self.character, difficulty)
         # Add buttons for skill and attribute selection
         self.add_item(MGT2ESelectSkillButton(self, roll_formula_obj.skill))
         self.add_item(MGT2ESelectAttributeButton(self, roll_formula_obj.attribute))
@@ -709,7 +714,7 @@ class MGT2ERollModifiersView(RollModifiersView):
     
     # Override to ensure we get the character before building the view
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        self.character = repo.get_active_character(interaction.guild.id, interaction.user.id)
+        self.character = repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id)
         if not self.character:
             await interaction.response.send_message("❌ No active character found.", ephemeral=True)
             return False
@@ -726,7 +731,7 @@ class MGT2ESelectSkillButton(ui.Button):
         self.parent_view = parent_view
     
     async def callback(self, interaction: discord.Interaction):
-        character = repo.get_active_character(interaction.guild.id, interaction.user.id)
+        character = repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id)
         if not character:
             await interaction.response.send_message("❌ No active character found.", ephemeral=True)
             return
@@ -800,7 +805,7 @@ class MGT2ESelectAttributeButton(ui.Button):
         self.parent_view = parent_view
     
     async def callback(self, interaction: discord.Interaction):
-        character = repo.get_active_character(interaction.guild.id, interaction.user.id)
+        character = repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id)
         if not character:
             await interaction.response.send_message("❌ No active character found.", ephemeral=True)
             return

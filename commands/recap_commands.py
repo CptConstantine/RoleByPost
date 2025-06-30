@@ -7,7 +7,7 @@ import json
 import openai
 import time
 import logging
-from data import repo
+from data.repositories.repository_factory import repositories
 
 class RecapCommands(commands.Cog):
     def __init__(self, bot):
@@ -38,7 +38,7 @@ class RecapCommands(commands.Cog):
         private: bool = False
     ):
         # Check if API key is configured
-        api_key = repo.get_openai_api_key(interaction.guild.id)
+        api_key = repositories.api_key.get_openai_key(str(interaction.guild.id))
         if not api_key:
             await interaction.response.send_message("❌ No API key has been set. A GM must set one with `/setup openai set_api_key`.", ephemeral=True)
             return
@@ -86,12 +86,12 @@ class RecapCommands(commands.Cog):
         days_to_include: int = 7
     ):
         # Check if user has GM permissions
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can configure automatic recaps.", ephemeral=True)
             return
         
         # Check if API key is configured
-        api_key = repo.get_openai_api_key(interaction.guild.id)
+        api_key = repositories.api_key.get_openai_key(str(interaction.guild.id))
         if not api_key and enabled:
             await interaction.response.send_message("❌ No API key has been set. Please set one with `/setup openai set_api_key` first.", ephemeral=True)
             return
@@ -101,15 +101,15 @@ class RecapCommands(commands.Cog):
             channel = interaction.channel
             
         # Get current settings
-        current_settings = repo.get_auto_recap_settings(interaction.guild.id)
+        current_settings = repositories.auto_recap.get_settings(str(interaction.guild.id))
         
         # Update settings if provided
         if enabled is not None:
             # Save to DB
-            repo.set_auto_recap(
-                interaction.guild.id,
+            repositories.auto_recap.update_settings(
+                str(interaction.guild.id),
                 enabled,
-                channel.id if enabled else current_settings.get("channel_id"),
+                str(channel.id) if enabled else current_settings.channel_id,
                 days_interval,
                 days_to_include
             )
@@ -119,7 +119,7 @@ class RecapCommands(commands.Cog):
                 # Schedule the task
                 if interaction.guild.id in self.recap_tasks:
                     self.recap_tasks[interaction.guild.id].cancel()
-                self._schedule_guild_recap(interaction.guild.id)
+                self._schedule_guild_recap(str(interaction.guild.id))
                 await interaction.response.send_message(
                     f"✅ Automatic recaps enabled. A recap will be posted to {channel.mention} every {days_interval} days, including {days_to_include} days of history.",
                     ephemeral=True
@@ -133,14 +133,14 @@ class RecapCommands(commands.Cog):
             return
             
         # If no parameters were provided, show current settings
-        if current_settings and current_settings.get("enabled", False):
-            channel_id = current_settings.get("channel_id")
+        if current_settings and current_settings.enabled:
+            channel_id = current_settings.channel_id
             channel_mention = f"<#{channel_id}>" if channel_id else "default channel"
-            interval = current_settings.get("days_interval", 7)
-            days_count = current_settings.get("days_to_include", 7)
+            interval = current_settings.days_interval
+            days_count = current_settings.days_to_include
             
             # Calculate next recap time
-            last_recap = current_settings.get("last_recap_time", 0)
+            last_recap = current_settings.last_recap_time or 0
             if last_recap:
                 next_recap = last_recap + (interval * 86400)
                 next_recap_str = f"<t:{int(next_recap)}:R>"
@@ -164,18 +164,18 @@ class RecapCommands(commands.Cog):
     )
     async def auto_recap_now(self, interaction: discord.Interaction):
         # Check if user has GM permissions
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can force recaps.", ephemeral=True)
             return
             
         # Check if auto recaps are enabled
-        settings = repo.get_auto_recap_settings(interaction.guild.id)
-        if not settings or not settings.get("enabled", False):
+        settings = repositories.auto_recap.get_settings(str(interaction.guild.id))
+        if not settings or not settings.enabled:
             await interaction.response.send_message("❌ Automatic recaps are not enabled for this server.", ephemeral=True)
             return
         
         # Check if API key is configured
-        api_key = repo.get_openai_api_key(interaction.guild.id)
+        api_key = repositories.api_key.get_openai_key(str(interaction.guild.id))
         if not api_key:
             await interaction.response.send_message("❌ No API key has been set. Please set one with `/setup openai set_api_key` first.", ephemeral=True)
             return
@@ -192,8 +192,8 @@ class RecapCommands(commands.Cog):
         task = self.bot.loop.create_task(
             self._post_scheduled_recap(
                 guild_id,
-                settings.get("channel_id"),
-                settings.get("days_to_include", 7),
+                settings.channel_id,
+                settings.days_to_include,
                 0  # Run immediately
             )
         )
@@ -205,8 +205,8 @@ class RecapCommands(commands.Cog):
     )
     async def recap_autostatus(self, interaction: discord.Interaction):
         """Show the current automatic recap settings for this server"""
-        settings = repo.get_auto_recap_settings(interaction.guild.id)
-        api_key_set = repo.get_openai_api_key(interaction.guild.id) is not None
+        settings = repositories.auto_recap.get_settings(str(interaction.guild.id))
+        api_key_set = repositories.api_key.get_openai_key(str(interaction.guild.id)) is not None
         
         # Create embed
         embed = discord.Embed(
@@ -215,17 +215,17 @@ class RecapCommands(commands.Cog):
         )
         
         # Main settings section
-        enabled = settings.get("enabled", False)
-        paused = settings.get("paused", False)
+        enabled = settings.enabled
+        paused = settings.paused
         
         # Format the interval
-        days_interval = settings.get("days_interval", 7)
-        days_to_include = settings.get("days_to_include", 7)
+        days_interval = settings.days_interval
+        days_to_include = settings.days_to_include
         
         # Calculate next recap time if enabled
         next_recap_str = "Not scheduled"
         if enabled and not paused:
-            last_recap_time = settings.get("last_recap_time", 0)
+            last_recap_time = settings.last_recap_time or 0
             if last_recap_time:
                 next_recap_time = last_recap_time + (days_interval * 86400)
                 next_recap_str = f"<t:{int(next_recap_time)}:R>"
@@ -254,7 +254,7 @@ class RecapCommands(commands.Cog):
             config_value = []
             
             # Channel info
-            channel_id = settings.get("channel_id")
+            channel_id = settings.channel_id
             if channel_id:
                 channel_mention = f"<#{channel_id}>"
                 config_value.append(f"**Channel:** {channel_mention}")
@@ -267,7 +267,7 @@ class RecapCommands(commands.Cog):
             config_value.append(f"**Next Recap:** {next_recap_str}")
             
             # Activity check info
-            activity_check = settings.get("check_activity", True)
+            activity_check = settings.check_activity
             config_value.append(f"**Activity Checks:** {'✅ Enabled' if activity_check else '❌ Disabled'}")
             
             embed.add_field(
@@ -277,7 +277,7 @@ class RecapCommands(commands.Cog):
             )
         
         # Add footer with commands based on user permissions
-        if await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             footer_text = "GM Commands: /recap setauto, /setup openai set_api_key, /recap autonow"
         else:
             footer_text = "Only GMs can modify automatic recap settings"
@@ -293,7 +293,7 @@ class RecapCommands(commands.Cog):
         logging.info("Starting recap task recovery...")
         
         # Get all guilds with auto recap enabled
-        guilds = repo.get_all_auto_recap_guilds()
+        guilds = repositories.auto_recap.get_all_enabled_guilds()
         count = 0
         
         for guild_id in guilds:
@@ -330,7 +330,7 @@ class RecapCommands(commands.Cog):
     async def _cleanup_inactive_servers(self):
         """Check for and clean up inactive or deleted servers"""
         # Get all guilds with auto recap enabled
-        guilds = repo.get_all_auto_recap_guilds()
+        guilds = repositories.auto_recap.get_all_enabled_guilds()
         for guild_id in guilds:
             try:
                 # Check if the guild still exists/bot is still in it
@@ -342,11 +342,11 @@ class RecapCommands(commands.Cog):
                     continue
                 
                 # Get the channel for this guild's recaps
-                settings = repo.get_auto_recap_settings(guild_id)
-                if not settings or not settings.get("enabled", False):
+                settings = repositories.auto_recap.get_settings(guild_id)
+                if not settings or not settings.enabled:
                     continue
                     
-                channel_id = settings.get("channel_id")
+                channel_id = settings.channel_id
                 channel = guild.get_channel(int(channel_id)) if channel_id else None
                 if not channel:
                     # Channel was deleted, disable recaps
@@ -355,7 +355,7 @@ class RecapCommands(commands.Cog):
                     continue
                 
                 # Check for server activity
-                if settings.get("check_activity", True):  # Allow servers to opt out of activity checks
+                if settings.check_activity:  # Allow servers to opt out of activity checks
                     is_active = await self._check_server_activity(channel, self.inactive_threshold_days)
                     if not is_active:
                         # Server is inactive, pause recaps temporarily
@@ -400,7 +400,7 @@ class RecapCommands(commands.Cog):
                 del self.recap_tasks[guild_id]
             
             # Disable recaps in the database
-            repo.set_auto_recap(
+            repositories.auto_recap.update_settings(
                 guild_id,
                 enabled=False,
                 channel_id=None,
@@ -410,7 +410,7 @@ class RecapCommands(commands.Cog):
             
             # Optionally, clean up the API key if the guild is truly gone
             # This is more aggressive so maybe only do this after multiple confirmations
-            # repo.set_openai_api_key(guild_id, None)
+            # repositories.api_key.set_openai_key(guild_id, None)
             
             logging.info(f"Disabled recaps for deleted guild {guild_id}")
         except Exception as e:
@@ -425,7 +425,7 @@ class RecapCommands(commands.Cog):
                 del self.recap_tasks[guild_id]
             
             # Disable recaps in the database
-            repo.set_auto_recap(
+            repositories.auto_recap.update_settings(
                 guild_id,
                 enabled=False,
                 channel_id=None,
@@ -452,12 +452,12 @@ class RecapCommands(commands.Cog):
         """Temporarily pause recaps for an inactive guild"""
         try:
             # Get current settings
-            settings = repo.get_auto_recap_settings(guild_id)
+            settings = repositories.auto_recap.get_settings(guild_id)
             
             # Only pause if not already paused
-            if not settings.get("paused", False):
+            if not settings.paused:
                 # Mark as paused in database
-                repo.update_auto_recap_pause_state(guild_id, True)
+                repositories.auto_recap.update_pause_state(guild_id, True)
                 
                 # Cancel any running tasks but don't delete from the recap_tasks dictionary
                 # This keeps track of the paused state
@@ -474,10 +474,10 @@ class RecapCommands(commands.Cog):
         """Re-enable recaps for a guild if it was previously paused due to inactivity"""
         try:
             # Check if currently paused
-            settings = repo.get_auto_recap_settings(guild_id)
-            if settings.get("paused", False):
+            settings = repositories.auto_recap.get_settings(guild_id)
+            if settings.paused:
                 # Un-pause in the database
-                repo.update_auto_recap_pause_state(guild_id, False)
+                repositories.auto_recap.update_pause_state(guild_id, False)
                 
                 # Reschedule the task
                 if guild_id in self.recap_tasks and self.recap_tasks[guild_id] == "PAUSED":
@@ -565,14 +565,14 @@ class RecapCommands(commands.Cog):
     def _schedule_guild_recap(self, guild_id):
         """Schedule a recap task for a specific guild"""
         try:
-            settings = repo.get_auto_recap_settings(guild_id)
-            if not settings or not settings.get("enabled", False):
+            settings = repositories.auto_recap.get_settings(guild_id)
+            if not settings or not settings.enabled:
                 return
                 
             # Calculate when the next recap should be posted
-            last_recap_time = repo.get_last_recap_time(guild_id) or 0
+            last_recap_time = settings.last_recap_time or 0
             now = datetime.datetime.now().timestamp()
-            interval_seconds = settings.get("days_interval", 7) * 86400
+            interval_seconds = settings.days_interval * 86400
             next_recap_time = last_recap_time + interval_seconds
             
             # If the next recap time is in the past, schedule it for now + 10 seconds
@@ -589,8 +589,8 @@ class RecapCommands(commands.Cog):
             task = self.bot.loop.create_task(
                 self._post_scheduled_recap(
                     guild_id,
-                    settings.get("channel_id"),
-                    settings.get("days_to_include", 7),
+                    settings.channel_id,
+                    settings.days_to_include,
                     delay_seconds
                 )
             )
@@ -615,8 +615,8 @@ class RecapCommands(commands.Cog):
                 return
             
             # Check if recap is still enabled
-            settings = repo.get_auto_recap_settings(guild_id)
-            if not settings or not settings.get("enabled", False) or settings.get("paused", False):
+            settings = repositories.auto_recap.get_settings(guild_id)
+            if not settings or not settings.enabled or settings.paused:
                 logging.info(f"Recap for guild {guild_id} is now disabled or paused, skipping")
                 return
             
@@ -628,7 +628,7 @@ class RecapCommands(commands.Cog):
                 return
             
             # Get the API key
-            api_key = repo.get_openai_api_key(guild_id)
+            api_key = repositories.api_key.get_openai_key(guild_id)
             if not api_key:
                 logging.error(f"No API key for guild {guild_id}")
                 return
@@ -638,7 +638,7 @@ class RecapCommands(commands.Cog):
             if not messages:
                 logging.info(f"No messages to summarize for guild {guild_id}")
                 # Reschedule the next one even if there are no messages
-                repo.update_last_recap_time(guild_id, datetime.datetime.now().timestamp())
+                repositories.auto_recap.update_last_recap_time(guild_id, datetime.datetime.now().timestamp())
                 self._schedule_guild_recap(guild_id)
                 return
                 
@@ -660,7 +660,7 @@ class RecapCommands(commands.Cog):
             logging.info(f"Posted recap to guild {guild_id}, channel {channel_id}")
             
             # Update the last recap time
-            repo.update_last_recap_time(guild_id, current_time.timestamp())
+            repositories.auto_recap.update_last_recap_time(guild_id, current_time.timestamp())
             
             # After success, check server activity before rescheduling
             last_activity = await self._check_server_recent_activity(channel)

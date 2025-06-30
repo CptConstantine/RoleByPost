@@ -90,26 +90,26 @@ class GenericSheetEditView(ui.View):
 
     @ui.button(label="Edit Name", style=discord.ButtonStyle.secondary, row=0)
     async def edit_name(self, interaction: discord.Interaction, button: ui.Button):
-        character = get_character(interaction.guild.id, self.char_id)
+        character = get_character(self.char_id)
         await interaction.response.send_modal(
             EditNameModal(
                 self.char_id,
                 character.name if character else "",
                 SYSTEM,
-                lambda editor_id, char_id: (GenericSheet().format_full_sheet(get_character(interaction.guild.id, char_id)), GenericSheetEditView(editor_id, char_id))
+                lambda editor_id, char_id: (GenericSheet().format_full_sheet(get_character(char_id)), GenericSheetEditView(editor_id, char_id))
             )
         )
 
     @ui.button(label="Edit Notes", style=discord.ButtonStyle.secondary, row=0)
     async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
-        character = get_character(interaction.guild.id, self.char_id)
+        character = get_character(self.char_id)
         notes = "\n".join(character.notes) if character and character.notes else ""
         await interaction.response.send_modal(
             EditNotesModal(
                 self.char_id,
                 notes,
                 SYSTEM,
-                lambda editor_id, char_id: (GenericSheet().format_full_sheet(get_character(interaction.guild.id, char_id)), GenericSheetEditView(editor_id, char_id))
+                lambda editor_id, char_id: (GenericSheet().format_full_sheet(get_character(char_id)), GenericSheetEditView(editor_id, char_id))
             )
         )
 

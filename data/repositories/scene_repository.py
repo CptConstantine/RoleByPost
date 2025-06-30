@@ -1,6 +1,6 @@
 from typing import List, Optional
 from .base_repository import BaseRepository
-from models import Scene, SceneNPC, PinnedSceneMessage, SceneNotes
+from data.models import Scene, SceneNPC, PinnedSceneMessage, SceneNotes
 import time
 import uuid
 
@@ -44,6 +44,11 @@ class SceneRepository(BaseRepository[Scene]):
         
         self.save(scene)
         return scene_id
+    
+    def get_all_scenes(self, guild_id: str) -> List[Scene]:
+        """Get all scenes for a guild"""
+        query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s ORDER BY creation_time DESC"
+        return self.execute_query(query, (str(guild_id),), fetch_all=True)
     
     def get_by_name(self, guild_id: str, name: str) -> Optional[Scene]:
         """Get scene by name within a guild"""
@@ -122,6 +127,36 @@ class SceneNPCRepository(BaseRepository[SceneNPC]):
             (str(guild_id), str(scene_id), str(npc_id))
         )
         return deleted_count > 0
+    
+    def get_scene_npcs(self, guild_id: str, scene_name: str = None) -> List[dict]:
+        """Get NPCs for a scene - helper method for initiative commands"""
+        from .repository_factory import repositories
+        
+        if scene_name:
+            # Get specific scene
+            scenes = repositories.scene.find_all_by_column('guild_id', str(guild_id))
+            scene = next((s for s in scenes if s.name.lower() == scene_name.lower()), None)
+            if not scene:
+                return []
+            
+            # Get NPCs for this scene
+            scene_npcs = self.find_all_by_column('scene_id', scene.scene_id)
+            npc_ids = [sn.npc_id for sn in scene_npcs]
+            
+            # Get the actual NPC character objects
+            all_chars = repositories.character.find_all_by_column('guild_id', str(guild_id))
+            return [c for c in all_chars if c.is_npc and c.id in npc_ids]
+        else:
+            # Get active scene NPCs
+            active_scene = repositories.scene.get_active_scene(str(guild_id))
+            if not active_scene:
+                return []
+            
+            scene_npcs = self.find_all_by_column('scene_id', active_scene.scene_id)
+            npc_ids = [sn.npc_id for sn in scene_npcs]
+            
+            all_chars = repositories.character.find_all_by_column('guild_id', str(guild_id))
+            return [c for c in all_chars if c.is_npc and c.id in npc_ids]
 
 class PinnedSceneMessageRepository(BaseRepository[PinnedSceneMessage]):
     def __init__(self):
@@ -157,6 +192,16 @@ class PinnedSceneMessageRepository(BaseRepository[PinnedSceneMessage]):
         """Get scene message info for a channel"""
         query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND channel_id = %s"
         return self.execute_query(query, (str(guild_id), str(channel_id)), fetch_one=True)
+    
+    def get_all_pinned_messages(self, guild_id: str) -> List[PinnedSceneMessage]:
+        """Get all pinned scene messages for a guild"""
+        query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s ORDER BY scene_id"
+        return self.execute_query(query, (str(guild_id),), fetch_all=True)
+    
+    def clear_all_pins(self, guild_id: str) -> None:
+        """Clear all pinned messages for a guild"""
+        query = f"DELETE FROM {self.table_name} WHERE guild_id = %s"
+        self.execute_query(query, (str(guild_id),))
     
 class SceneNotesRepository(BaseRepository[SceneNotes]):
     def __init__(self):
@@ -199,4 +244,4 @@ class SceneNotesRepository(BaseRepository[SceneNotes]):
     def get_all_scene_notes_for_guild(self, guild_id: str) -> list[SceneNotes]:
         """Get all scene notes for a guild"""
         query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s ORDER BY scene_id"
-        return self.execute_query(query, (str(guild_id),))
+        return self.execute_query(query, (str(guild_id),), fetch_all=True)

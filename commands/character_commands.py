@@ -3,12 +3,12 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from core.models import BaseCharacter
-from data import repo
+from data.repositories.repository_factory import repositories
 import core.factories as factories
 import json
 
 async def pc_name_autocomplete(interaction: discord.Interaction, current: str):
-    all_chars = repo.get_all_characters(interaction.guild.id)
+    all_chars = repositories.character.get_all_characters(interaction.guild.id)
     pcs = [
         c for c in all_chars
         if not c.is_npc and str(c.owner_id) == str(interaction.user.id)
@@ -17,17 +17,17 @@ async def pc_name_autocomplete(interaction: discord.Interaction, current: str):
     return [app_commands.Choice(name=name, value=name) for name in options[:25]]
 
 async def pc_name_gm_autocomplete(interaction: discord.Interaction, current: str):
-    all_chars = repo.get_all_characters(interaction.guild.id)
+    all_chars = repositories.character.get_all_characters(interaction.guild.id)
     pcs = [c for c in all_chars if not c.is_npc]
     options = [c.name for c in pcs if current.lower() in c.name.lower()]
     return [app_commands.Choice(name=name, value=name) for name in options[:25]]
 
 async def character_or_npc_autocomplete(interaction: discord.Interaction, current: str):
     """Autocomplete for commands that can target both PCs and NPCs"""
-    all_chars = repo.get_all_characters(interaction.guild.id)
+    all_chars = repositories.character.get_all_characters(interaction.guild.id)
     
     # Check if user is GM
-    is_gm = await repo.has_gm_permission(interaction.guild.id, interaction.user)
+    is_gm = await repositories.server.has_gm_permission(interaction.guild.id, interaction.user)
     
     # Filter characters based on permissions
     options = []
@@ -55,16 +55,16 @@ class CharacterCommands(commands.Cog):
     @app_commands.describe(char_name="The name of your new character")
     async def create_pc(self, interaction: discord.Interaction, char_name: str):
         await interaction.response.defer(ephemeral=True)
-        system = repo.get_system(interaction.guild.id)
+        system = repositories.server.get_system(interaction.guild.id)
         CharacterClass = factories.get_specific_character(system)
-        existing = repo.get_character(interaction.guild.id, char_name)
+        existing = repositories.character.get_character_by_name(interaction.guild.id, char_name)
         if existing:
             await interaction.followup.send(f"❌ A character named `{char_name}` already exists.", ephemeral=True)
             return
         
         # Create a new Character instance using the helper method
         char_id = str(uuid.uuid4())
-        character_dict = BaseCharacter.create_base_character(
+        character_dict = BaseCharacter.build_character_dict(
             id=char_id,
             name=char_name,
             owner_id=interaction.user.id,
@@ -73,30 +73,32 @@ class CharacterCommands(commands.Cog):
         
         character = CharacterClass(character_dict)
         character.apply_defaults(is_npc=False, guild_id=interaction.guild.id)
-        repo.set_character(interaction.guild.id, character, system=system)
+        repositories.character.upsert_character(interaction.guild.id, character, system=system)
         
-        if not repo.get_active_character(interaction.guild.id, interaction.user.id):
-            repo.set_active_character(interaction.guild.id, interaction.user.id, char_id)
+        # Set as active if no active character exists
+        if not repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id):
+            repositories.active_character.set_active_character(str(interaction.guild.id), str(interaction.user.id), char_id)
+        
         await interaction.followup.send(f'📝 Created {system.upper()} character: **{char_name}**.', ephemeral=True)
 
     @create_group.command(name="npc", description="GM: Create a new NPC with a required name")
     @app_commands.describe(npc_name="The name of the new NPC")
     async def create_npc(self, interaction: discord.Interaction, npc_name: str):
         await interaction.response.defer(ephemeral=True)
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.followup.send("❌ Only GMs can create NPCs.", ephemeral=True)
             return
             
-        system = repo.get_system(interaction.guild.id)
+        system = repositories.server.get_system(interaction.guild.id)
         CharacterClass = factories.get_specific_character(system)
-        existing = repo.get_character(interaction.guild.id, npc_name)
+        existing = repositories.character.get_character_by_name(interaction.guild.id, npc_name)
         if existing:
             await interaction.followup.send(f"❌ An NPC named `{npc_name}` already exists.", ephemeral=True)
             return
             
         # Create a new Character instance using the helper method
         npc_id = str(uuid.uuid4())
-        character_dict = BaseCharacter.create_base_character(
+        character_dict = BaseCharacter.build_character_dict(
             id=npc_id,
             name=npc_name,
             owner_id=interaction.user.id,
@@ -105,7 +107,7 @@ class CharacterCommands(commands.Cog):
         
         character = CharacterClass(character_dict)
         character.apply_defaults(is_npc=True, guild_id=interaction.guild.id)
-        repo.set_character(interaction.guild.id, character, system=system)
+        repositories.character.upsert_character(interaction.guild.id, character, system=system)
         await interaction.followup.send(f"🤖 Created NPC: **{npc_name}**", ephemeral=True)
 
     @character_group.command(name="sheet", description="View a character or NPC's full sheet")
@@ -113,21 +115,21 @@ class CharacterCommands(commands.Cog):
     async def sheet(self, interaction: discord.Interaction, char_name: str = None):
         character = None
         if not char_name:
-            character = repo.get_active_character(interaction.guild.id, interaction.user.id)
+            character = repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id)
             if not character:
                 await interaction.response.send_message("❌ No active character set. Use `/character switch` to choose one.", ephemeral=True)
                 return
         else:
-            character = repo.get_character(interaction.guild.id, char_name)
+            character = repositories.character.get_character_by_name(interaction.guild.id, char_name)
             if not character:
                 await interaction.response.send_message("❌ Character not found.", ephemeral=True)
                 return
 
-        if character.is_npc and not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if character.is_npc and not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only the GM can view NPCs.", ephemeral=True)
             return
         
-        system = repo.get_system(interaction.guild.id)
+        system = repositories.server.get_system(interaction.guild.id)
         sheet_obj = factories.get_specific_sheet(system)
         sheet_view = factories.get_specific_sheet_view(system, interaction.user.id, character.id)
         embed = sheet_obj.format_full_sheet(character)
@@ -137,35 +139,27 @@ class CharacterCommands(commands.Cog):
     @app_commands.describe(char_name="Leave blank to export your character, or enter an NPC name")
     async def export(self, interaction: discord.Interaction, char_name: str = None):
         await interaction.response.defer(ephemeral=True)
-        system = repo.get_system(interaction.guild.id)
+        system = repositories.server.get_system(interaction.guild.id)
         
         if char_name is None:
-            all_chars = repo.get_all_characters(interaction.guild.id, system=system)
-            character = next((c for c in all_chars if not c.is_npc and str(c.owner_id) == str(interaction.user.id)), None)
+            # Get user's PC
+            user_chars = repositories.character.get_user_characters(interaction.guild.id, interaction.user.id)
+            character = user_chars[0] if user_chars else None
             if not character:
                 await interaction.followup.send("❌ You don't have a character to export.", ephemeral=True)
                 return
         else:
-            character = repo.get_character(interaction.guild.id, char_name) if char_name else None
-            if character and character.is_npc and not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+            character = repositories.character.get_character_by_name(interaction.guild.id, char_name)
+            if not character:
+                await interaction.followup.send("❌ Character not found.", ephemeral=True)
+                return
+                
+            if character.is_npc and not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
                 await interaction.followup.send("❌ Only the GM can export NPCs.", ephemeral=True)
                 return
-            elif not character.is_npc:
+            elif not character.is_npc and str(character.owner_id) != str(interaction.user.id):
                 await interaction.followup.send("❌ You can only export your own character.", ephemeral=True)
                 return
-            else:
-                character = repo.get_character(interaction.guild.id, char_name)
-                if character and str(character.owner_id) != str(interaction.user.id):
-                    await interaction.followup.send("❌ You can only export your own character.", ephemeral=True)
-                    return
-                    
-        if not character:
-            await interaction.followup.send("❌ Character not found.", ephemeral=True)
-            return
-            
-        if character.is_npc and not await repo.has_gm_permission(interaction.guild.id, interaction.user):
-            await interaction.followup.send("❌ Only the GM can export NPCs.", ephemeral=True)
-            return
             
         export_data = character.data
         export_data["system"] = system
@@ -190,7 +184,7 @@ class CharacterCommands(commands.Cog):
             await interaction.followup.send("❌ Could not decode or parse the file. Make sure it's a valid JSON export from this bot.", ephemeral=True)
             return
             
-        system = repo.get_system(interaction.guild.id)
+        system = repositories.server.get_system(interaction.guild.id)
         CharacterClass = factories.get_specific_character(system)
         
         # Extract key fields from imported data
@@ -201,7 +195,7 @@ class CharacterCommands(commands.Cog):
         avatar_url = data.get("avatar_url")
         
         # Use the helper method
-        character_dict = BaseCharacter.create_base_character(
+        character_dict = BaseCharacter.build_character_dict(
             id=id,
             name=name,
             owner_id=interaction.user.id,  # Always set owner to current user
@@ -219,11 +213,11 @@ class CharacterCommands(commands.Cog):
         character = CharacterClass(character_dict)
         character.apply_defaults(is_npc=is_npc, guild_id=interaction.guild.id)
         
-        if character.is_npc and not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if character.is_npc and not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.followup.send("❌ Only GMs can import NPCs.", ephemeral=True)
             return
-            
-        repo.set_character(interaction.guild.id, character, system=system)
+
+        repositories.character.upsert_character(interaction.guild.id, character, system=system)
         await interaction.followup.send(f"✅ Imported {'NPC' if character.is_npc else 'character'} `{character.name}`.", ephemeral=True)
 
     @character_group.command(name="transfer", description="GM: Transfer a PC to another player")
@@ -233,18 +227,17 @@ class CharacterCommands(commands.Cog):
     )
     @app_commands.autocomplete(char_name=pc_name_gm_autocomplete)
     async def transfer(self, interaction: discord.Interaction, char_name: str, new_owner: discord.Member):
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only GMs can transfer characters.", ephemeral=True)
             return
             
-        character = repo.get_character(interaction.guild.id, char_name)
+        character = repositories.character.get_character_by_name(interaction.guild.id, char_name)
         if not character or character.is_npc:
             await interaction.response.send_message("❌ PC not found.", ephemeral=True)
             return
             
         character.owner_id = new_owner.id
-        system = repo.get_system(interaction.guild.id)
-        repo.set_character(interaction.guild.id, character, system=system)
+        repositories.character.upsert_character(interaction.guild.id, character)
         await interaction.response.send_message(
             f"✅ Ownership of `{char_name}` transferred to {new_owner.display_name}.", ephemeral=True
         )
@@ -253,16 +246,16 @@ class CharacterCommands(commands.Cog):
     @app_commands.describe(char_name="The name of your character to set as active")
     @app_commands.autocomplete(char_name=pc_name_autocomplete)
     async def switch(self, interaction: discord.Interaction, char_name: str):
-        all_chars = repo.get_all_characters(interaction.guild.id)
+        user_chars = repositories.character.get_user_characters(interaction.guild.id, interaction.user.id)
         character = next(
-            (c for c in all_chars if not c.is_npc and str(c.owner_id) == str(interaction.user.id) and c.name.lower() == char_name.lower()),
+            (c for c in user_chars if c.name.lower() == char_name.lower()),
             None
         )
         if not character:
             await interaction.response.send_message(f"❌ You don't have a character named `{char_name}`.", ephemeral=True)
             return
             
-        repo.set_active_character(interaction.guild.id, interaction.user.id, character.id)
+        repositories.active_character.set_active_character(str(interaction.guild.id), str(interaction.user.id), character.id)
         await interaction.response.send_message(f"✅ `{char_name}` is now your active character.", ephemeral=True)
 
     @character_group.command(name="setavatar", description="Set your character's avatar image")
@@ -278,7 +271,7 @@ class CharacterCommands(commands.Cog):
         character = None
         if char_name:
             # User specified a character name
-            character = repo.get_character(interaction.guild.id, char_name)
+            character = repositories.character.get_character_by_name(interaction.guild.id, char_name)
             if not character:
                 await interaction.response.send_message(f"❌ Character '{char_name}' not found.", ephemeral=True)
                 return
@@ -286,18 +279,18 @@ class CharacterCommands(commands.Cog):
             # Check permissions
             if character.is_npc:
                 # Only GMs can set NPC avatars
-                if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+                if not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
                     await interaction.response.send_message("❌ Only GMs can set NPC avatars.", ephemeral=True)
                     return
             else:
                 # Only the owner can set PC avatars (unless GM)
-                is_gm = await repo.has_gm_permission(interaction.guild.id, interaction.user)
+                is_gm = await repositories.server.has_gm_permission(interaction.guild.id, interaction.user)
                 if str(character.owner_id) != str(interaction.user.id) and not is_gm:
                     await interaction.response.send_message("❌ You can only set avatars for your own characters.", ephemeral=True)
                     return
         else:
             # No character specified, use active character
-            character = repo.get_active_character(interaction.guild.id, interaction.user.id)
+            character = repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id)
             if not character:
                 await interaction.response.send_message("❌ You don't have an active character set. Use `/character switch` to choose one or specify a character name.", ephemeral=True)
                 return
@@ -309,9 +302,8 @@ class CharacterCommands(commands.Cog):
         
         # Save the avatar URL to the character
         character.avatar_url = avatar_url
-        system = repo.get_system(interaction.guild.id)
-        repo.set_character(interaction.guild.id, character, system=system)
-        
+        repositories.character.upsert_character(interaction.guild.id, character)
+
         # Show a preview
         embed = discord.Embed(
             title="Avatar Updated",

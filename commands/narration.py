@@ -1,8 +1,8 @@
 import re
 import discord
 from core.models import BaseCharacter
-from data import repo
 import core.factories as factories
+from data.repositories.repository_factory import repositories
 
 async def process_narration(message):
     """Process messages with special prefixes for character speech and GM narration."""
@@ -16,7 +16,7 @@ async def process_narration(message):
     # Check for GM narration first
     if content.startswith("gm::"):
         # Make sure user is a GM
-        if not await repo.has_gm_permission(guild_id, message.author):
+        if not await repositories.server.has_gm_permission(guild_id, message.author):
             await message.reply("❌ Only GMs can use GM narration.", delete_after=10)
             try:
                 await message.delete()
@@ -31,7 +31,7 @@ async def process_narration(message):
     # Extract type and content from message format for PC/NPC speech
     if content.startswith("pc::"):
         # Get user's active character
-        character = repo.get_active_character(guild_id, user_id)
+        character = repositories.active_character.get_active_character(guild_id, user_id)
         if not character:
             await message.reply("❌ You don't have an active character set. Use `/character switch` first.", delete_after=10)
             try:
@@ -46,7 +46,7 @@ async def process_narration(message):
         
     elif content.startswith("npc::"):
         # Make sure user is a GM
-        if not await repo.has_gm_permission(guild_id, message.author):
+        if not await repositories.server.has_gm_permission(guild_id, message.author):
             await message.reply("❌ Only GMs can speak as NPCs.", delete_after=10)
             try:
                 await message.delete()
@@ -78,7 +78,7 @@ async def process_narration(message):
             alias = None
         
         # Find the NPC
-        character = repo.get_character(guild_id, npc_name)
+        character = repositories.character.get_character_by_name(guild_id, npc_name)
         
         # Handle case where NPC doesn't exist - create a temporary character object
         if not character:
@@ -87,8 +87,8 @@ async def process_narration(message):
                 alias = npc_name  # Use the NPC name as an alias if no alias was provided
             
             # Create a temporary character for display
-            character_dict = BaseCharacter.create_base_character(f"temp_{npc_name.lower().replace(' ', '_')}", npc_name, user_id, is_npc=True, notes=[])
-            CharacterClass = factories.get_specific_character(repo.get_system(guild_id))
+            character_dict = BaseCharacter.build_character_dict(f"temp_{npc_name.lower().replace(' ', '_')}", npc_name, user_id, is_npc=True, notes=[])
+            CharacterClass = factories.get_specific_character(repositories.server.get_system(guild_id))
             character = CharacterClass.from_dict(character_dict)
     else:
         return  # Not a narration command

@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from data import repo
+from data.repositories.repository_factory import repositories
 from rpg_systems.fate.fate_models import Aspect
 
 class FateCommands(commands.Cog):
@@ -23,28 +23,28 @@ class FateCommands(commands.Cog):
     async def fate_scene_aspects(self, interaction: discord.Interaction):
         """Show all aspects in the current scene and their descriptions"""
         # Check if server is using Fate
-        system = repo.get_system(interaction.guild.id)
+        system = repositories.server.get_system(str(interaction.guild.id))
         if system != "fate":
             await interaction.response.send_message("⚠️ This command is only available for Fate games.", ephemeral=True)
             return
 
         # Get active scene
-        active_scene = repo.get_active_scene(interaction.guild.id)
+        active_scene = repositories.scene.get_active_scene(str(interaction.guild.id))
         if not active_scene:
             await interaction.response.send_message("⚠️ No active scene found. Create one with `/scene create` first.", ephemeral=True)
             return
             
         # Check if user is a GM 
-        is_gm = await repo.has_gm_permission(interaction.guild.id, interaction.user)
+        is_gm = repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
         
         # Start building our response
         embed = discord.Embed(
-            title=f"🎭 Aspects in Scene: {active_scene['name']}",
+            title=f"🎭 Aspects in Scene: {active_scene.name}",
             color=discord.Color.gold()
         )
         
         # 1. Get scene aspects
-        scene_aspects = repo.get_fate_scene_aspects(interaction.guild.id, active_scene['id']) or []
+        scene_aspects = repositories.fate_aspects.get_aspects(str(interaction.guild.id), str(active_scene.scene_id)) or []
         
         # Format aspect strings
         aspect_lines = []
@@ -62,17 +62,18 @@ class FateCommands(commands.Cog):
             
         # 2. Get zone aspects (if zones implementation supports aspects)
         zone_aspects = []
-        scene_zones = repo.get_fate_scene_zones(interaction.guild.id, active_scene['id']) or []
+        scene_zones = repositories.fate_zones.get_zones(str(interaction.guild.id), str(active_scene.scene_id)) or []
         
         # In this example, we're assuming zones don't yet have aspects
         # This is where you'd add zone aspect handling if implemented
         
         # 3. Get character aspects from NPCs in the scene
         npc_aspects_by_character = {}
-        npc_ids = repo.get_scene_npc_ids(interaction.guild.id, active_scene['id'])
+        npc_ids = repositories.scene_npc.get_scene_npc_ids(str(interaction.guild.id), str(active_scene.scene_id))
         
         for npc_id in npc_ids:
-            npc = repo.get_character_by_id(interaction.guild.id, npc_id)
+            # Get all characters and find the specific NPC
+            npc = repositories.character.get_by_id(str(npc_id))
             if not npc:
                 continue
                 
@@ -101,7 +102,7 @@ class FateCommands(commands.Cog):
         pc_aspects_by_character = {}
         
         # Get all characters for the guild that aren't NPCs
-        all_characters = repo.get_pcs_by_guild(interaction.guild.id)
+        all_characters = repositories.character.get_pcs_by_guild(str(interaction.guild.id))
         for character in all_characters:
             # Get aspect data for this PC
             character_aspects = []
@@ -109,7 +110,7 @@ class FateCommands(commands.Cog):
                 # Format each aspect string
                 for aspect in character.aspects:
                     # Check if this user owns the character
-                    is_owner = character.owner_id == interaction.user.id
+                    is_owner = str(character.owner_id) == str(interaction.user.id)
                     aspect_str = aspect.get_full_aspect_string(is_gm=is_gm, is_owner=is_owner)
                     if aspect_str:  # Skip empty strings (hidden aspects for non-GMs/non-owners)
                         character_aspects.append(aspect_str)

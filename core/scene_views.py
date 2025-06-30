@@ -3,8 +3,8 @@ import logging
 import discord
 from discord import ui
 from discord.ext import commands
-from data import repo
 from core import factories
+from data.repositories.repository_factory import repositories
 
 class BasePinnableSceneView(ABC, discord.ui.View):
     """
@@ -42,18 +42,18 @@ class BasePinnableSceneView(ABC, discord.ui.View):
         """Initialize the view if it was loaded as a persistent view"""
         if not self.is_initialized:
             # Get scene ID from the database for this channel
-            scene_info = repo.get_scene_message_info(interaction.guild.id, interaction.channel.id)
+            scene_info = repositories.pinned_scene.get_scene_message_info(str(interaction.guild.id), str(interaction.channel.id))
             if not scene_info:
                 return False
                 
             self.guild_id = str(interaction.guild.id)
             self.channel_id = str(interaction.channel.id)
-            self.scene_id = scene_info["scene_id"]  
+            self.scene_id = scene_info.scene_id
             self.message_id = str(interaction.message.id)
             self.is_initialized = True
             
             # Check if user is GM
-            self.is_gm = await repo.has_gm_permission(interaction.guild.id, interaction.user)
+            self.is_gm = repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
             
             # Build the view components
             self.build_view_components()
@@ -95,7 +95,7 @@ class BasePinnableSceneView(ABC, discord.ui.View):
             
             # Store the message ID in the database - this doesn't mean it's pinned,
             # just that we're tracking this message for this scene in this channel
-            #repo.set_scene_message_id(self.guild_id, self.scene_id, self.channel_id, message.id)
+            #repositories.pinned_scene.set_pinned_message(self.guild_id, self.scene_id, self.channel_id, message.id)
             
             return message
         except Exception as e:
@@ -113,8 +113,8 @@ class BasePinnableSceneView(ABC, discord.ui.View):
         """
         try:
             # Check if the scene is active - only active scenes can be pinned
-            scene = repo.get_scene_by_id(self.guild_id, self.scene_id)
-            if not scene or not scene["is_active"]:
+            scene = repositories.scene.find_by_id('scene_id', self.scene_id)
+            if not scene or not scene.is_active:
                 await interaction.followup.send(
                     "❌ Only the active scene can be pinned.",
                     ephemeral=True
@@ -130,7 +130,7 @@ class BasePinnableSceneView(ABC, discord.ui.View):
             await message.pin()
             
             # Store the message ID in the pinned messages database
-            repo.set_pinned_scene_message_id(self.guild_id, self.scene_id, self.channel_id, message.id)
+            repositories.pinned_scene.set_pinned_message(str(self.guild_id), str(self.scene_id), str(self.channel_id), str(message.id))
             
             # Send a temporary message indicating the scene has been pinned
             temp_msg = await interaction.channel.send("📌 Scene view has been pinned. You can always find the current scene at the top of the channel.")
@@ -211,8 +211,8 @@ class BasePinnableSceneView(ABC, discord.ui.View):
         Both should always be updated for active scenes.
         """
         # Check if this scene is active
-        scene = repo.get_scene_by_id(self.guild_id, self.scene_id)
-        is_active = scene and scene["is_active"]
+        scene = repositories.scene.find_by_id('scene_id', self.scene_id)
+        is_active = scene and scene.is_active
         
         # Get the current content
         #embed, content = await self.create_scene_content()
@@ -232,7 +232,7 @@ class BasePinnableSceneView(ABC, discord.ui.View):
         
         # Always update the ephemeral view for the current user
         # Create a view with proper GM permissions for the ephemeral message
-        system = repo.get_system(self.guild_id)
+        system = repositories.server.get_system(str(self.guild_id))
         ephemeral_view = factories.get_specific_scene_view(
             system=system,
             guild_id=self.guild_id, 
@@ -240,7 +240,7 @@ class BasePinnableSceneView(ABC, discord.ui.View):
             scene_id=self.scene_id,
             message_id=self.message_id
         )
-        ephemeral_view.is_gm = await repo.has_gm_permission(interaction.guild.id, interaction.user)
+        ephemeral_view.is_gm = repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
         ephemeral_view.build_view_components()
         
         # Create embed with scene content for the ephemeral response
@@ -279,7 +279,7 @@ class BasePinnableSceneView(ABC, discord.ui.View):
             )
             
             # Remove the message from the pinned messages database
-            repo.clear_scene_pins(self.guild_id)
+            repositories.pinned_scene.clear_all_pins(str(self.guild_id))
             
             return True
         except Exception as e:
@@ -299,7 +299,7 @@ class BasePinnableSceneView(ABC, discord.ui.View):
                 return False
                 
         # Update the is_gm flag
-        self.is_gm = await repo.has_gm_permission(interaction.guild.id, interaction.user)
+        self.is_gm = repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
             
         # For GM-only buttons, check permissions
         component_id = interaction.data.get("custom_id", "")
@@ -340,7 +340,7 @@ class GenericSceneView(BasePinnableSceneView):
     
     async def create_scene_content(self):
         # Get scene info
-        scene = repo.get_scene_by_id(self.guild_id, self.scene_id)
+        scene = repositories.scene.find_by_id('scene_id', self.scene_id)
         if not scene:
             return discord.Embed(
                 title="❌ Scene Not Found",
@@ -349,26 +349,26 @@ class GenericSceneView(BasePinnableSceneView):
             ), "❌ **SCENE ERROR** ❌"
             
         # Get system and sheet for formatting
-        system = repo.get_system(self.guild_id)
+        system = repositories.server.get_system(str(self.guild_id))
         sheet = factories.get_specific_sheet(system)
         
         # Get NPCs in scene
-        npc_ids = repo.get_scene_npc_ids(self.guild_id, self.scene_id)
+        npc_ids = repositories.scene_npc.get_scene_npc_ids(str(self.guild_id), str(self.scene_id))
         
         # Format scene content
         lines = []
         for npc_id in npc_ids:
-            npc = repo.get_character_by_id(self.guild_id, npc_id)
+            npc = repositories.character.get_by_id(str(npc_id))
             if npc:
                 # Show NPC details for everyone
                 lines.append(sheet.format_npc_scene_entry(npc, is_gm=False))
                 
         # Get scene notes
-        notes = repo.get_scene_notes(self.guild_id, self.scene_id)
+        notes = repositories.scene_notes.get_scene_notes(str(self.guild_id), str(self.scene_id))
         
         # Create embed
         embed = discord.Embed(
-            title=f"🎭 Current Scene: {scene['name']}",
+            title=f"🎭 Current Scene: {scene.name}",
             color=discord.Color.purple()
         )
         
@@ -400,7 +400,7 @@ class SceneNotesButton(ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         # Check if user has GM role
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can edit scene notes.", ephemeral=True)
             return
             
@@ -414,7 +414,7 @@ class SceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
         self.parent_view = parent_view
         
         # Get current notes
-        current_notes = repo.get_scene_notes(parent_view.guild_id, parent_view.scene_id) or ""
+        current_notes = repositories.scene_notes.get_scene_notes(str(parent_view.guild_id), str(parent_view.scene_id)) or ""
         
         self.notes = discord.ui.TextInput(
             label="Scene Notes",
@@ -427,7 +427,7 @@ class SceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
 
     async def on_submit(self, interaction: discord.Interaction):
         # Update notes in DB
-        repo.set_scene_notes(self.parent_view.guild_id, self.notes.value, self.parent_view.scene_id)
+        repositories.scene_notes.set_scene_notes(str(self.parent_view.guild_id), str(self.parent_view.scene_id), self.notes.value)
         
         # Find any SceneCommands cog instance to use its update method
         scene_cog = None

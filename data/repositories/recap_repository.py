@@ -1,6 +1,6 @@
 from typing import Optional, List
 from .base_repository import BaseRepository
-from models import AutoRecapSettings, ApiKey
+from data.models import AutoRecapSettings, ApiKey
 
 class AutoRecapRepository(BaseRepository[AutoRecapSettings]):
     def __init__(self):
@@ -59,7 +59,7 @@ class AutoRecapRepository(BaseRepository[AutoRecapSettings]):
     
     def get_all_enabled_guilds(self) -> List[str]:
         """Get all guild IDs with auto recap enabled"""
-        query = f"SELECT guild_id FROM {self.table_name} WHERE enabled = true"
+        query = f"SELECT * FROM {self.table_name} WHERE enabled = true"
         results = self.execute_query(query, fetch_all=True)
         return [result.guild_id for result in results]
 

@@ -1,8 +1,10 @@
 from typing import List, Optional
 from .base_repository import BaseRepository
-from models import Character, ActiveCharacter
+from data.models import Character, ActiveCharacter
+from core.models import BaseCharacter
 import json
 import uuid
+import core.factories as factories
 
 class CharacterRepository(BaseRepository[Character]):
     def __init__(self):
@@ -22,6 +24,20 @@ class CharacterRepository(BaseRepository[Character]):
         }
     
     def from_dict(self, data: dict) -> Character:
+        # Handle system_specific_data - it might already be parsed or still be a string
+        system_specific_data = data.get('system_specific_data', '{}')
+        if isinstance(system_specific_data, str):
+            system_specific_data = json.loads(system_specific_data)
+        elif system_specific_data is None:
+            system_specific_data = {}
+        
+        # Handle notes - it might already be parsed or still be a string
+        notes = data.get('notes', '[]')
+        if isinstance(notes, str):
+            notes = json.loads(notes)
+        elif notes is None:
+            notes = []
+        
         return Character(
             id=data['id'],
             guild_id=data['guild_id'],
@@ -29,46 +45,140 @@ class CharacterRepository(BaseRepository[Character]):
             owner_id=data['owner_id'],
             entity_type=data['entity_type'],
             system=data.get('system'),
-            system_specific_data=json.loads(data.get('system_specific_data', '{}')),
-            notes=json.loads(data.get('notes', '[]')),
+            system_specific_data=system_specific_data,
+            notes=notes,
             avatar_url=data.get('avatar_url', '')
         )
     
-    def get_by_name(self, guild_id: str, name: str) -> Optional[Character]:
+    def _convert_to_base_character(self, character: Character) -> BaseCharacter:
+        """Convert a Character entity to a system-specific BaseCharacter"""
+        if not character:
+            return None
+            
+        # Get the system-specific character class
+        CharacterClass = factories.get_specific_character(character.system)
+        
+        # Create the character dict using the helper method
+        character_dict = BaseCharacter.build_character_dict(
+            id=character.id,
+            name=character.name,
+            owner_id=character.owner_id,
+            is_npc=character.is_npc,
+            notes=character.notes,
+            avatar_url=character.avatar_url,
+            system_specific_fields=character.system_specific_data
+        )
+        
+        return CharacterClass.from_dict(character_dict)
+    
+    def _convert_list_to_base_characters(self, characters: List[Character]) -> List[BaseCharacter]:
+        """Convert a list of Character entities to BaseCharacter objects"""
+        return [self._convert_to_base_character(char) for char in characters if char]
+    
+    def get_by_id(self, id: str) -> Optional[BaseCharacter]:
+        """Get character by ID"""
+        query = f"SELECT * FROM {self.table_name} WHERE id = %s"
+        character = self.execute_query(query, (str(id),), fetch_one=True)
+        return self._convert_to_base_character(character)
+    
+    def get_by_name(self, guild_id: str, name: str) -> Optional[BaseCharacter]:
         """Get character by name within a guild"""
         query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND name = %s"
-        return self.execute_query(query, (str(guild_id), name), fetch_one=True)
+        character = self.execute_query(query, (str(guild_id), name), fetch_one=True)
+        return self._convert_to_base_character(character)
     
-    def get_all_by_guild(self, guild_id: str, system: str = None) -> List[Character]:
+    def get_all_by_guild(self, guild_id: str, system: str = None) -> List[BaseCharacter]:
         """Get all characters for a guild, optionally filtered by system"""
         if system:
             query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND system = %s"
-            return self.execute_query(query, (str(guild_id), system), fetch_all=True)
+            characters = self.execute_query(query, (str(guild_id), system), fetch_all=True)
         else:
-            return self.find_all_by_column('guild_id', str(guild_id))
+            characters = self.find_all_by_column('guild_id', str(guild_id))
+        return self._convert_list_to_base_characters(characters)
     
-    def get_npcs_by_guild(self, guild_id: str) -> List[Character]:
+    def get_npcs_by_guild(self, guild_id: str) -> List[BaseCharacter]:
         """Get all NPCs for a guild"""
         query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND entity_type = 'npc'"
-        return self.execute_query(query, (str(guild_id),), fetch_all=True)
+        characters = self.execute_query(query, (str(guild_id),), fetch_all=True)
+        return self._convert_list_to_base_characters(characters)
     
-    def get_pcs_by_guild(self, guild_id: str) -> List[Character]:
+    def get_pcs_by_guild(self, guild_id: str) -> List[BaseCharacter]:
         """Get all PCs for a guild"""
         query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND entity_type = 'pc'"
-        return self.execute_query(query, (str(guild_id),), fetch_all=True)
+        characters = self.execute_query(query, (str(guild_id),), fetch_all=True)
+        return self._convert_list_to_base_characters(characters)
     
-    def get_non_gm_active_characters(self, guild_id: str) -> List[Character]:
+    def get_non_gm_active_characters(self, guild_id: str) -> List[BaseCharacter]:
         """Get active characters excluding GM-owned characters"""
-        query = f"""
-            SELECT c.* FROM {self.table_name} c
-            INNER JOIN active_characters ac ON c.id = ac.char_id
-            WHERE c.guild_id = %s AND c.entity_type = 'pc'
-        """
-        return self.execute_query(query, (str(guild_id),), fetch_all=True)
+        characters = self.find_all_by_column('guild_id', str(guild_id))
+        # Filter to only PCs (non-NPCs) and convert
+        pc_characters = [c for c in characters if not c.is_npc]
+        return self._convert_list_to_base_characters(pc_characters)
     
-    def upsert_character(self, character: Character) -> None:
-        """Save or update a character"""
-        self.save(character, conflict_columns=['id'])
+    def get_all_characters(self, guild_id: int) -> List[BaseCharacter]:
+        """Get all characters in a guild"""
+        characters = self.find_all_by_column('guild_id', str(guild_id))
+        return self._convert_list_to_base_characters(characters)
+    
+    def get_character_by_name(self, guild_id: int, char_name: str) -> Optional[BaseCharacter]:
+        """Get character by name from guild"""
+        characters = self.find_all_by_column('guild_id', str(guild_id))
+        character = next((c for c in characters if c.name.lower() == char_name.lower()), None)
+        return self._convert_to_base_character(character)
+    
+    def get_user_characters(self, guild_id: int, user_id: int, include_npcs: bool = False) -> List[BaseCharacter]:
+        """Get all characters owned by a user"""
+        characters = self.find_all_by_column('guild_id', str(guild_id))
+        user_characters = [c for c in characters 
+                          if str(c.owner_id) == str(user_id) and (include_npcs or not c.is_npc)]
+        return self._convert_list_to_base_characters(user_characters)
+    
+    def get_npcs(self, guild_id: int) -> List[BaseCharacter]:
+        """Get all NPCs in a guild"""
+        characters = self.find_all_by_column('guild_id', str(guild_id))
+        npc_characters = [c for c in characters if c.is_npc]
+        return self._convert_list_to_base_characters(npc_characters)
+    
+    def upsert_character(self, guild_id, character: BaseCharacter, system=None) -> None:
+        """Save or update a BaseCharacter by converting it to Character first"""
+        from .repository_factory import repositories
+        
+        # Get system if not provided
+        if not system:
+            system = repositories.server.get_system(guild_id)
+        CharacterClass = factories.get_specific_character(system)
+
+        # Use the system's defined fields
+        if character.is_npc:
+            system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC
+        else:
+            system_fields = CharacterClass.SYSTEM_SPECIFIC_CHARACTER
+
+        system_specific_data = {}
+        for key in system_fields:
+            system_specific_data[key] = character.data.get(key)
+
+        notes = character.notes or []
+        
+        # Create Character entity from BaseCharacter
+        storage_character = Character(
+            id=character.id,
+            guild_id=str(guild_id),
+            name=character.name,
+            owner_id=character.owner_id,
+            entity_type='npc' if character.is_npc else 'pc',
+            system=system,
+            system_specific_data=system_specific_data,
+            notes=notes,
+            avatar_url=character.avatar_url
+        )
+        
+        self.save(storage_character, conflict_columns=['id'])
+
+    def delete_character(self, character_id: str) -> None:
+        """Delete a character by ID"""
+        query = f"DELETE FROM {self.table_name} WHERE id = %s"
+        self.execute_query(query, (character_id,))
 
 class ActiveCharacterRepository(BaseRepository[ActiveCharacter]):
     def __init__(self):
@@ -88,16 +198,33 @@ class ActiveCharacterRepository(BaseRepository[ActiveCharacter]):
             char_id=data['char_id']
         )
     
-    def get_active_character(self, guild_id: str, user_id: str) -> Optional[ActiveCharacter]:
-        """Get active character for a user in a guild"""
+    def get_active_character_record(self, guild_id: int, user_id: int) -> Optional[ActiveCharacter]:
+        """Get active character record for a user"""
         query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND user_id = %s"
         return self.execute_query(query, (str(guild_id), str(user_id)), fetch_one=True)
     
-    def set_active_character(self, guild_id: str, user_id: str, char_id: str) -> None:
-        """Set active character for a user"""
+    def get_active_character(self, guild_id: int, user_id: int) -> Optional[BaseCharacter]:
+        """Get user's active character object as BaseCharacter"""
+        from .repository_factory import repositories
+        
+        active_record = self.get_active_character_record(guild_id, user_id)
+        if active_record:
+            # Use find_all_by_column to get Character, then convert
+            characters = repositories.character.find_all_by_column('id', active_record.char_id)
+            if characters:
+                return repositories.character._convert_to_base_character(characters[0])
+        return None
+    
+    def set_active_character(self, guild_id: str, user_id: str, character_id: str) -> None:
+        """Set a user's active character"""
         active_char = ActiveCharacter(
-            guild_id=str(guild_id),
-            user_id=str(user_id),
-            char_id=str(char_id)
+            guild_id=guild_id,
+            user_id=user_id,
+            char_id=character_id
         )
         self.save(active_char, conflict_columns=['guild_id', 'user_id'])
+    
+    def clear_active_character(self, guild_id: int, user_id: int) -> None:
+        """Clear a user's active character"""
+        query = f"DELETE FROM {self.table_name} WHERE guild_id = %s AND user_id = %s"
+        self.execute_query(query, (str(guild_id), str(user_id)))

@@ -7,11 +7,12 @@ from discord import app_commands
 from core.shared_views import RequestRollView
 from core.utils import roll_parameters_to_dict
 import core.factories as factories
-from data import repo
+from data.repositories.repository_factory import repositories
+
 
 async def skill_autocomplete(interaction: discord.Interaction, current: str):
     try:
-        all_chars = repo.get_all_characters(interaction.guild.id)
+        all_chars = repositories.character.get_all_characters(str(interaction.guild.id))
         character = next((c for c in all_chars if not c.is_npc and str(c.owner_id) == str(interaction.user.id)), None)
         if not character:
             return []
@@ -23,7 +24,7 @@ async def skill_autocomplete(interaction: discord.Interaction, current: str):
         return []
 
 async def attribute_autocomplete(interaction: discord.Interaction, current: str):
-    all_chars = repo.get_all_characters(interaction.guild.id)
+    all_chars = repositories.character.get_all_characters(str(interaction.guild.id))
     character = next((c for c in all_chars if not c.is_npc and str(c.owner_id) == str(interaction.user.id)), None)
     if not character:
         return []
@@ -48,7 +49,7 @@ class SetupCommands(commands.Cog):
             await interaction.response.send_message("❌ Only admins can set the GM role.", ephemeral=True)
             return
         
-        repo.set_gm_role(interaction.guild.id, role.id)
+        repositories.server.set_gm_role(str(interaction.guild.id), str(role.id))
         
         await interaction.response.send_message(
             f"✅ Set role `{role.name}` as the GM role. Members with this role now have GM permissions.",
@@ -65,7 +66,7 @@ class SetupCommands(commands.Cog):
             await interaction.response.send_message("❌ Only admins can set the player role.", ephemeral=True)
             return
         
-        repo.set_player_role(interaction.guild.id, role.id)
+        repositories.server.set_player_role(str(interaction.guild.id), str(role.id))
         
         await interaction.response.send_message(
             f"✅ Set role `{role.name}` as the player role. Members with this role are now considered players.",
@@ -83,13 +84,13 @@ class SetupCommands(commands.Cog):
         if system not in valid_systems:
             await interaction.response.send_message(f"❌ Invalid system. Valid options: {', '.join(valid_systems)}", ephemeral=True)
             return
-        repo.set_system(interaction.guild.id, system)
+        repositories.server.set_system(str(interaction.guild.id), system)
         await interaction.response.send_message(f"✅ System set to {system.upper()} for this server.", ephemeral=True)
 
     @setup_group.command(name="defaultskillsfile", description="Set default skills for this server's system with a .txt file (one skill per line).")
     @app_commands.describe(file="A .txt file with skills, one per line or Skill:Value per line")
     async def setup_defaultskillsfile(self, interaction: discord.Interaction, file: discord.Attachment):
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can set default skills.", ephemeral=True)
             return
         if not file.filename.endswith('.txt'):
@@ -118,7 +119,7 @@ class SetupCommands(commands.Cog):
         if not skills_dict:
             await interaction.response.send_message("❌ No skills found in the file.", ephemeral=True)
             return
-        system = repo.get_system(interaction.guild.id)
+        system = repositories.server.get_system(str(interaction.guild.id))
         sheet = factories.get_specific_sheet(system)
         if hasattr(sheet, "parse_and_validate_skills"):
             skills_str = ", ".join(f"{k}:{v}" for k, v in skills_dict.items())
@@ -126,16 +127,16 @@ class SetupCommands(commands.Cog):
             if not skills_dict:
                 await interaction.response.send_message("❌ The skills list is invalid for this system.", ephemeral=True)
                 return
-        repo.set_default_skills(interaction.guild.id, system, skills_dict)
+        repositories.default_skills.set_default_skills(str(interaction.guild.id), system, skills_dict)
         await interaction.response.send_message(f"✅ Default skills for {system.upper()} updated from file.", ephemeral=True)
 
     @setup_group.command(name="defaultskills", description="Set default skills for this server's system via text.")
     @app_commands.describe(skills="Skill list, e.g. Admin:0, Gun Combat:1, Pilot:2")
     async def setup_defaultskills(self, interaction: discord.Interaction, skills: str):
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can set default skills.", ephemeral=True)
             return
-        system = repo.get_system(interaction.guild.id)
+        system = repositories.server.get_system(str(interaction.guild.id))
         sheet = factories.get_specific_sheet(system)
         if not hasattr(sheet, "parse_and_validate_skills"):
             await interaction.response.send_message("❌ This system does not support setting default skills.", ephemeral=True)
@@ -144,7 +145,7 @@ class SetupCommands(commands.Cog):
         if not skills_dict:
             await interaction.response.send_message("❌ Invalid format or no skills provided. Example: `Admin:0, Gun Combat:1, Pilot:2`", ephemeral=True)
             return
-        repo.set_default_skills(interaction.guild.id, system, skills_dict)
+        repositories.default_skills.set_default_skills(str(interaction.guild.id), system, skills_dict)
         await interaction.response.send_message(f"✅ Default skills for {system.upper()} updated for this server.", ephemeral=True)
 
     @openai_group.command(
@@ -155,7 +156,7 @@ class SetupCommands(commands.Cog):
     async def openai_set_key(self, interaction: discord.Interaction, api_key: str):
         """Set the OpenAI API key for this server"""
         # Check if user has GM permissions
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can set the API key.", ephemeral=True)
             return
         
@@ -165,7 +166,7 @@ class SetupCommands(commands.Cog):
             return
             
         # Store the API key
-        repo.set_openai_api_key(interaction.guild.id, api_key)
+        repositories.api_key.set_openai_key(str(interaction.guild.id), api_key)
         
         await interaction.response.send_message("✅ OpenAI API key set successfully. You can now use AI features like story recaps.", ephemeral=True)
 
@@ -175,7 +176,7 @@ class SetupCommands(commands.Cog):
     )
     async def openai_status(self, interaction: discord.Interaction):
         """Check the status of the OpenAI API key for this server"""
-        api_key_set = repo.get_openai_api_key(interaction.guild.id) is not None
+        api_key_set = repositories.api_key.get_openai_key(str(interaction.guild.id)) is not None
         
         embed = discord.Embed(
             title="🔑 OpenAI API Key Status",
@@ -206,7 +207,7 @@ class SetupCommands(commands.Cog):
             )
         
         # Add footer based on permissions
-        if await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             footer_text = "GM Commands: /setup openai set_api_key [key]"
         else:
             footer_text = "Only GMs can modify the API key"
@@ -221,17 +222,17 @@ class SetupCommands(commands.Cog):
     )
     async def setup_status(self, interaction: discord.Interaction):
         """Display comprehensive server bot settings and statistics"""
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can view server bot settings.", ephemeral=True)
             return
         
         guild = interaction.guild
-        guild_id = guild.id
+        guild_id = str(guild.id)
         
         # Get basic server settings
-        system = repo.get_system(guild_id)
-        gm_role_id = repo.get_gm_role_id(guild_id)
-        player_role_id = repo.get_player_role_id(guild_id)
+        system = repositories.server.get_system(guild_id)
+        gm_role_id = repositories.server.get_gm_role_id(guild_id)
+        player_role_id = repositories.server.get_player_role_id(guild_id)
         
         # Get role objects
         gm_role = guild.get_role(int(gm_role_id)) if gm_role_id else None
@@ -243,38 +244,38 @@ class SetupCommands(commands.Cog):
             gm_members = [member.display_name for member in gm_role.members]
         
         # Get game state info
-        active_scene = repo.get_active_scene(guild_id)
-        all_scenes = repo.get_scenes(guild_id)
+        active_scene = repositories.scene.get_active_scene(guild_id)
+        all_scenes = repositories.scene.get_all_scenes(guild_id)
         
         # Get initiative info
         initiative_data = None
         for channel in guild.text_channels:
-            init_data = repo.get_initiative(guild_id, channel.id)
+            init_data = repositories.initiative.get_initiative_data(guild_id, str(channel.id))
             if init_data and init_data.get("is_active"):
                 initiative_data = init_data
                 initiative_data["channel"] = channel
                 break
         
-        default_initiative = repo.get_default_initiative_type(guild_id)
+        default_initiative = repositories.server_initiative_defaults.get_default_type(guild_id)
         
         # Get character counts
-        all_characters = repo.get_all_characters(guild_id)
+        all_characters = repositories.character.get_all_characters(guild_id)
         pcs = [c for c in all_characters if not c.is_npc]
         npcs = [c for c in all_characters if c.is_npc]
         
         # Get feature settings
-        auto_reminder_settings = repo.get_auto_reminder_settings(guild_id)
-        auto_recap_settings = repo.get_auto_recap_settings(guild_id)
+        auto_reminder_settings = repositories.auto_reminder_settings.get_settings(guild_id)
+        auto_recap_settings = repositories.auto_recap.get_settings(guild_id)
         
         # Check for default skills
-        has_default_skills = repo.get_default_skills(guild_id, system) is not None
+        has_default_skills = repositories.default_skills.get_default_skills(guild_id, system) is not None
         
         # Check API key status (don't show the actual key)
-        api_key_set = repo.get_openai_api_key(guild_id) is not None
+        api_key_set = repositories.api_key.get_openai_key(guild_id) is not None
         
         # Get homebrew rules count
-        homebrew_rules = repo.get_homebrew_rules(guild_id)
-        homebrew_count = len(homebrew_rules) if homebrew_rules else 0
+        homebrew_rules_entities = repositories.homebrew.get_all_rules(guild_id)
+        homebrew_count = len(homebrew_rules_entities)
         
         # Create embed
         embed = discord.Embed(
@@ -305,7 +306,7 @@ class SetupCommands(commands.Cog):
         # Active Game State
         game_state_lines = []
         if active_scene:
-            game_state_lines.append(f"**Active Scene:** {active_scene['name']}")
+            game_state_lines.append(f"**Active Scene:** {active_scene.name}")
         else:
             game_state_lines.append("**Active Scene:** None")
         
@@ -344,8 +345,8 @@ class SetupCommands(commands.Cog):
         feature_lines = []
         
         # Auto Reminders
-        reminder_status = "✅ Enabled" if auto_reminder_settings.get("enabled", False) else "❌ Disabled"
-        delay_seconds = auto_reminder_settings.get("delay_seconds", 86400)
+        reminder_status = "✅ Enabled" if auto_reminder_settings.enabled else "❌ Disabled"
+        delay_seconds = auto_reminder_settings.delay_seconds
         if delay_seconds >= 86400:
             delay_str = f"{delay_seconds // 86400}d"
         elif delay_seconds >= 3600:
@@ -357,17 +358,17 @@ class SetupCommands(commands.Cog):
         feature_lines.append(f"**Auto Reminders:** {reminder_status} ({delay_str})")
         
         # Auto Recaps
-        recap_enabled = auto_recap_settings.get("enabled", False)
+        recap_enabled = auto_recap_settings.enabled
         recap_status = "✅ Enabled" if recap_enabled else "❌ Disabled"
         if recap_enabled:
-            recap_channel_id = auto_recap_settings.get("channel_id")
+            recap_channel_id = auto_recap_settings.channel_id
             if recap_channel_id:
                 recap_channel = guild.get_channel(int(recap_channel_id))
                 channel_mention = recap_channel.mention if recap_channel else "Unknown Channel"
             else:
                 channel_mention = "No channel set"
             
-            days_interval = auto_recap_settings.get("days_interval", 7)
+            days_interval = auto_recap_settings.days_interval
             feature_lines.append(f"**Auto Recaps:** {recap_status} ({channel_mention}, every {days_interval}d)")
         else:
             feature_lines.append(f"**Auto Recaps:** {recap_status}")

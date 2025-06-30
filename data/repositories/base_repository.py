@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import TypeVar, Generic, List, Optional
-from database import db_manager
+from data.database import db_manager
 
 T = TypeVar('T')
 

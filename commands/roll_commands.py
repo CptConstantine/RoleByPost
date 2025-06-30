@@ -4,26 +4,7 @@ from discord import app_commands
 from core.shared_views import RequestRollView
 from core.utils import roll_parameters_to_dict
 import core.factories as factories
-from data import repo
-
-async def skill_autocomplete(interaction: discord.Interaction, current: str):
-    try:
-        all_chars = repo.get_all_characters(interaction.guild.id)
-        character = next((c for c in all_chars if not c.is_npc and str(c.owner_id) == str(interaction.user.id)), None)
-        if not character:
-            return []
-        skills = character.skills
-        options = [k for k in skills.keys() if current.lower() in k.lower()]
-        return [app_commands.Choice(name=k, value=k) for k in options[:25]]
-    except Exception as e:
-        print("Autocomplete error:", e)
-        return []
-
-async def pc_name_autocomplete(interaction: discord.Interaction, current: str):
-    all_chars = repo.get_all_characters(interaction.guild.id)
-    pcs = [c for c in all_chars if not c.is_npc]
-    options = [c.name for c in pcs if current.lower() in c.name.lower()]
-    return [app_commands.Choice(name=name, value=name) for name in options[:25]]
+from data.repositories.repository_factory import repositories
 
 class RollCommands(commands.Cog):
     def __init__(self, bot):
@@ -40,12 +21,12 @@ class RollCommands(commands.Cog):
         difficulty="Optional difficulty number to compare against (e.g. 15)"
     )
     async def roll_check(self, interaction: discord.Interaction, roll_parameters: str = None, difficulty: int = None):
-        character = repo.get_active_character(interaction.guild.id, interaction.user.id)
+        character = repositories.active_character.get_active_character(str(interaction.guild.id), str(interaction.user.id))
         if not character:
             await interaction.response.send_message("❌ No active character set or character not found.", ephemeral=True)
             return
         
-        system = repo.get_system(interaction.guild.id)
+        system = repositories.server.get_system(str(interaction.guild.id))
         roll_parameters_dict = roll_parameters_to_dict(roll_parameters)
         roll_formula_obj = factories.get_specific_roll_formula(system, roll_parameters_dict)
         await character.send_roll_message(interaction, roll_formula_obj, difficulty)
@@ -56,12 +37,12 @@ class RollCommands(commands.Cog):
     )
     async def roll_custom(self, interaction: discord.Interaction):
         """Open a fully interactive UI for rolling dice with your character"""
-        character = repo.get_active_character(interaction.guild.id, interaction.user.id)
+        character = repositories.active_character.get_active_character(str(interaction.guild.id), str(interaction.user.id))
         if not character:
             await interaction.response.send_message("❌ No active character set. Use `/character switch` to choose one.", ephemeral=True)
             return
         
-        system = repo.get_system(interaction.guild.id)
+        system = repositories.server.get_system(str(interaction.guild.id))
         roll_formula_obj = factories.get_specific_roll_formula(system, {})
         formula_view = factories.get_specific_roll_formula_view(system, roll_formula_obj)
         await interaction.response.send_message(
@@ -86,12 +67,12 @@ class RollCommands(commands.Cog):
         roll_parameters: str = None,
         difficulty: int = None
     ):
-        if not await repo.has_gm_permission(interaction.guild.id, interaction.user):
+        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can use this command.", ephemeral=True)
             return
 
-        system = repo.get_system(interaction.guild.id)
-        all_chars = repo.get_all_characters(interaction.guild.id, system=system)
+        system = repositories.server.get_system(str(interaction.guild.id))
+        all_chars = repositories.character.get_all_characters(str(interaction.guild.id))
         char_names = [name.strip() for name in chars_to_roll.split(",") if name.strip()]
         chars = [c for c in all_chars if c.name in char_names]
         if not chars:
