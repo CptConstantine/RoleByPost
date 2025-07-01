@@ -35,7 +35,7 @@ class FateCommands(commands.Cog):
             return
             
         # Check if user is a GM 
-        is_gm = repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
         
         # Start building our response
         embed = discord.Embed(

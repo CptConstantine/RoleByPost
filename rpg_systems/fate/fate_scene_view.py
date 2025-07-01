@@ -121,7 +121,7 @@ class EditSceneAspectsButton(ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         # Check if user has GM role
-        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can edit aspects.", ephemeral=True)
             return
             
@@ -136,7 +136,7 @@ class EditZonesButton(ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         # Check if user has GM role
-        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can edit zones.", ephemeral=True)
             return
             
@@ -151,7 +151,7 @@ class ManageNPCsButton(ui.Button):
         
     async def callback(self, interaction: discord.Interaction):
         # Check if user has GM role
-        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can manage NPCs.", ephemeral=True)
             return
         

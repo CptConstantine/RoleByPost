@@ -100,7 +100,7 @@ class EditEnvironmentButton(ui.Button):
     async def callback(self, interaction: discord.Interaction):
         # Check if user has GM role - this is handled by interaction_check in base class,
         # but we add an additional check here for safety
-        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can edit environment details.", ephemeral=True)
             return
             
@@ -116,7 +116,7 @@ class ManageNPCsButton(ui.Button):
     async def callback(self, interaction: discord.Interaction):
         # Check if user has GM role - this is handled by interaction_check in base class,
         # but we add an additional check here for safety
-        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can manage NPCs.", ephemeral=True)
             return
         
@@ -293,7 +293,7 @@ class EditEnvironmentModal(discord.ui.Modal, title="Edit Scene Environment"):
                 await scene_cog._update_all_pinned_scenes(interaction.guild, self.parent_view.scene_id)
         
         # Always update the user's ephemeral view with GM permissions intact
-        is_gm = repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
         
         # Create a new scene view with the updated environment data
         temp_view = factories.get_specific_scene_view(

@@ -112,7 +112,7 @@ class RulesCommands(commands.Cog):
             rule_text: The actual rule content
         """
         # Check GM permissions
-        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message(
                 "❌ Only GMs can manage homebrew rules.", 
                 ephemeral=True
@@ -195,7 +195,7 @@ class RulesCommands(commands.Cog):
             rule_name: Name of the rule to remove
         """
         # Check GM permissions
-        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message(
                 "❌ Only GMs can manage homebrew rules.", 
                 ephemeral=True

@@ -67,7 +67,7 @@ class RollCommands(commands.Cog):
         roll_parameters: str = None,
         difficulty: int = None
     ):
-        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can use this command.", ephemeral=True)
             return
 

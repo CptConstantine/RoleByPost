@@ -86,7 +86,7 @@ class RecapCommands(commands.Cog):
         days_to_include: int = 7
     ):
         # Check if user has GM permissions
-        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can configure automatic recaps.", ephemeral=True)
             return
         
@@ -164,7 +164,7 @@ class RecapCommands(commands.Cog):
     )
     async def auto_recap_now(self, interaction: discord.Interaction):
         # Check if user has GM permissions
-        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can force recaps.", ephemeral=True)
             return
             
@@ -277,7 +277,7 @@ class RecapCommands(commands.Cog):
             )
         
         # Add footer with commands based on user permissions
-        if repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+        if await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             footer_text = "GM Commands: /recap setauto, /setup openai set_api_key, /recap autonow"
         else:
             footer_text = "Only GMs can modify automatic recap settings"

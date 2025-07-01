@@ -90,7 +90,7 @@ class SetupCommands(commands.Cog):
     @setup_group.command(name="defaultskillsfile", description="Set default skills for this server's system with a .txt file (one skill per line).")
     @app_commands.describe(file="A .txt file with skills, one per line or Skill:Value per line")
     async def setup_defaultskillsfile(self, interaction: discord.Interaction, file: discord.Attachment):
-        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can set default skills.", ephemeral=True)
             return
         if not file.filename.endswith('.txt'):
@@ -133,7 +133,7 @@ class SetupCommands(commands.Cog):
     @setup_group.command(name="defaultskills", description="Set default skills for this server's system via text.")
     @app_commands.describe(skills="Skill list, e.g. Admin:0, Gun Combat:1, Pilot:2")
     async def setup_defaultskills(self, interaction: discord.Interaction, skills: str):
-        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can set default skills.", ephemeral=True)
             return
         system = repositories.server.get_system(str(interaction.guild.id))
@@ -156,7 +156,7 @@ class SetupCommands(commands.Cog):
     async def openai_set_key(self, interaction: discord.Interaction, api_key: str):
         """Set the OpenAI API key for this server"""
         # Check if user has GM permissions
-        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can set the API key.", ephemeral=True)
             return
         
@@ -207,7 +207,7 @@ class SetupCommands(commands.Cog):
             )
         
         # Add footer based on permissions
-        if repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+        if await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             footer_text = "GM Commands: /setup openai set_api_key [key]"
         else:
             footer_text = "Only GMs can modify the API key"
@@ -222,7 +222,7 @@ class SetupCommands(commands.Cog):
     )
     async def setup_status(self, interaction: discord.Interaction):
         """Display comprehensive server bot settings and statistics"""
-        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can view server bot settings.", ephemeral=True)
             return
         

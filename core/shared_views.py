@@ -78,7 +78,7 @@ class SceneNotesButton(discord.ui.Button):
         self.guild_id = guild_id
 
     async def callback(self, interaction: discord.Interaction):
-        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can edit scene notes.", ephemeral=True)
             return
             
@@ -113,7 +113,7 @@ class EditSceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
         system = repositories.server.get_system(str(self.guild_id))
         sheet = factories.get_specific_sheet(system)
         npc_ids = repositories.scene_npc.get_scene_npc_ids(str(self.guild_id), str(self.scene_id))
-        is_gm = repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
         active_scene = repositories.scene.get_active_scene(str(self.guild_id))
         
         lines = []

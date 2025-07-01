@@ -53,7 +53,7 @@ class BasePinnableSceneView(ABC, discord.ui.View):
             self.is_initialized = True
             
             # Check if user is GM
-            self.is_gm = repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+            self.is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
             
             # Build the view components
             self.build_view_components()
@@ -240,7 +240,7 @@ class BasePinnableSceneView(ABC, discord.ui.View):
             scene_id=self.scene_id,
             message_id=self.message_id
         )
-        ephemeral_view.is_gm = repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        ephemeral_view.is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
         ephemeral_view.build_view_components()
         
         # Create embed with scene content for the ephemeral response
@@ -299,7 +299,7 @@ class BasePinnableSceneView(ABC, discord.ui.View):
                 return False
                 
         # Update the is_gm flag
-        self.is_gm = repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        self.is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
             
         # For GM-only buttons, check permissions
         component_id = interaction.data.get("custom_id", "")
@@ -400,7 +400,7 @@ class SceneNotesButton(ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         # Check if user has GM role
-        if not repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can edit scene notes.", ephemeral=True)
             return
             
