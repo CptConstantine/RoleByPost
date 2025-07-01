@@ -54,7 +54,7 @@ class InitiativeTracker:
     guild_id: str
     channel_id: str
     type: str
-    initiative_state: str
+    initiative_state: Dict[str, Any]
     is_active: bool
     message_id: Optional[str] = None
 

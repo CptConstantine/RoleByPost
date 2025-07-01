@@ -250,10 +250,10 @@ class SetupCommands(commands.Cog):
         # Get initiative info
         initiative_data = None
         for channel in guild.text_channels:
-            init_data = repositories.initiative.get_initiative_data(guild_id, str(channel.id))
-            if init_data and init_data.get("is_active"):
+            init_data = repositories.initiative._get_initiative_tracker(guild_id, str(channel.id))
+            if init_data and init_data.is_active:
                 initiative_data = init_data
-                initiative_data["channel"] = channel
+                initiative_data.channel_id = channel.id
                 break
         
         default_initiative = repositories.server_initiative_defaults.get_default_type(guild_id)
@@ -274,7 +274,7 @@ class SetupCommands(commands.Cog):
         api_key_set = repositories.api_key.get_openai_key(guild_id) is not None
         
         # Get homebrew rules count
-        homebrew_rules_entities = repositories.homebrew.get_all_rules(guild_id)
+        homebrew_rules_entities = repositories.homebrew.get_all_homebrew_rules(guild_id)
         homebrew_count = len(homebrew_rules_entities)
         
         # Create embed
@@ -313,7 +313,7 @@ class SetupCommands(commands.Cog):
         game_state_lines.append(f"**Total Scenes:** {len(all_scenes)}")
         
         if initiative_data:
-            init_channel = initiative_data["channel"]
+            init_channel = interaction.guild.get_channel(int(initiative_data.channel_id))
             game_state_lines.append(f"**Initiative Active:** Yes (#{init_channel.name})")
         else:
             game_state_lines.append("**Initiative Active:** No")

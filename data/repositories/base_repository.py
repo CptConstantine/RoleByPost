@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import TypeVar, Generic, List, Optional
 from data.database import db_manager
+import psycopg2.extras
+import logging
 
 T = TypeVar('T')
 
@@ -18,20 +20,34 @@ class BaseRepository(Generic[T], ABC):
         """Convert dictionary from database to entity"""
         pass
     
-    def execute_query(self, query: str, params: tuple = None, fetch_one: bool = False, fetch_all: bool = False):
+    def execute_query(self, query: str, params: tuple = None, fetch_one: bool = False):
         """Execute a query and return results"""
-        with db_manager.get_connection() as conn:
-            with conn.cursor() as cur:
+        try:
+            with db_manager.get_connection() as conn:
+                cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
                 cur.execute(query, params or ())
                 
-                if fetch_one:
-                    result = cur.fetchone()
-                    return self.from_dict(dict(result)) if result else None
-                elif fetch_all:
-                    results = cur.fetchall()
-                    return [self.from_dict(dict(row)) for row in results]
+                # Only try to fetch if this is a SELECT query
+                if query.strip().upper().startswith('SELECT'):
+                    if fetch_one:
+                        result = cur.fetchone()
+                        return self.from_dict(dict(result)) if result else None
+                    else:
+                        results = cur.fetchall()
+                        if results:
+                            return [self.from_dict(dict(row)) for row in results]
+                        else:
+                            return []
                 else:
-                    return cur.rowcount
+                    # For INSERT, UPDATE, DELETE queries, just return success
+                    return cur.rowcount if hasattr(cur, 'rowcount') else None
+                        
+        except Exception as e:
+            logging.error(f"Database error: {e}")
+            if query.strip().upper().startswith('SELECT'):
+                return [] if not fetch_one else None
+            else:
+                return None
     
     def find_by_id(self, id_column: str, id_value: str) -> Optional[T]:
         """Find entity by ID"""
@@ -41,7 +57,7 @@ class BaseRepository(Generic[T], ABC):
     def find_all_by_column(self, column: str, value: str) -> List[T]:
         """Find all entities by column value"""
         query = f"SELECT * FROM {self.table_name} WHERE {column} = %s"
-        return self.execute_query(query, (value,), fetch_all=True)
+        return self.execute_query(query, (value,))
     
     def save(self, entity: T, conflict_columns: List[str] = None) -> None:
         """Save entity with upsert logic"""

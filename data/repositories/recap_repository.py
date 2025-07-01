@@ -60,7 +60,7 @@ class AutoRecapRepository(BaseRepository[AutoRecapSettings]):
     def get_all_enabled_guilds(self) -> List[str]:
         """Get all guild IDs with auto recap enabled"""
         query = f"SELECT * FROM {self.table_name} WHERE enabled = true"
-        results = self.execute_query(query, fetch_all=True)
+        results = self.execute_query(query)
         return [result.guild_id for result in results]
 
 class ApiKeyRepository(BaseRepository[ApiKey]):

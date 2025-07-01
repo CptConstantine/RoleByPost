@@ -19,7 +19,7 @@ async def homebrew_rule_autocomplete(interaction: discord.Interaction, current: 
         List of app_commands.Choice objects for autocomplete
     """
     try:
-        homebrew_rules = repositories.homebrew.get_all_rules(str(interaction.guild.id))
+        homebrew_rules = repositories.homebrew.get_all_homebrew_rules(str(interaction.guild.id))
         options = [rule.rule_name for rule in homebrew_rules if current.lower() in rule.rule_name.lower()]
         return [app_commands.Choice(name=name, value=name) for name in options[:25]]
     except Exception:
@@ -65,7 +65,7 @@ class RulesCommands(commands.Cog):
         try:
             # Get system and homebrew context
             system = repositories.server.get_system(str(interaction.guild.id))
-            homebrew_rules_entities = repositories.homebrew.get_all_rules(str(interaction.guild.id))
+            homebrew_rules_entities = repositories.homebrew.get_all_homebrew_rules(str(interaction.guild.id))
             
             # Convert to dictionary for compatibility with existing code
             homebrew_rules = {rule.rule_name: rule.rule_text for rule in homebrew_rules_entities}
@@ -153,7 +153,7 @@ class RulesCommands(commands.Cog):
         Args:
             interaction: Discord interaction object
         """
-        homebrew_rules_entities = repositories.homebrew.get_all_rules(str(interaction.guild.id))
+        homebrew_rules_entities = repositories.homebrew.get_all_homebrew_rules(str(interaction.guild.id))
         
         if not homebrew_rules_entities:
             await interaction.response.send_message(

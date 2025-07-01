@@ -1,20 +1,5 @@
 from typing import Any, Dict, List
-from dataclasses import dataclass, asdict
-from core.models import BaseInitiative
-
-@dataclass
-class InitiativeParticipant:
-    id: str
-    name: str
-    owner_id: str
-    is_npc: bool
-
-    def to_dict(self):
-        return asdict(self)
-
-    @staticmethod
-    def from_dict(data):
-        return InitiativeParticipant(**data)
+from core.models import BaseInitiative, InitiativeParticipant
 
 class GenericInitiative(BaseInitiative):
     """
@@ -44,23 +29,7 @@ class GenericInitiative(BaseInitiative):
     @classmethod
     def from_dict(cls, data: Dict[str, Any]):
         data = data.copy()
-        data["participants"] = [InitiativeParticipant.from_dict(p) if isinstance(p, dict) else p for p in data.get("participants", [])]
         return cls(data)
-
-    def to_dict(self):
-        data = self.data.copy()
-        data["participants"] = [p.to_dict() if isinstance(p, InitiativeParticipant) else p for p in self.participants]
-        return data
-
-    @property
-    def participants(self):
-        # Always return as dataclasses
-        return [InitiativeParticipant.from_dict(p) if isinstance(p, dict) else p for p in self.data["participants"]]
-
-    @participants.setter
-    def participants(self, value):
-        # Accepts a list of InitiativeParticipant or dicts
-        self.data["participants"] = [p.to_dict() if isinstance(p, InitiativeParticipant) else p for p in value]
 
     @property
     def current_index(self):
@@ -91,12 +60,6 @@ class GenericInitiative(BaseInitiative):
         if self.current_index >= len(self.participants):
             self.current_index = 0
             self.round_number += 1
-
-    def get_participant_name(self, user_id):
-        for p in self.participants:
-            if p.id == user_id:
-                return p.name
-        return "Unknown"
 
 class PopcornInitiative(BaseInitiative):
     """
@@ -130,21 +93,6 @@ class PopcornInitiative(BaseInitiative):
         data = data.copy()
         data["participants"] = [InitiativeParticipant.from_dict(p) if isinstance(p, dict) else p for p in data.get("participants", [])]
         return cls(data)
-
-    def to_dict(self):
-        data = self.data.copy()
-        data["participants"] = [p.to_dict() if isinstance(p, InitiativeParticipant) else p for p in self.participants]
-        return data
-
-    @property
-    def participants(self):
-        # Always return as dataclasses
-        return [InitiativeParticipant.from_dict(p) if isinstance(p, dict) else p for p in self.data["participants"]]
-
-    @participants.setter
-    def participants(self, value):
-        # Accepts a list of InitiativeParticipant or dicts
-        self.data["participants"] = [p.to_dict() if isinstance(p, InitiativeParticipant) else p for p in value]
 
     @property
     def remaining_in_round(self):
@@ -193,9 +141,3 @@ class PopcornInitiative(BaseInitiative):
         Returns True if the round is ending (no one left in remaining_in_round).
         """
         return not self.remaining_in_round
-
-    def get_participant_name(self, user_id):
-        for p in self.participants:
-            if p.id == user_id:
-                return p.name
-        return "Unknown"

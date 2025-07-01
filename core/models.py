@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import discord
 
@@ -58,6 +59,20 @@ class BaseSheet(ABC):
         """Return a string for displaying an NPC in a scene summary."""
         pass
 
+@dataclass
+class InitiativeParticipant:
+    id: str
+    name: str
+    owner_id: str
+    is_npc: bool
+
+    def to_dict(self):
+        return asdict(self)
+
+    @staticmethod
+    def from_dict(data):
+        return InitiativeParticipant(**data)
+    
 class BaseInitiative(ABC):
     """
     Abstract base class for initiative.
@@ -70,6 +85,11 @@ class BaseInitiative(ABC):
     def from_dict(cls, data: Dict[str, Any]) -> "BaseInitiative":
         """Deserialize an entity from a dict."""
         return cls(data)
+    
+    def to_dict(self):
+        data = self.data.copy()
+        data["participants"] = [p.to_dict() if isinstance(p, InitiativeParticipant) else p for p in self.participants]
+        return data
 
     @property
     def type(self) -> str:
@@ -95,6 +115,37 @@ class BaseInitiative(ABC):
     @round_number.setter
     def round_number(self, value: int):
         self.data["round_number"] = value
+
+    @property
+    def participants(self):
+        # Always return as dataclasses
+        return [InitiativeParticipant.from_dict(p) if isinstance(p, dict) else p for p in self.data["participants"]]
+
+    @participants.setter
+    def participants(self, value):
+        # Accepts a list of InitiativeParticipant or dicts
+        self.data["participants"] = [p.to_dict() if isinstance(p, InitiativeParticipant) else p for p in value]
+
+    def add_participant(self, participant: InitiativeParticipant):
+        """
+        Add a participant to the initiative.
+        If the participant already exists, it will not be added again.
+        """
+        if not any(p.id == participant.id for p in self.participants):
+            self.participants.append(participant)
+
+    def remove_participant(self, participant_id: str):
+        """
+        Remove a participant by their ID.
+        If the participant does not exist, nothing happens.
+        """
+        self.participants = [p for p in self.participants if p.id != participant_id]
+
+    def get_participant_name(self, user_id):
+        for p in self.participants:
+            if p.id == user_id:
+                return p.name
+        return "Unknown"
 
 class RollModifiers(ABC):
     """

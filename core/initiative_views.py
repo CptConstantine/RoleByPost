@@ -3,6 +3,7 @@ import logging
 import discord
 from discord import ui, SelectOption
 from core.initiative_types import GenericInitiative, PopcornInitiative
+from core.models import BaseInitiative
 from data.repositories.repository_factory import repositories
 
 async def get_gm_ids(guild: discord.Guild):
@@ -22,7 +23,7 @@ class BasePinnedInitiativeView(ABC, discord.ui.View):
     Base class for initiative views that use a single pinned message.
     Handles common functionality for pinning and updating messages.
     """
-    def __init__(self, guild_id=None, channel_id=None, initiative=None, message_id=None):
+    def __init__(self, guild_id=None, channel_id=None, initiative: BaseInitiative=None, message_id=None):
         # Always use timeout=None for persistent views
         super().__init__(timeout=None)
         self.guild_id = guild_id
@@ -40,8 +41,8 @@ class BasePinnedInitiativeView(ABC, discord.ui.View):
         channel_id = interaction.channel.id
         
         # Get initiative data from the database
-        initiative_data = repositories.initiative.get_initiative_data(str(guild_id), str(channel_id))
-        if not initiative_data or not initiative_data.get("is_active", False):
+        initiative = repositories.initiative.get_active_initiative(str(guild_id), str(channel_id))
+        if not initiative:
             return False
             
         # Get the message ID from the database if we don't have it
@@ -53,66 +54,32 @@ class BasePinnedInitiativeView(ABC, discord.ui.View):
         self.guild_id = guild_id
         self.channel_id = channel_id
         self.message_id = message_id
-        
-        # Load initiative state based on concrete class type
-        import core.factories as factories
-        if isinstance(self, GenericInitiativeView):
-            InitiativeClass = factories.get_specific_initiative("generic")
-        elif isinstance(self, PopcornInitiativeView):
-            InitiativeClass = factories.get_specific_initiative("popcorn")
-        else:
-            raise ValueError(f"Unknown initiative view type: {type(self)}")
-        
-        self.initiative = InitiativeClass.from_dict(initiative_data["initiative_state"])
+        self.initiative = initiative
         self.is_initialized = True
         
         return True
         
-    async def get_initiative_message(self, interaction):
-        """Get the initiative message if it exists in the database"""
+    async def get_pinned_initiative_message(self, interaction: discord.Interaction):
+        """Get the initiative message if it exists in the database, or create and pin a new one"""
         channel = interaction.channel
         
         # Get the message ID from the database if we don't have it
         if not self.message_id:
             self.message_id = repositories.initiative.get_initiative_message_id(str(self.guild_id), str(self.channel_id))
 
-        # If we have a message ID, try to fetch that message
+        # If we have a message ID, try to fetch and update that message
         if self.message_id:
             try:
-                return await channel.fetch_message(int(self.message_id))
+                message = await channel.fetch_message(int(self.message_id))
+                # Update the existing message with current content
+                embed, content = await self.create_initiative_content()
+                await message.edit(content=content, embed=embed, view=self)
+                return message
             except (discord.NotFound, discord.Forbidden, discord.HTTPException):
                 # Message not found or can't be accessed, we'll create a new one
                 pass
-
-        # Get the proper content and embed based on the initiative state
-        embed, content = await self.create_initiative_content()
         
-        # Create a new initiative message with the proper content right away
-        message = await channel.send(content=content, embed=embed, view=self)
-        
-        try:
-            await message.pin(reason="Initiative tracking")
-            self.message_id = message.id
-            
-            # Store the message ID in the database
-            repositories.initiative.set_initiative_message_id(str(self.guild_id), str(self.channel_id), str(message.id))
-            
-            # Send a temporary message indicating the initiative has been pinned
-            temp_msg = await channel.send("📌 Initiative tracking has been pinned. You can always find the current turn at the top of the channel.")
-            
-            # Delete the pin notification sent by Discord
-            async for msg in channel.history(limit=10):
-                if msg.type == discord.MessageType.pins_add:
-                    await msg.delete()
-                    break
-                    
-            # Delete our own temporary message after a delay
-            await temp_msg.delete(delay=8.0)
-            
-            return message
-        except discord.Forbidden:
-            await message.edit(content=content + "\n⚠️ I don't have permission to pin messages. This initiative tracker won't be pinned.")
-            return message
+        return None
 
     @abstractmethod
     async def update_view(self, interaction: discord.Interaction):
@@ -132,12 +99,12 @@ class BasePinnedInitiativeView(ABC, discord.ui.View):
             tuple: (embed, content) where embed is a discord.Embed and content is a string
         """
         pass
-            
-    async def update_initiative_message(self, interaction, content=None, embed=None, view=None):
+
+    async def update_initiative_message(self, interaction: discord.Interaction, content, embed: discord.Embed, view: discord.ui.View):
         """Update the initiative message instead of sending a new one"""
-        message = await self.get_initiative_message(interaction)
+        message = await self.get_pinned_initiative_message(interaction)
         
-        try:
+        """ try:
             # Always use message.edit rather than interaction.response.edit_message
             # This ensures we're updating the pinned message, not responding to the interaction
             await message.edit(content=content, embed=embed, view=view)
@@ -161,7 +128,67 @@ class BasePinnedInitiativeView(ABC, discord.ui.View):
                     "⚠️ Failed to update the initiative message. The previous initiative message may have been deleted.",
                     ephemeral=True
                 )
-            return None
+            return None """
+        
+        if embed is None or content is None:
+            embed, content = await self.create_initiative_content()
+        
+        if not view:
+            view = self
+        
+        if message:
+            try:
+                # If the message exists, just update it
+                await message.edit(content=content, embed=embed, view=view)
+            except Exception as e:
+                logging.error(f"Error updating initiative message: {e}")
+                # Fallback to sending a new message if editing fails
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "⚠️ Failed to update the initiative message. The previous initiative message may have been deleted.",
+                        ephemeral=True
+                    )
+                else:
+                    await interaction.followup.send(
+                        "⚠️ Failed to update the initiative message. The previous initiative message may have been deleted.",
+                        ephemeral=True
+                    )
+                return None
+        else:
+            # Pin it if it doesn't exist
+            message = await interaction.channel.send(content=content, embed=embed, view=view)
+        
+            try:
+                await message.pin(reason="Initiative tracking")
+                self.message_id = message.id
+                
+                # Store the message ID in the database
+                repositories.initiative.set_initiative_message_id(str(self.guild_id), str(self.channel_id), str(message.id))
+                
+                # Send a temporary message indicating the initiative has been pinned
+                temp_msg = await interaction.channel.send("📌 Initiative tracking has been pinned. You can always find the current turn at the top of the channel.")
+                
+                # Delete the pin notification sent by Discord
+                async for msg in interaction.channel.history(limit=10):
+                    if msg.type == discord.MessageType.pins_add:
+                        await msg.delete()
+                        break
+                        
+                # Delete our own temporary message after a delay
+                await temp_msg.delete(delay=8.0)
+                
+                return message
+            except discord.Forbidden:
+                await message.edit(content=content + "\n⚠️ I don't have permission to pin messages. This initiative tracker won't be pinned.")
+                return message
+        
+        # Mention the current participant if they have an owner ID
+        if self.initiative and self.initiative.participants:
+            current_participant = next((p for p in self.initiative.participants if p.id == self.initiative.current), None)
+            if current_participant and not current_participant.is_npc and current_participant.owner_id:
+                mention = f"<@{current_participant.owner_id}>, it's your turn!"
+                mention_str= f"{mention}"
+                await interaction.response.send_message(mention_str, ephemeral=False)
 
 class GenericInitiativeView(BasePinnedInitiativeView):
     """
@@ -239,7 +266,7 @@ class GenericInitiativeView(BasePinnedInitiativeView):
             )
             
             # Check if the user is allowed to interact
-            gm_ids = await self.get_gm_ids(interaction.guild)
+            gm_ids = await get_gm_ids(interaction.guild)
             is_gm = str(interaction.user.id) in gm_ids
             is_current_participant = False
             
@@ -270,14 +297,12 @@ class GenericInitiativeView(BasePinnedInitiativeView):
                 
             return False  # We've already handled the interaction
             
-        # For the Set Order button, only GMs can use it
-        component_id = interaction.data.get("custom_id", "")
-        if component_id == "set_initiative_order":
-            # Check if user has GM role
-            gm_ids = await self.get_gm_ids(interaction.guild)
-            if str(interaction.user.id) not in gm_ids:
-                await interaction.response.send_message("❌ Only GMs can set the initiative order.", ephemeral=True)
-                return False
+        # Add gms to allowed_ids if not already set
+        self.guild = interaction.guild
+        gm_ids = await get_gm_ids(interaction.guild)
+        for gm_id in gm_ids:
+            if str(gm_id) not in self.allowed_ids:
+                self.allowed_ids.append(str(gm_id))
             
         # Normal interaction check for fully initialized view
         return str(interaction.user.id) in self.allowed_ids
@@ -285,25 +310,32 @@ class GenericInitiativeView(BasePinnedInitiativeView):
     async def handle_end_turn(self, interaction):
         """Handle the end turn button press"""
         self.initiative.advance_turn()
-        repositories.initiative.update_initiative_state(str(self.guild_id), str(self.channel_id), self.initiative.to_dict())
+        repositories.initiative.update_initiative_state(str(self.guild_id), str(self.channel_id), self.initiative)
         embed, content = await self.create_initiative_content()
         new_view = GenericInitiativeView(self.guild_id, self.channel_id, self.initiative, self.message_id)
         await self.update_initiative_message(interaction, content=content, embed=embed, view=new_view)
+        if not interaction.response.is_done():
+                await interaction.response.defer(ephemeral=True, thinking=False)
+
         
     async def handle_start_initiative(self, interaction):
         """Handle the start initiative button press"""
         self.initiative.is_started = True
         self.initiative.current_index = 0
-        repositories.initiative.update_initiative_state(str(self.guild_id), str(self.channel_id), self.initiative.to_dict())
+        repositories.initiative.update_initiative_state(str(self.guild_id), str(self.channel_id), self.initiative)
         embed, content = await self.create_initiative_content()
         new_view = GenericInitiativeView(self.guild_id, self.channel_id, self.initiative, self.message_id)
         await self.update_initiative_message(interaction, content=content, embed=embed, view=new_view)
+        if not interaction.response.is_done():
+                await interaction.response.defer(ephemeral=True, thinking=False)
 
     async def update_view(self, interaction: discord.Interaction):
         """Update the initiative pinned message with current state"""
         new_view = GenericInitiativeView(self.guild_id, self.channel_id, self.initiative, self.message_id)
         embed, content = await self.create_initiative_content()
         await self.update_initiative_message(interaction, content=content, embed=embed, view=new_view)
+        if not interaction.response.is_done():
+                await interaction.response.defer(ephemeral=True, thinking=False)
 
     async def create_initiative_content(self):
         """Create the content for a generic initiative view"""
@@ -316,6 +348,7 @@ class GenericInitiativeView(BasePinnedInitiativeView):
         if not self.initiative or not self.initiative.is_started:
             content = "🎲 **INITIATIVE TRACKING** 🎲\nPress Start Initiative to begin."
             embed.description = "Press Start Initiative to begin."
+            embed.description += "\n\nCurrent Initiative Order: {" + ", ".join([p.name for p in self.initiative.participants]) + "}" if self.initiative and self.initiative.participants else ""
             
         elif not self.initiative.participants:
             content = "🎲 **INITIATIVE TRACKING** 🎲\nNo participants in initiative."
@@ -325,11 +358,6 @@ class GenericInitiativeView(BasePinnedInitiativeView):
             current_name = self.initiative.get_participant_name(self.initiative.current)
 
             content = f"🎲 **INITIATIVE TRACKING** 🎲\n\n🔔 It's now **{current_name}**'s turn! (Round {self.initiative.round_number})"
-
-            current_participant = next((p for p in self.initiative.participants if p.id == self.initiative.current), None)
-            if current_participant and not current_participant.is_npc and current_participant.owner_id:
-                mention = f"<@{current_participant.owner_id}>, it's your turn!"
-                content += f"\n{mention}"
 
             # Add round information
             embed.add_field(name="Round", value=str(self.initiative.round_number), inline=True)
@@ -372,7 +400,7 @@ class FirstPickerSelect(ui.Select):
         initiative.current = first_id
         initiative.remaining_in_round = [p.id for p in initiative.participants if p.id != first_id]
         # Save updated initiative state to DB
-        repositories.initiative.update_initiative_state(str(self.parent_view.guild_id), str(self.parent_view.channel_id), initiative.to_dict())
+        repositories.initiative.update_initiative_state(str(self.parent_view.guild_id), str(self.parent_view.channel_id), initiative)
         await self.parent_view.update_view(interaction)
 
 class PopcornNextSelect(ui.Select):
@@ -384,7 +412,7 @@ class PopcornNextSelect(ui.Select):
         next_id = self.values[0]
         initiative = self.parent_view.initiative
         initiative.advance_turn(next_id)
-        repositories.initiative.update_initiative_state(str(self.parent_view.guild_id), str(self.parent_view.channel_id), initiative.to_dict())
+        repositories.initiative.update_initiative_state(str(self.parent_view.guild_id), str(self.parent_view.channel_id), initiative)
         await self.parent_view.update_view(interaction)
 
 class EmptyPersistentSelect(ui.Select):
@@ -510,9 +538,6 @@ class PopcornInitiativeView(BasePinnedInitiativeView):
             if not await self.initialize_if_needed(interaction):
                 return False
                 
-            # Get custom_id and values from interaction
-            component_id = interaction.data.get("custom_id", "")
-            
             # Create a new view with the loaded data and properly initialized components
             new_view = PopcornInitiativeView(
                 guild_id=self.guild_id,
@@ -522,7 +547,7 @@ class PopcornInitiativeView(BasePinnedInitiativeView):
             )
             
             # Check if the user is allowed to interact
-            gm_ids = await self.get_gm_ids(interaction.guild)
+            gm_ids = await get_gm_ids(interaction.guild)
             is_gm = str(interaction.user.id) in gm_ids
             is_current_participant = False
             
@@ -558,6 +583,13 @@ class PopcornInitiativeView(BasePinnedInitiativeView):
                 )
                 
             return False
+        
+        # Add gms to allowed_ids if not already set
+        self.guild = interaction.guild
+        gm_ids = await get_gm_ids(interaction.guild)
+        for gm_id in gm_ids:
+            if str(gm_id) not in self.allowed_ids:
+                self.allowed_ids.append(str(gm_id))
             
         # Normal interaction check for fully initialized view
         return str(interaction.user.id) in self.allowed_ids
@@ -616,6 +648,8 @@ class PopcornInitiativeView(BasePinnedInitiativeView):
         new_view = PopcornInitiativeView(self.guild_id, self.channel_id, self.initiative, self.message_id)
         embed, content = await self.create_initiative_content()
         await self.update_initiative_message(interaction, content=content, embed=embed, view=new_view)
+        if not interaction.response.is_done():
+                await interaction.response.defer(ephemeral=True, thinking=False)
 
 class SetOrderButton(ui.Button):
     def __init__(self, parent_view: GenericInitiativeView):
@@ -708,7 +742,7 @@ class SetInitiativeOrderModal(discord.ui.Modal, title="Set Initiative Order"):
         repositories.initiative.update_initiative_state(
             str(self.parent_view.guild_id), 
             str(self.parent_view.channel_id), 
-            self.parent_view.initiative.to_dict()
+            self.parent_view.initiative
         )
         
         # Update the view
@@ -729,9 +763,8 @@ class SetInitiativeOrderModal(discord.ui.Modal, title="Set Initiative Order"):
             embed=embed, 
             view=new_view
         )
-        
-        # Confirm to the user
+
         await interaction.response.send_message(
-            f"✅ Initiative order set to: {', '.join(p.name for p in new_order)}",
-            ephemeral=True
+            "✅ Initiative order set to " + ", ".join([p.name for p in new_order]),
+            ephemeral=False
         )

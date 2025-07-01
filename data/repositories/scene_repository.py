@@ -48,7 +48,7 @@ class SceneRepository(BaseRepository[Scene]):
     def get_all_scenes(self, guild_id: str) -> List[Scene]:
         """Get all scenes for a guild"""
         query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s ORDER BY creation_time DESC"
-        return self.execute_query(query, (str(guild_id),), fetch_all=True)
+        return self.execute_query(query, (str(guild_id),))
     
     def get_by_name(self, guild_id: str, name: str) -> Optional[Scene]:
         """Get scene by name within a guild"""
@@ -196,7 +196,7 @@ class PinnedSceneMessageRepository(BaseRepository[PinnedSceneMessage]):
     def get_all_pinned_messages(self, guild_id: str) -> List[PinnedSceneMessage]:
         """Get all pinned scene messages for a guild"""
         query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s ORDER BY scene_id"
-        return self.execute_query(query, (str(guild_id),), fetch_all=True)
+        return self.execute_query(query, (str(guild_id),))
     
     def clear_all_pins(self, guild_id: str) -> None:
         """Clear all pinned messages for a guild"""
@@ -244,4 +244,4 @@ class SceneNotesRepository(BaseRepository[SceneNotes]):
     def get_all_scene_notes_for_guild(self, guild_id: str) -> list[SceneNotes]:
         """Get all scene notes for a guild"""
         query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s ORDER BY scene_id"
-        return self.execute_query(query, (str(guild_id),), fetch_all=True)
+        return self.execute_query(query, (str(guild_id),))

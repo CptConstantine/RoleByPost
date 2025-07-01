@@ -286,7 +286,7 @@ def get_non_gm_active_characters(guild_id):
         if not rows:
             return []
 
-        gm_ids = set(get_gm_ids(guild_id))
+        gm_ids = get_gm_ids(guild_id)
         characters = []
         for row in rows:
             id, system, name, owner_id, entity_type, system_specific_data, notes, avatar_url = row

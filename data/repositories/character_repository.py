@@ -91,7 +91,7 @@ class CharacterRepository(BaseRepository[Character]):
         """Get all characters for a guild, optionally filtered by system"""
         if system:
             query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND system = %s"
-            characters = self.execute_query(query, (str(guild_id), system), fetch_all=True)
+            characters = self.execute_query(query, (str(guild_id), system))
         else:
             characters = self.find_all_by_column('guild_id', str(guild_id))
         return self._convert_list_to_base_characters(characters)
@@ -99,13 +99,13 @@ class CharacterRepository(BaseRepository[Character]):
     def get_npcs_by_guild(self, guild_id: str) -> List[BaseCharacter]:
         """Get all NPCs for a guild"""
         query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND entity_type = 'npc'"
-        characters = self.execute_query(query, (str(guild_id),), fetch_all=True)
+        characters = self.execute_query(query, (str(guild_id),))
         return self._convert_list_to_base_characters(characters)
     
     def get_pcs_by_guild(self, guild_id: str) -> List[BaseCharacter]:
         """Get all PCs for a guild"""
         query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND entity_type = 'pc'"
-        characters = self.execute_query(query, (str(guild_id),), fetch_all=True)
+        characters = self.execute_query(query, (str(guild_id),))
         return self._convert_list_to_base_characters(characters)
     
     def get_non_gm_active_characters(self, guild_id: str) -> List[BaseCharacter]:

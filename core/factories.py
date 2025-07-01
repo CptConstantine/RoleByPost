@@ -1,4 +1,5 @@
 from core import initiative_types, initiative_views, scene_views
+from core.models import BaseInitiative
 from rpg_systems.fate import fate_character, fate_scene_view
 from rpg_systems.mgt2e import mgt2e_character, mgt2e_scene_view
 from rpg_systems.generic import generic_character
@@ -41,7 +42,7 @@ def get_specific_initiative(initiative_type: str):
     else:
         raise ValueError(f"Unknown initiative type: {initiative_type}")
 
-def get_specific_initiative_view(guild_id: str, channel_id: str, initiative, message_id=None):
+def get_specific_initiative_view(guild_id: str, channel_id: str, initiative: BaseInitiative, message_id=None):
     if initiative.type == "popcorn":
         return initiative_views.PopcornInitiativeView(
             guild_id=guild_id, 
