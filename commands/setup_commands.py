@@ -416,6 +416,9 @@ class SetupCommands(commands.Cog):
         homebrew_rules_entities = repositories.homebrew.get_all_homebrew_rules(guild_id)
         homebrew_count = len(homebrew_rules_entities)
         
+        # Get channel restrictions
+        channel_permissions = repositories.channel_permissions.get_all_channel_permissions(guild_id)
+        
         # Create embed
         embed = discord.Embed(
             title=f"🛠️ Server Bot Configuration: {guild.name}",
@@ -522,6 +525,32 @@ class SetupCommands(commands.Cog):
             inline=True
         )
         
+        # Channel Restrictions
+        restriction_lines = []
+        if not channel_permissions:
+            restriction_lines.append("**Status:** No restrictions set")
+            restriction_lines.append("All channels are unrestricted")
+        else:
+            # Count channels by type
+            channels_by_type = {"ic": 0, "ooc": 0, "gm": 0}
+            for perm in channel_permissions:
+                if perm.channel_type in channels_by_type:
+                    channels_by_type[perm.channel_type] += 1
+            
+            restriction_lines.append(f"**Restricted Channels:** {len(channel_permissions)}")
+            if channels_by_type["ic"] > 0:
+                restriction_lines.append(f"• IC: {channels_by_type['ic']} channels")
+            if channels_by_type["ooc"] > 0:
+                restriction_lines.append(f"• OOC: {channels_by_type['ooc']} channels")
+            if channels_by_type["gm"] > 0:
+                restriction_lines.append(f"• GM Only: {channels_by_type['gm']} channels")
+        
+        embed.add_field(
+            name="🔒 Channel Restrictions",
+            value="\n".join(restriction_lines),
+            inline=False
+        )
+        
         # API Integration & Homebrew
         integration_lines = []
         api_status = "✅ Set" if api_key_set else "❌ Not set"
@@ -535,7 +564,7 @@ class SetupCommands(commands.Cog):
         )
         
         # Add footer with helpful info
-        embed.set_footer(text="Use /setup commands to modify these settings • GM permissions required")
+        embed.set_footer(text="Use /setup commands to modify these settings • Use /setup channel status for detailed channel info • GM permissions required")
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
 

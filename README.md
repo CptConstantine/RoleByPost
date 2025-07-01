@@ -50,6 +50,11 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
   - GMs can speak as NPCs with custom display names
   - GMs can provide narration with special formatting
 
+- **Channel Management**
+  - Configure channels as In-Character (IC), Out-of-Character (OOC), GM Only, or Unrestricted
+  - Commands are automatically restricted based on channel type to maintain immersion and organization
+  - Keeps roleplay focused in IC channels while organizing administrative tasks in appropriate channels
+
 ---
 
 ## Supported Systems
@@ -84,8 +89,14 @@ The following are the commands that are currently available.
 - `/setup openai status`  
   Check if an OpenAI API key is configured for this server and see available AI features.
 
+- `/setup channel type [channel] [channel_type]`  
+  (GM only) Configure channel restrictions. Set channels as IC (in-character), OOC (out-of-character), GM Only, or Unrestricted.
+
+- `/setup channel status`  
+  (GM only) View all channel permission configurations for this server.
+
 - `/setup status`  
-  (GM only) View comprehensive server bot configuration and statistics including roles, active scenes, character counts, feature settings, and more.
+  (GM only) View comprehensive server bot configuration and statistics including roles, active scenes, character counts, feature settings, channel restrictions, and more.
 
 ### Characters
 
@@ -257,7 +268,6 @@ For more detailed help, use `/character narration`.
 
 ### Secondary Priority
 
-- Manage channels so that certain commands can only be used in specific channels to prevent clutter
 - System specific commands (ex. starships, travel, and maintenance cost calculations for Traveller; system specific damage calculations)
 - Support for other systems
 
