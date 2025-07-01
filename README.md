@@ -305,16 +305,11 @@ Pull requests and suggestions are welcome! Please open an issue or PR for bug fi
    - For hosted databases (like Heroku Postgres), use the full connection string provided by your service
    - You can get an encryption key by running `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
 
-5. **Initialize the database**
+5. **Run the bot**
    ```sh
    python main.py
    ```
    The bot will automatically create the necessary database schema on first run.
-
-6. **Run the bot**
-   ```sh
-   python main.py
-   ```
 
 ---
 
