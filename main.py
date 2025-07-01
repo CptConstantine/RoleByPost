@@ -8,8 +8,8 @@ from commands import character_commands, initiative_commands, reminder_commands,
 from rpg_systems.fate import fate_commands
 from core.initiative_views import GenericInitiativeView, PopcornInitiativeView
 from core.scene_views import GenericSceneView
-from rpg_systems.fate.fate_scene_view import FateSceneView
-from rpg_systems.mgt2e.mgt2e_scene_view import MGT2ESceneView
+from rpg_systems.fate.fate_scene_views import FateSceneView
+from rpg_systems.mgt2e.mgt2e_scene_views import MGT2ESceneView
 from data.repositories.repository_factory import repositories
 
 dotenv.load_dotenv()

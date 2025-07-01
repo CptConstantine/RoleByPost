@@ -1,6 +1,5 @@
 from typing import List, Optional, Dict, Any
-
-from rpg_systems.fate.fate_models import Aspect
+from rpg_systems.fate.aspect import Aspect
 from .base_repository import BaseRepository
 from data.models import FateSceneAspects, FateSceneZones, MGT2ESceneEnvironment, DefaultSkills
 import json

@@ -9,7 +9,7 @@ import discord
 from core.models import BaseCharacter
 import core.factories as factories
 from data import encryption
-from rpg_systems.fate.fate_models import Aspect
+from rpg_systems.fate.aspect import Aspect
 
 
 DB_FILE = 'data/db/bot.db'

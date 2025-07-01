@@ -4,7 +4,7 @@ from discord import ui
 from discord.ext import commands
 from core.scene_views import BasePinnableSceneView, PlaceholderPersistentButton, SceneNotesButton
 from core import factories
-from rpg_systems.fate.fate_models import Aspect
+from rpg_systems.fate.aspect import Aspect
 from data.repositories.repository_factory import repositories
 
 SYSTEM = "fate"

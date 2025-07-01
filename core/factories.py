@@ -1,7 +1,7 @@
 from core import initiative_types, initiative_views, scene_views
 from core.models import BaseInitiative
-from rpg_systems.fate import fate_character, fate_scene_view
-from rpg_systems.mgt2e import mgt2e_character, mgt2e_scene_view
+from rpg_systems.fate import fate_character, fate_roll_modifiers, fate_roll_views, fate_scene_views, fate_sheet, fate_sheet_edit_views
+from rpg_systems.mgt2e import mgt2e_character, mgt2e_roll_modifiers, mgt2e_roll_views, mgt2e_scene_views, mgt2e_sheet, mgt2e_sheet_edit_views
 from rpg_systems.generic import generic_character
 
 def get_specific_character(system: str):
@@ -16,9 +16,9 @@ def get_specific_character(system: str):
 
 def get_specific_sheet(system: str):
     if system == "fate":
-        return fate_character.FateSheet()
+        return fate_sheet.FateSheet()
     elif system == "mgt2e":
-        return mgt2e_character.MGT2ESheet()
+        return mgt2e_sheet.MGT2ESheet()
     elif system == "generic":
         return generic_character.GenericSheet()
     else:
@@ -26,9 +26,9 @@ def get_specific_sheet(system: str):
 
 def get_specific_sheet_view(system: str, editor_id: str, char_id: str):
     if system == "fate":
-        return fate_character.FateSheetEditView(editor_id=editor_id, char_id=char_id)
+        return fate_sheet_edit_views.FateSheetEditView(editor_id=editor_id, char_id=char_id)
     elif system == "mgt2e":
-        return mgt2e_character.MGT2ESheetEditView(editor_id=editor_id, char_id=char_id)
+        return mgt2e_sheet_edit_views.MGT2ESheetEditView(editor_id=editor_id, char_id=char_id)
     elif system == "generic":
         return generic_character.GenericSheetEditView(editor_id=editor_id, char_id=char_id)
     else:
@@ -62,9 +62,9 @@ def get_specific_initiative_view(guild_id: str, channel_id: str, initiative: Bas
     
 def get_specific_roll_formula(system: str, roll_parameters_dict: dict = None):
     if system == "fate":
-        return fate_character.FateRollModifiers(roll_parameters_dict)
+        return fate_roll_modifiers.FateRollModifiers(roll_parameters_dict)
     elif system == "mgt2e":
-        return mgt2e_character.MGT2ERollModifiers(roll_parameters_dict)
+        return mgt2e_roll_modifiers.MGT2ERollModifiers(roll_parameters_dict)
     elif system == "generic":
         return generic_character.GenericRollModifiers(roll_parameters_dict)
     else:
@@ -72,9 +72,9 @@ def get_specific_roll_formula(system: str, roll_parameters_dict: dict = None):
 
 def get_specific_roll_formula_view(system: str, roll_formula_obj, difficulty: int = None):
     if system == "fate":
-        return fate_character.FateRollModifiersView(roll_formula_obj, difficulty)
+        return fate_roll_views.FateRollModifiersView(roll_formula_obj, difficulty)
     elif system == "mgt2e":
-        return mgt2e_character.MGT2ERollModifiersView(roll_formula_obj, difficulty)
+        return mgt2e_roll_views.MGT2ERollModifiersView(roll_formula_obj, difficulty)
     elif system == "generic":
         return generic_character.GenericRollModifiersView(roll_formula_obj, difficulty)
     else:
@@ -83,8 +83,8 @@ def get_specific_roll_formula_view(system: str, roll_formula_obj, difficulty: in
 def get_specific_scene_view(system, guild_id=None, channel_id=None, scene_id=None, message_id=None):
     """Get the appropriate scene view for the given system"""
     if system == "fate":
-        return fate_scene_view.FateSceneView(guild_id, channel_id, scene_id, message_id)
+        return fate_scene_views.FateSceneView(guild_id, channel_id, scene_id, message_id)
     elif system == "mgt2e":
-        return mgt2e_scene_view.MGT2ESceneView(guild_id, channel_id, scene_id, message_id)
+        return mgt2e_scene_views.MGT2ESceneView(guild_id, channel_id, scene_id, message_id)
     else:
         return scene_views.GenericSceneView(guild_id, channel_id, scene_id, message_id)

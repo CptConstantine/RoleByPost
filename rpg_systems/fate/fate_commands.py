@@ -2,7 +2,6 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from data.repositories.repository_factory import repositories
-from rpg_systems.fate.fate_models import Aspect
 
 class FateCommands(commands.Cog):
     def __init__(self, bot):

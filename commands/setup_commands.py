@@ -115,15 +115,15 @@ class SetupCommands(commands.Cog):
                     await interaction.response.send_message(f"❌ Invalid value for skill: `{line}`. All values must be integers.", ephemeral=True)
                     return
             else:
-                skills_dict[line] = -3
+                skills_dict[line] = None
         if not skills_dict:
             await interaction.response.send_message("❌ No skills found in the file.", ephemeral=True)
             return
         system = repositories.server.get_system(str(interaction.guild.id))
-        sheet = factories.get_specific_sheet(system)
-        if hasattr(sheet, "parse_and_validate_skills"):
+        char = factories.get_specific_character(system)
+        if hasattr(char, "parse_and_validate_skills"):
             skills_str = ", ".join(f"{k}:{v}" for k, v in skills_dict.items())
-            skills_dict = sheet.parse_and_validate_skills(skills_str)
+            skills_dict = char.parse_and_validate_skills(skills_str)
             if not skills_dict:
                 await interaction.response.send_message("❌ The skills list is invalid for this system.", ephemeral=True)
                 return
