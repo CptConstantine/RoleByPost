@@ -4,6 +4,7 @@ import datetime
 import discord
 from discord.ext import commands
 from discord import app_commands
+from core import channel_restriction
 from core.shared_views import RequestRollView
 from core.utils import roll_parameters_to_dict
 import core.factories as factories
@@ -38,12 +39,14 @@ class SetupCommands(commands.Cog):
 
     setup_group = app_commands.Group(name="setup", description="Server setup commands")
     openai_group = app_commands.Group(name="openai", description="OpenAI API key management", parent=setup_group)
+    channel_group = app_commands.Group(name="channel", description="Channel permission management", parent=setup_group)
 
     @setup_group.command(
         name="gmrole",
         description="Set a Discord role as the GM role for the server. You must be an Admin."
     )
     @app_commands.describe(role="The Discord role to set as the GM role")
+    @channel_restriction.no_ic_channels()
     async def setup_gmrole(self, interaction: discord.Interaction, role: discord.Role):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Only admins can set the GM role.", ephemeral=True)
@@ -61,6 +64,7 @@ class SetupCommands(commands.Cog):
         description="Set a Discord role as the player role for the server. You must be an Admin."
     )
     @app_commands.describe(role="The Discord role to set as the player role")
+    @channel_restriction.no_ic_channels()
     async def setup_playerrole(self, interaction: discord.Interaction, role: discord.Role):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Only admins can set the player role.", ephemeral=True)
@@ -75,6 +79,12 @@ class SetupCommands(commands.Cog):
 
     @setup_group.command(name="system", description="Set the RPG system for your server. You must be an Admin.")
     @app_commands.describe(system="The system to use (e.g. generic, fate, mgt2e)")
+    @app_commands.choices(system=[
+        app_commands.Choice(name="Fate Core/Condensed/Accelerated", value="fate"),
+        app_commands.Choice(name="Mongoose Traveller 2nd Edition", value="mgt2e"),
+        app_commands.Choice(name="Generic System", value="generic")
+    ])
+    @channel_restriction.no_ic_channels()
     async def setup_system(self, interaction: discord.Interaction, system: str):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Only admins can set the system.", ephemeral=True)
@@ -89,6 +99,7 @@ class SetupCommands(commands.Cog):
 
     @setup_group.command(name="defaultskillsfile", description="Set default skills for this server's system with a .txt file (one skill per line).")
     @app_commands.describe(file="A .txt file with skills, one per line or Skill:Value per line")
+    @channel_restriction.no_ic_channels()
     async def setup_defaultskillsfile(self, interaction: discord.Interaction, file: discord.Attachment):
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can set default skills.", ephemeral=True)
@@ -132,6 +143,7 @@ class SetupCommands(commands.Cog):
 
     @setup_group.command(name="defaultskills", description="Set default skills for this server's system via text.")
     @app_commands.describe(skills="Skill list, e.g. Admin:0, Gun Combat:1, Pilot:2")
+    @channel_restriction.no_ic_channels()
     async def setup_defaultskills(self, interaction: discord.Interaction, skills: str):
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can set default skills.", ephemeral=True)
@@ -173,6 +185,7 @@ class SetupCommands(commands.Cog):
         description="GM: Set the OpenAI API key used for generating recaps and other AI features"
     )
     @app_commands.describe(api_key="Your OpenAI API key (will be stored securely)")
+    @channel_restriction.no_ic_channels()
     async def openai_set_key(self, interaction: discord.Interaction, api_key: str):
         """Set the OpenAI API key for this server"""
         # Check if user has GM permissions
@@ -194,6 +207,7 @@ class SetupCommands(commands.Cog):
         name="status",
         description="Check if an OpenAI API key is configured for this server"
     )
+    @channel_restriction.no_ic_channels()
     async def openai_status(self, interaction: discord.Interaction):
         """Check the status of the OpenAI API key for this server"""
         api_key_set = repositories.api_key.get_openai_key(str(interaction.guild.id)) is not None
@@ -236,10 +250,115 @@ class SetupCommands(commands.Cog):
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
+    @channel_group.command(
+        name="type",
+        description="GM: Configure which commands are allowed in which channels"
+    )
+    @app_commands.describe(
+        channel="The channel to configure",
+        channel_type="Channel type: ic (in-character), ooc (out-of-character), gm (GM only), unrestricted"
+    )
+    @app_commands.choices(channel_type=[
+        app_commands.Choice(name="In-Character (IC)", value="ic"),
+        app_commands.Choice(name="Out-of-Character (OOC)", value="ooc"),
+        app_commands.Choice(name="GM Only", value="gm"),
+        app_commands.Choice(name="Unrestricted", value="unrestricted")
+    ])
+    @channel_restriction.no_ic_channels()
+    async def setup_channel_type(
+        self, 
+        interaction: discord.Interaction, 
+        channel: discord.TextChannel,
+        channel_type: str
+    ):
+        """Configure channel permissions for command restrictions"""
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+            await interaction.response.send_message("❌ Only GMs can configure channel permissions.", ephemeral=True)
+            return
+        
+        if channel_type == "unrestricted":
+            # Remove the channel permission entry to make it unrestricted
+            repositories.channel_permissions.remove_channel_permission(str(interaction.guild.id), str(channel.id))
+            await interaction.response.send_message(
+                f"✅ {channel.mention} is now **unrestricted** - all commands are allowed.",
+                ephemeral=True
+            )
+        else:
+            # Set the channel type
+            repositories.channel_permissions.set_channel_type(str(interaction.guild.id), str(channel.id), channel_type)
+            
+            channel_type_names = {
+                "ic": "In-Character (IC)",
+                "ooc": "Out-of-Character (OOC)", 
+                "gm": "GM Only"
+            }
+            
+            await interaction.response.send_message(
+                f"✅ {channel.mention} is now configured as **{channel_type_names[channel_type]}**.",
+                ephemeral=True
+            )
+
+    @channel_group.command(
+        name="status",
+        description="GM: View channel permission configuration for this server"
+    )
+    @channel_restriction.no_ic_channels()
+    async def setup_channel_status(self, interaction: discord.Interaction):
+        """View all channel permissions for this server"""
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+            await interaction.response.send_message("❌ Only GMs can view channel configuration.", ephemeral=True)
+            return
+        
+        permissions = repositories.channel_permissions.get_all_channel_permissions(str(interaction.guild.id))
+        
+        embed = discord.Embed(
+            title=f"🔒 Channel Permissions: {interaction.guild.name}",
+            color=discord.Color.blue()
+        )
+        
+        if not permissions:
+            embed.add_field(
+                name="No Restrictions",
+                value="All channels are currently unrestricted - all commands are allowed everywhere.",
+                inline=False
+            )
+        else:
+            # Group channels by type
+            channels_by_type = {"ic": [], "ooc": [], "gm": []}
+            
+            for perm in permissions:
+                channel = interaction.guild.get_channel(int(perm.channel_id))
+                if channel:  # Channel still exists
+                    channels_by_type[perm.channel_type].append(channel.mention)
+            
+            # Add fields for each type
+            type_names = {
+                "ic": "🎭 In-Character (IC)",
+                "ooc": "💬 Out-of-Character (OOC)",
+                "gm": "👑 GM Only"
+            }
+            
+            for channel_type, channel_list in channels_by_type.items():
+                if channel_list:
+                    embed.add_field(
+                        name=type_names[channel_type],
+                        value="\n".join(channel_list),
+                        inline=True
+                    )
+        
+        embed.add_field(
+            name="Configuration",
+            value="Use `/setup channel type` to configure channel restrictions.",
+            inline=False
+        )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     @setup_group.command(
         name="status",
         description="GM: View comprehensive server bot configuration and statistics"
     )
+    @channel_restriction.no_ic_channels()
     async def setup_status(self, interaction: discord.Interaction):
         """Display comprehensive server bot settings and statistics"""
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):

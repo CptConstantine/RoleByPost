@@ -163,3 +163,9 @@ class HomebrewRule:
     id: Optional[int] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+@dataclass
+class ChannelPermission:
+    guild_id: str
+    channel_id: str
+    channel_type: str  # 'ic', 'ooc', 'gm', 'unrestricted'

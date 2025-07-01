@@ -171,6 +171,13 @@ CREATE TABLE IF NOT EXISTS homebrew_rules (
     UNIQUE(guild_id, rule_name)
 );
 
+CREATE TABLE IF NOT EXISTS channel_permissions (
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    channel_type TEXT NOT NULL CHECK (channel_type IN ('ic', 'ooc', 'gm')),
+    PRIMARY KEY (guild_id, channel_id)
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_character_guild_name ON characters(guild_id, name);
 CREATE INDEX IF NOT EXISTS idx_character_guild_owner ON characters(guild_id, owner_id);
@@ -179,3 +186,4 @@ CREATE INDEX IF NOT EXISTS idx_reminders_timestamp ON reminders(timestamp);
 CREATE INDEX IF NOT EXISTS idx_initiative_active ON initiative(guild_id, is_active);
 CREATE INDEX IF NOT EXISTS idx_pinned_scene_channel ON pinned_scene_messages(guild_id, channel_id);
 CREATE INDEX IF NOT EXISTS idx_homebrew_rules_guild ON homebrew_rules(guild_id);
+CREATE INDEX IF NOT EXISTS idx_channel_permissions_lookup ON channel_permissions (guild_id, channel_id);

@@ -1,3 +1,4 @@
+from .channel_permission_repository import ChannelPermissionRepository
 from .server_repository import ServerRepository
 from .homebrew_repository import HomebrewRepository
 from .character_repository import CharacterRepository, ActiveCharacterRepository
@@ -48,6 +49,9 @@ class RepositoryFactory:
         self._fate_zones_repo = None
         self._mgt2e_environment_repo = None
         self._default_skills_repo = None
+
+        # Channel permission repositories
+        self._channel_permissions_repo = None
     
     # Core repositories
     @property
@@ -175,6 +179,13 @@ class RepositoryFactory:
         if self._default_skills_repo is None:
             self._default_skills_repo = DefaultSkillsRepository()
         return self._default_skills_repo
+    
+    # Channel permission repositories
+    @property
+    def channel_permissions(self) -> ChannelPermissionRepository:
+        if self._channel_permissions_repo is None:
+            self._channel_permissions_repo = ChannelPermissionRepository()
+        return self._channel_permissions_repo
 
 # Global repository factory instance
 repositories = RepositoryFactory()
