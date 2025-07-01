@@ -136,12 +136,32 @@ class SetupCommands(commands.Cog):
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can set default skills.", ephemeral=True)
             return
+        
+        #Convert skills string to a dictionary
+        skills = skills.strip()
+        skills_dict = {}
+        for entry in skills.split(","):
+            entry = entry.strip()
+            if ":" in entry:
+                k, v = entry.split(":", 1)
+                k = k.strip()
+                v = v.strip()
+                if v:
+                    try:
+                        skills_dict[k] = int(v)
+                    except ValueError:
+                        skills_dict[k] = v
+                else:
+                    skills_dict[k] = None
+            else:
+                skills_dict[entry] = None
+
         system = repositories.server.get_system(str(interaction.guild.id))
-        sheet = factories.get_specific_sheet(system)
-        if not hasattr(sheet, "parse_and_validate_skills"):
+        char = factories.get_specific_character(system)
+        if not hasattr(char, "parse_and_validate_skills"):
             await interaction.response.send_message("❌ This system does not support setting default skills.", ephemeral=True)
             return
-        skills_dict = sheet.parse_and_validate_skills(skills)
+        skills_dict = char.parse_and_validate_skills(skills_dict)
         if not skills_dict:
             await interaction.response.send_message("❌ Invalid format or no skills provided. Example: `Admin:0, Gun Combat:1, Pilot:2`", ephemeral=True)
             return
