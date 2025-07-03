@@ -260,6 +260,21 @@ This bot provides special message prefixes that transform regular text messages 
 
 For more detailed help, use `/character narration`.
 
+### Fate System Commands
+
+- `/fate scene aspects`  
+  Show all aspects in the current scene including game aspects, scene aspects, zone aspects, and character aspects. GMs can see hidden aspects while players see only visible ones.
+
+**Interactive Aspect Management:**
+When viewing a scene in a Fate game, GMs have access to these Fate-specific features:
+- **Edit Game Aspects:** Manage server-wide aspects that persist across scenes
+- **Edit Scene Aspects:** Manage aspects specific to the current scene  
+- **Edit Zones:** Create and manage zone lists and zone-specific aspects
+
+All aspect editing supports:
+- Hidden aspects (surround with `*asterisks*`)
+- Free invokes (add `[number]` after aspect name)
+
 ---
 
 ## Features Planned
@@ -273,7 +288,6 @@ For more detailed help, use `/character narration`.
 
 - System specific features
   - Traveller: starships, travel, and maintenance cost calculations
-  - Fate: game aspects
 - Support for other systems
 
 ---
