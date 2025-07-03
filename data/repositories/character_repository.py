@@ -1,7 +1,7 @@
 from typing import List, Optional
 from .base_repository import BaseRepository
 from data.models import Character, ActiveCharacter
-from core.models import BaseCharacter
+from core.models import BaseCharacter, EntityJSONEncoder
 import json
 import uuid
 import core.factories as factories
@@ -18,7 +18,7 @@ class CharacterRepository(BaseRepository[Character]):
             'owner_id': entity.owner_id,
             'entity_type': entity.entity_type,
             'system': entity.system,
-            'system_specific_data': json.dumps(entity.system_specific_data),
+            'system_specific_data': json.dumps(entity.system_specific_data, cls=EntityJSONEncoder),
             'notes': json.dumps(entity.notes),
             'avatar_url': entity.avatar_url
         }

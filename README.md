@@ -49,6 +49,7 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
   - Players can speak as their characters with formatted messages and avatars
   - GMs can speak as NPCs with custom display names
   - GMs can provide narration with special formatting
+  - Automatically restricted from out of character channels to maintain immersion
 
 - **Channel Management**
   - Configure channels as In-Character (IC), Out-of-Character (OOC), GM Only, or Unrestricted
@@ -254,6 +255,8 @@ This bot provides special message prefixes that transform regular text messages 
 
 - **Character Avatars**  
   Set your character's avatar with `/character setavatar [url]` to enhance the immersion.
+
+**Channel Restrictions:** Narration commands (`pc::`, `npc::`, `gm::`) are automatically blocked in **Out-of-Character (OOC)** channels to maintain immersion. Use them in **In-Character (IC)** or **Unrestricted** channels.
 
 For more detailed help, use `/character narration`.
 

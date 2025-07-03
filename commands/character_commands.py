@@ -323,6 +323,10 @@ class CharacterCommands(commands.Cog):
             description="How to speak as characters or narrate as a GM in play-by-post games",
             color=discord.Color.blue()
         )
+
+        # Check if there are any channel restrictions set up
+        channel_permissions = repositories.channel_permissions.get_all_channel_permissions(str(interaction.guild.id))
+        has_restrictions = len(channel_permissions) > 0
         
         embed.add_field(
             name="Speaking as Your Character",
@@ -359,6 +363,18 @@ class CharacterCommands(commands.Cog):
             ),
             inline=False
         )
+
+        # Add channel restrictions info if they exist
+        if has_restrictions:
+            embed.add_field(
+                name="⚠️ Channel Restrictions",
+                value=(
+                    "Narration commands (`pc::`, `npc::`, `gm::`) are **not allowed** in **Out-of-Character (OOC)** channels.\n"
+                    "Use these commands in **In-Character (IC)** or **Unrestricted** channels to maintain immersion.\n\n"
+                    "GMs can configure channel types with `/setup channel type`."
+                ),
+                inline=False
+            )
         
         embed.add_field(
             name="Text Formatting",

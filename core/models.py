@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+import json
+from typing import Any, Dict, List, Optional
 import discord
 
 class NotesMixin:
@@ -176,7 +177,13 @@ class RollModifiers(ABC):
 
     def __repr__(self):
         return f"RollModifiers(modifiers={self.modifiers})"
-    
+
+class EntityJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if hasattr(obj, 'to_dict'):
+            return obj.to_dict()
+        return super().default(obj)
+
 class BaseEntity(BaseRpgObj):
     """
     Abstract base class for a "thing".

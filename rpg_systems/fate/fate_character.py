@@ -6,6 +6,8 @@ from data.repositories.repository_factory import repositories
 from rpg_systems.fate.aspect import Aspect
 from rpg_systems.fate.fate_roll_modifiers import FateRollModifiers
 from rpg_systems.fate.fate_roll_views import FateRollModifiersView
+from rpg_systems.fate.stress_track import StressTrack, StressBox
+from rpg_systems.fate.consequence_track import ConsequenceTrack, Consequence
 
 SYSTEM = "fate"
 
@@ -34,18 +36,54 @@ class FateCharacter(BaseCharacter):
         "refresh": 3,  
         "fate_points": 3,
         "skills": {},
-        "aspects": [],  # This will now hold objects, not strings
-        "stress": {"physical": [False, False], "mental": [False, False]},
-        "consequences": ["Mild: None", "Moderate: None", "Severe: None"],
+        "aspects": [],
+        "stress_tracks": [
+            {
+                "track_name": "Physical",
+                "boxes": [{"value": 1, "is_filled": False}, {"value": 2, "is_filled": False}],
+                "linked_skill": "Physique"
+            },
+            {
+                "track_name": "Mental",
+                "boxes": [{"value": 1, "is_filled": False}, {"value": 2, "is_filled": False}],
+                "linked_skill": "Will"
+            }
+        ],
+        "consequence_tracks": [
+            {
+                "name": "Consequences",
+                "consequences": [
+                    {"name": "Mild", "severity": 2, "aspect": None},
+                    {"name": "Moderate", "severity": 4, "aspect": None},
+                    {"name": "Severe", "severity": 6, "aspect": None}
+                ]
+            }
+        ],
         "stunts": {}  # Added stunts as a dictionary: {name: description}
     }
     SYSTEM_SPECIFIC_NPC = {
         "refresh": 0,
         "fate_points": 0,
         "skills": {},
-        "aspects": [],  # This will now hold objects, not strings
-        "stress": {"physical": [False, False], "mental": [False, False]},
-        "consequences": ["Mild: None"],
+        "aspects": [],
+        "stress_tracks": [
+            {
+                "track_name": "Physical",
+                "boxes": [{"value": 1, "is_filled": False}, {"value": 2, "is_filled": False}],
+                "linked_skill": "Physique"
+            },
+            {
+                "track_name": "Mental",
+                "boxes": [{"value": 1, "is_filled": False}, {"value": 2, "is_filled": False}],
+                "linked_skill": "Will"
+            }
+        ],
+        "consequence_tracks": [
+            {
+                "name": "Consequences",
+                "consequences": [{"name": "Mild", "severity": 2, "aspect": None}]
+            }
+        ],
         "stunts": {}  # Added stunts for NPCs too
     }
 
@@ -55,8 +93,6 @@ class FateCharacter(BaseCharacter):
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "FateCharacter":
         return cls(data)
-
-    # Properties for system-specific fields
 
     @property
     def skills(self) -> Dict[str, int]:
@@ -101,20 +137,51 @@ class FateCharacter(BaseCharacter):
         self.data["refresh"] = value
 
     @property
+    def stress_tracks(self) -> List[StressTrack]:
+        """Get stress tracks as StressTrack objects"""
+        tracks_data = self.data.get("stress_tracks", [])
+        return [StressTrack.from_dict(track) for track in tracks_data]
+
+    @stress_tracks.setter
+    def stress_tracks(self, value: List[StressTrack]):
+        """Set stress tracks from StressTrack objects"""
+        self.data["stress_tracks"] = [track.to_dict() for track in value]
+
+    @property
+    def consequence_tracks(self) -> List[ConsequenceTrack]:
+        """Get consequence track as a list of ConsequenceTrack objects"""
+        tracks_data = self.data.get("consequence_tracks", [])
+        return [ConsequenceTrack.from_dict(track) for track in tracks_data]
+
+    @consequence_tracks.setter
+    def consequence_tracks(self, value: List[ConsequenceTrack]):
+        """Set consequence tracks from a list of ConsequenceTrack objects"""
+        self.data["consequence_tracks"] = [track.to_dict() for track in value]
+
+    # Legacy properties for backward compatibility during migration
+    @property
     def stress(self) -> Dict[str, list]:
-        return self.data.get("stress", {})
+        """Legacy stress property - returns boolean lists for backward compatibility"""
+        tracks = {}
+        for track in self.stress_tracks:
+            bool_list = [box.is_filled for box in track.boxes]
+            linked_skill = track.linked_skill.lower() if track.linked_skill else None
+            tracks[track.track_name.lower()] = bool_list
+        return tracks
 
     @stress.setter
     def stress(self, value: Dict[str, list]):
-        self.data["stress"] = value
-
-    @property
-    def consequences(self) -> list:
-        return self.data.get("consequences", [])
-
-    @consequences.setter
-    def consequences(self, value: list):
-        self.data["consequences"] = value
+        """Legacy stress setter - converts from boolean lists"""
+        stress_tracks = []
+        for track_name, bool_list in value.items():
+            boxes = [StressBox(value=i + 1, is_filled=filled) for i, filled in enumerate(bool_list)]
+            linked_skill = None
+            if "physical" in track_name:
+                linked_skill = "Physique"
+            elif "mental" in track_name:
+                linked_skill = "Will"
+            stress_tracks.append(StressTrack(track_name=track_name.capitalize(), boxes=boxes, linked_skill=linked_skill))
+        self.stress_tracks = stress_tracks
 
     # Add property getter and setter for stunts
     @property
@@ -124,9 +191,6 @@ class FateCharacter(BaseCharacter):
     @stunts.setter
     def stunts(self, value: Dict[str, str]):
         self.data["stunts"] = value
-
-    # You can keep your old getter methods for backward compatibility if needed,
-    # but you should now use the properties above in new code.
 
     def apply_defaults(self, is_npc=False, guild_id=None):
         """
@@ -152,9 +216,35 @@ class FateCharacter(BaseCharacter):
                         if skill not in updated_skills:
                             updated_skills[skill] = val
                     self.skills = updated_skills
+            elif key == "stress_tracks":
+                # Handle stress tracks - convert dict format to StressTrack objects
+                if not self.stress_tracks:
+                    stress_tracks = []
+                    for track_data in value:
+                        stress_tracks.append(StressTrack.from_dict(track_data))
+                    self.stress_tracks = stress_tracks
+            elif key == "consequence_tracks":
+                # Handle consequence tracks - convert dict format to ConsequenceTrack objects
+                if not self.consequence_tracks:
+                    consequence_tracks = []
+                    for track_data in value:
+                        consequence_tracks.append(ConsequenceTrack.from_dict(track_data))
+                    self.consequence_tracks = consequence_tracks
+            elif key == "aspects":
+                # Handle aspects - convert dict format to Aspect objects
+                if not self.aspects:
+                    aspects = []
+                    for aspect_data in value:
+                        if isinstance(aspect_data, dict):
+                            aspects.append(Aspect.from_dict(aspect_data))
+                        else:
+                            # Assume it's already an Aspect object
+                            aspects.append(aspect_data)
+                    self.aspects = aspects
             else:
                 # Use property setters for all other fields
-                if not hasattr(self, key) or getattr(self, key) in (None, [], {}, 0, False):
+                current_value = getattr(self, key, None)
+                if current_value in (None, [], {}, 0, False):
                     setattr(self, key, value)
     
     async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: "FateRollModifiers", difficulty: int = None):

@@ -113,7 +113,12 @@ class FateCommands(commands.Cog):
                     aspect_str = aspect.get_full_aspect_string(is_gm=is_gm, is_owner=is_owner)
                     if aspect_str:  # Skip empty strings (hidden aspects for non-GMs/non-owners)
                         character_aspects.append(aspect_str)
-                    
+            if character.consequence_tracks:
+                for track in character.consequence_tracks:
+                    for consequence in track.consequences:
+                        if consequence.is_filled():
+                            character_aspects.append(f"{consequence.aspect.name} {f'[{consequence.aspect.free_invokes}]' if consequence.aspect.free_invokes > 0 else ''} ({consequence.name} Consequence)")
+
             if character_aspects:
                 pc_aspects_by_character[character.name] = character_aspects
         

@@ -4,10 +4,26 @@ from core.models import BaseCharacter
 import core.factories as factories
 from data.repositories.repository_factory import repositories
 
-async def process_narration(message):
+async def process_narration(message: discord.Message):
     """Process messages with special prefixes for character speech and GM narration."""
     if not message.guild:
         return  # Only process in guild channels
+    
+    # Check channel restrictions for narration
+    channel_type = repositories.channel_permissions.get_channel_type(
+        str(message.guild.id), 
+        str(message.channel.id)
+    )
+    
+    # If channel is set to OOC, don't allow narration prefixes
+    if channel_type == 'ooc':
+        await message.reply(
+            "❌ Character narration (`pc::`, `npc::`, `gm::`) is not allowed in **Out-of-Character (OOC)** channels.\n"
+            "💡 Use these commands in **In-Character (IC)** or **Unrestricted** channels.",
+            delete_after=10
+        )
+        # Don't delete the original message in this case - let the user see the error and handle it
+        return
         
     content = message.content
     guild_id = message.guild.id
@@ -173,26 +189,13 @@ async def send_character_webhook(channel, character: BaseCharacter, content, ali
 
 def get_character_color(character):
     """Return a color for the character based on system and character type."""
-    system = character.data.get("system", "generic") if hasattr(character, "data") else "generic"
-    
-    if system == "fate":
-        return discord.Color.blue()
-    elif system == "mgt2e":
-        return discord.Color.dark_teal()
-    elif hasattr(character, "is_npc") and character.is_npc:
-        return discord.Color.dark_orange()
+    if character.is_npc:
+        return discord.Color.orange()  # NPCs get orange
     else:
-        return discord.Color.purple()
+        return discord.Color.green()   # PCs get green
 
 def get_default_avatar(character):
     """Return a default avatar URL based on character's system or type."""
-    system = character.data.get("system", "generic") if hasattr(character, "data") else "generic"
-    
-    if system == "fate":
-        return "https://i.imgur.com/JQ5kUTy.png"  # Fate dice icon
-    elif system == "mgt2e":
-        return "https://i.imgur.com/zsQlxz7.png"  # Traveller icon
-    elif hasattr(character, "is_npc") and character.is_npc:
-        return "https://i.imgur.com/ZLnfuEX.png"  # Generic NPC icon
-    else:
-        return "https://i.imgur.com/hVKYkR5.png"  # Generic PC icon
+    # This could be expanded to return different default avatars
+    # based on character system, type, etc.
+    return "https://cdn.discordapp.com/embed/avatars/0.png"
