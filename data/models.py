@@ -169,3 +169,17 @@ class ChannelPermission:
     guild_id: str
     channel_id: str
     channel_type: str  # 'ic', 'ooc', 'gm', 'unrestricted'
+
+@dataclass
+class GameAspect:
+    guild_id: str
+    aspect_name: str
+    aspect: Dict[str, Any]
+
+@dataclass  
+class ZoneAspect:
+    guild_id: str
+    scene_id: str
+    zone_name: str
+    aspect_name: str
+    aspect: Dict[str, Any]

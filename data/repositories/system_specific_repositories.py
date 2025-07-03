@@ -1,7 +1,8 @@
+from dataclasses import asdict
 from typing import List, Optional, Dict, Any
-from rpg_systems.fate.aspect import Aspect
+from rpg_systems.fate.aspect import Aspect, AspectType
 from .base_repository import BaseRepository
-from data.models import FateSceneAspects, FateSceneZones, MGT2ESceneEnvironment, DefaultSkills
+from data.models import FateSceneAspects, FateSceneZones, GameAspect, MGT2ESceneEnvironment, DefaultSkills, ZoneAspect
 import json
 
 class FateSceneAspectsRepository(BaseRepository[FateSceneAspects]):
@@ -186,3 +187,127 @@ class DefaultSkillsRepository(BaseRepository[DefaultSkills]):
             skills_json=skills
         )
         self.save(default_skills, conflict_columns=['guild_id', 'system'])
+
+class FateGameAspectsRepository(BaseRepository[GameAspect]):
+    def __init__(self):
+        super().__init__('game_aspects')
+        
+    def to_dict(self, entity: GameAspect) -> dict:
+        return {
+            'guild_id': entity.guild_id,
+            'aspect_name': entity.aspect_name,
+            'aspect': json.dumps(entity.aspect) if isinstance(entity.aspect, dict) else entity.aspect
+        }
+    
+    def from_dict(self, data: dict) -> Optional[GameAspect]:
+        if not data:
+            return None
+        
+        aspect_data = data.get('aspect', None)
+
+        if isinstance(aspect_data, str):
+            aspect_data = json.loads(aspect_data)
+        
+        return GameAspect(
+            guild_id=data.get('guild_id'),
+            aspect_name=data.get('aspect_name'),
+            aspect=aspect_data
+        )
+
+    def get_game_aspects(self, guild_id: str) -> List[Aspect]:
+        query = f"SELECT aspect_name, aspect FROM fate_game_aspects WHERE guild_id = %s"
+        params = (str(guild_id),)
+
+        rows = self.execute_query(query, params)
+        return [Aspect.from_dict(row.aspect) for row in rows if row]
+
+    def set_game_aspect(self, guild_id: str, aspect: Aspect):
+        """Set game aspect, replacing existing one with same name."""
+        aspect.aspect_type = AspectType.GAME
+        game_aspect = GameAspect(
+            guild_id=guild_id,
+            aspect_name=aspect.name,
+            aspect=aspect.to_dict()
+        )
+        self.save(game_aspect, conflict_columns=['guild_id', 'aspect_name'])
+        
+    def clear_game_aspects(self, guild_id: str):
+        """Clear all game aspects for a guild."""
+        self.delete(f"guild_id = %s", (str(guild_id),))
+
+class FateZoneAspectsRepository(BaseRepository[ZoneAspect]):
+    def __init__(self):
+        super().__init__('zone_aspects')
+    
+    def to_dict(self, entity: ZoneAspect) -> dict:
+        return {
+            'guild_id': entity.guild_id,
+            'scene_id': entity.scene_id,
+            'zone_name': entity.zone_name,
+            'aspect_name': entity.aspect_name,
+            'aspect': json.dumps(entity.aspect) if isinstance(entity.aspect, dict) else entity.aspect
+        }
+    
+    def from_dict(self, data: dict) -> Optional[ZoneAspect]:
+        if not data:
+            return None
+        
+        aspect_data = data.get('aspect', None)
+
+        if isinstance(aspect_data, str):
+            aspect_data = json.loads(aspect_data)
+        
+        return ZoneAspect(
+            guild_id=data.get('guild_id'),
+            scene_id=data.get('scene_id'),
+            zone_name=data.get('zone_name'),
+            aspect_name=data.get('aspect_name'),
+            aspect=aspect_data
+        )
+
+    def get_zone_aspects(self, guild_id: str, scene_id: str, zone_name: str) -> List[Aspect]:
+        """Get aspects for a specific zone."""
+        query = f"SELECT aspect FROM fate_zone_aspects WHERE guild_id = %s AND scene_id = %s AND zone_name = %s"
+        params = (str(guild_id), str(scene_id), str(zone_name))
+
+        rows = self.execute_query(query, params)
+        return [Aspect.from_dict(row.aspect) for row in rows if row]
+    
+    def set_zone_aspect(self, guild_id: str, scene_id: str, zone_name: str, aspect: Aspect):
+        """Set aspect for a zone"""
+        aspect.aspect_type = AspectType.ZONE
+        zone_aspect = ZoneAspect(
+            guild_id=guild_id,
+            scene_id=scene_id,
+            zone_name=zone_name,
+            aspect_name=aspect.name,
+            aspect=aspect.to_dict()  # Keep as dict for ZoneAspect model
+        )
+        self.save(zone_aspect, conflict_columns=['guild_id', 'scene_id', 'zone_name', 'aspect_name'])
+
+    def get_all_zone_aspects_for_scene(self, guild_id: str, scene_id: str) -> Dict[str, List[Aspect]]:
+        """Get all zone aspects for a scene, organized by zone name."""
+        query = f"SELECT zone_name, aspect FROM fate_zone_aspects WHERE guild_id = %s AND scene_id = %s"
+        params = (str(guild_id), str(scene_id))
+
+        rows = self.execute_query(query, params)
+        zone_aspects: Dict[str, List[Aspect]] = {}
+
+        for row in rows:
+            if row and hasattr(row, 'zone_name') and hasattr(row, 'aspect'):
+                zone_name = row.zone_name
+                aspect_data = row.aspect
+                if isinstance(aspect_data, str):
+                    aspect_data = json.loads(aspect_data)
+                aspect = Aspect.from_dict(aspect_data)
+
+                if zone_name not in zone_aspects:
+                    zone_aspects[zone_name] = []
+                zone_aspects[zone_name].append(aspect)
+
+        return zone_aspects
+    
+    def clear_zone_aspects(self, guild_id: str, scene_id: str):
+        """Clear all zone aspects for a specific scene."""
+        query = f"DELETE FROM fate_zone_aspects WHERE guild_id = %s AND scene_id = %s"
+        self.execute_query(query, (str(guild_id), str(scene_id)))

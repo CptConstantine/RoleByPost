@@ -10,8 +10,8 @@ from .reminder_repository import (
 )
 from .recap_repository import AutoRecapRepository, ApiKeyRepository
 from .system_specific_repositories import (
-    FateSceneAspectsRepository, FateSceneZonesRepository, 
-    MGT2ESceneEnvironmentRepository, DefaultSkillsRepository
+    FateSceneAspectsRepository, FateSceneZonesRepository, FateGameAspectsRepository, 
+    MGT2ESceneEnvironmentRepository, DefaultSkillsRepository, FateZoneAspectsRepository
 )
 
 class RepositoryFactory:
@@ -49,6 +49,8 @@ class RepositoryFactory:
         self._fate_zones_repo = None
         self._mgt2e_environment_repo = None
         self._default_skills_repo = None
+        self._fate_game_aspects_repo = None
+        self._fate_zone_aspects_repo = None
 
         # Channel permission repositories
         self._channel_permissions_repo = None
@@ -180,12 +182,25 @@ class RepositoryFactory:
             self._default_skills_repo = DefaultSkillsRepository()
         return self._default_skills_repo
     
+    @property
+    def fate_game_aspects(self) -> FateGameAspectsRepository:
+        if self._fate_game_aspects_repo is None:
+            self._fate_game_aspects_repo = FateGameAspectsRepository()
+        return self._fate_game_aspects_repo
+    
+    @property
+    def fate_zone_aspects(self) -> FateZoneAspectsRepository:
+        if self._fate_zone_aspects_repo is None:
+            self._fate_zone_aspects_repo = FateZoneAspectsRepository()
+        return self._fate_zone_aspects_repo
+    
     # Channel permission repositories
     @property
     def channel_permissions(self) -> ChannelPermissionRepository:
         if self._channel_permissions_repo is None:
             self._channel_permissions_repo = ChannelPermissionRepository()
         return self._channel_permissions_repo
+    
 
 # Global repository factory instance
 repositories = RepositoryFactory()

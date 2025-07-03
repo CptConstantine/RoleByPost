@@ -178,6 +178,30 @@ CREATE TABLE IF NOT EXISTS channel_permissions (
     PRIMARY KEY (guild_id, channel_id)
 );
 
+-- Game aspects (global and scene-specific)
+CREATE TABLE IF NOT EXISTS game_aspects (
+    id SERIAL PRIMARY KEY,
+    guild_id TEXT NOT NULL,
+    aspect_name TEXT NOT NULL,
+    aspect TEXT NOT NULL,  -- JSON serialized Aspect object
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(guild_id, aspect_name)
+);
+
+-- Zone aspects
+CREATE TABLE IF NOT EXISTS zone_aspects (
+    id SERIAL PRIMARY KEY,
+    guild_id TEXT NOT NULL,
+    scene_id TEXT NOT NULL,
+    zone_name TEXT NOT NULL,
+    aspect TEXT NOT NULL,  -- JSON serialized Aspect object
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    aspect_name TEXT NOT NULL,
+    UNIQUE(guild_id, scene_id, zone_name, aspect_name)
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_character_guild_name ON characters(guild_id, name);
 CREATE INDEX IF NOT EXISTS idx_character_guild_owner ON characters(guild_id, owner_id);

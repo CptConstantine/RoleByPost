@@ -95,8 +95,8 @@ class FateSheet(BaseSheet):
             if aspect_str:  # Skip empty strings (hidden aspects for non-GMs)
                 aspect_lines.append(aspect_str)
                     
-        aspect_str = "\n".join(aspect_lines) if aspect_lines else "_No aspects set_"
-        lines = [f"**{npc.name}**\n{aspect_str}"]
+        aspect_str = ", ".join(aspect_lines) if aspect_lines else "_No aspects set_"
+        lines = [f"**{npc.name}** - {aspect_str}"]
         
         # Add stress and consequences for GM view
         if is_gm:
@@ -124,7 +124,6 @@ class FateSheet(BaseSheet):
                 cons_display = ', '.join(filled_consequences)
                 lines.append(f"**Consequences:** {cons_display}")
         
-        # Rest of the method unchanged
         if is_gm and npc.notes:
             notes_display = "\n".join(npc.notes)
             lines.append(f"**Notes:** *{notes_display}*")

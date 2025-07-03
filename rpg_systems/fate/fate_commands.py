@@ -42,31 +42,61 @@ class FateCommands(commands.Cog):
             color=discord.Color.gold()
         )
         
-        # 1. Get scene aspects
+        # 1. Get game aspects
+        game_aspects = repositories.fate_game_aspects.get_game_aspects(str(interaction.guild.id)) or []
+        
+        # Format game aspect strings
+        game_aspect_lines = []
+        for aspect in game_aspects:
+            aspect_str = aspect.get_full_aspect_string(is_gm=is_gm)
+            if aspect_str:  # Skip empty strings (hidden aspects for non-GMs)
+                game_aspect_lines.append(aspect_str)
+        
+        if game_aspect_lines:
+            embed.add_field(
+                name="Game Aspects",
+                value="\n".join(f"• {line}" for line in game_aspect_lines),
+                inline=False
+            )
+        
+        # 2. Get scene aspects
         scene_aspects = repositories.fate_aspects.get_aspects(str(interaction.guild.id), str(active_scene.scene_id)) or []
         
-        # Format aspect strings
-        aspect_lines = []
+        # Format scene aspect strings
+        scene_aspect_lines = []
         for aspect in scene_aspects:
             aspect_str = aspect.get_full_aspect_string(is_gm=is_gm)
             if aspect_str:  # Skip empty strings (hidden aspects for non-GMs)
-                aspect_lines.append(aspect_str)
+                scene_aspect_lines.append(aspect_str)
         
-        if aspect_lines:
+        if scene_aspect_lines:
             embed.add_field(
                 name="Scene Aspects",
-                value="\n".join(aspect_lines),
+                value="\n".join(f"• {line}" for line in scene_aspect_lines),
                 inline=False
             )
             
-        # 2. Get zone aspects (if zones implementation supports aspects)
-        zone_aspects = []
+        # 3. Get zone aspects
         scene_zones = repositories.fate_zones.get_zones(str(interaction.guild.id), str(active_scene.scene_id)) or []
+        zone_aspects = repositories.fate_zone_aspects.get_all_zone_aspects_for_scene(str(interaction.guild.id), str(active_scene.scene_id)) or {}
         
-        # In this example, we're assuming zones don't yet have aspects
-        # This is where you'd add zone aspect handling if implemented
+        # Add zone aspects to embed
+        for zone_name in scene_zones:
+            if zone_name in zone_aspects and zone_aspects[zone_name]:
+                zone_aspect_lines = []
+                for aspect in zone_aspects[zone_name]:
+                    aspect_str = aspect.get_full_aspect_string(is_gm=is_gm)
+                    if aspect_str:  # Skip empty strings (hidden aspects for non-GMs)
+                        zone_aspect_lines.append(aspect_str)
+                
+                if zone_aspect_lines:
+                    embed.add_field(
+                        name=f"{zone_name} Zone Aspects",
+                        value="\n".join(f"• {line}" for line in zone_aspect_lines),
+                        inline=False
+                    )
         
-        # 3. Get character aspects from NPCs in the scene
+        # 4. Get character aspects from NPCs in the scene
         npc_aspects_by_character = {}
         npc_ids = repositories.scene_npc.get_scene_npc_ids(str(interaction.guild.id), str(active_scene.scene_id))
         
@@ -84,6 +114,17 @@ class FateCommands(commands.Cog):
                     aspect_str = aspect.get_full_aspect_string(is_gm=is_gm)
                     if aspect_str:  # Skip empty strings (hidden aspects for non-GMs)
                         character_aspects.append(aspect_str)
+            
+            # Add consequence aspects for NPCs
+            if npc.consequence_tracks:
+                for track in npc.consequence_tracks:
+                    for consequence in track.consequences:
+                        if consequence.is_filled():
+                            consequence_text = f"{consequence.aspect.name}"
+                            if consequence.aspect.free_invokes > 0:
+                                consequence_text += f" [{consequence.aspect.free_invokes}]"
+                            consequence_text += f" ({consequence.name} Consequence)"
+                            character_aspects.append(consequence_text)
                     
             if character_aspects:
                 npc_aspects_by_character[npc.name] = character_aspects
@@ -97,7 +138,7 @@ class FateCommands(commands.Cog):
                     inline=False
                 )
         
-        # 4. Get player character aspects
+        # 5. Get player character aspects
         pc_aspects_by_character = {}
         
         # Get all characters for the guild that aren't NPCs
@@ -113,11 +154,17 @@ class FateCommands(commands.Cog):
                     aspect_str = aspect.get_full_aspect_string(is_gm=is_gm, is_owner=is_owner)
                     if aspect_str:  # Skip empty strings (hidden aspects for non-GMs/non-owners)
                         character_aspects.append(aspect_str)
+            
+            # Add consequence aspects for PCs
             if character.consequence_tracks:
                 for track in character.consequence_tracks:
                     for consequence in track.consequences:
                         if consequence.is_filled():
-                            character_aspects.append(f"{consequence.aspect.name} {f'[{consequence.aspect.free_invokes}]' if consequence.aspect.free_invokes > 0 else ''} ({consequence.name} Consequence)")
+                            consequence_text = f"{consequence.aspect.name}"
+                            if consequence.aspect.free_invokes > 0:
+                                consequence_text += f" [{consequence.aspect.free_invokes}]"
+                            consequence_text += f" ({consequence.name} Consequence)"
+                            character_aspects.append(consequence_text)
 
             if character_aspects:
                 pc_aspects_by_character[character.name] = character_aspects
@@ -138,9 +185,12 @@ class FateCommands(commands.Cog):
         # Add footer note for GMs
         if is_gm:
             embed.set_footer(text="As GM, you can see all aspects including hidden ones.")
+        else:
+            embed.set_footer(text="Hidden aspects are not shown. Contact the GM for more information.")
             
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
+    
 
 async def setup_fate_commands(bot):
     await bot.add_cog(FateCommands(bot))

@@ -271,7 +271,9 @@ For more detailed help, use `/character narration`.
 
 ### Secondary Priority
 
-- System specific commands (ex. starships, travel, and maintenance cost calculations for Traveller; system specific damage calculations)
+- System specific features
+  - Traveller: starships, travel, and maintenance cost calculations
+  - Fate: game aspects
 - Support for other systems
 
 ---

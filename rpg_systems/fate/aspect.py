@@ -1,31 +1,22 @@
-from typing import Dict, Any, Optional
+from dataclasses import dataclass, field
+from typing import Optional, Dict, Any
+from enum import Enum
 
+class AspectType(Enum):
+    CHARACTER = "character"
+    SCENE = "scene" 
+    GAME = "game"
+    ZONE = "zone"
+    CONSEQUENCE = "consequence"
+
+@dataclass
 class Aspect:
-    """
-    Represents a Fate aspect with standard properties and formatting methods.
-    Used for character aspects, scene aspects, and potentially zone aspects.
-    """
-    def __init__(self, 
-                 name: str = "", 
-                 description: str = "", 
-                 is_hidden: bool = False, 
-                 free_invokes: int = 0,
-                 owner_id: Optional[str] = None):
-        """
-        Initialize an Aspect object.
-        
-        Args:
-            name: The name/title of the aspect
-            description: Optional longer description or notes about the aspect
-            is_hidden: Whether this aspect is hidden from non-GM players
-            free_invokes: Number of free invocations available on this aspect
-            owner_id: Optional ID of the entity that owns this aspect (character, scene, etc.)
-        """
-        self.name = name
-        self.description = description
-        self.is_hidden = is_hidden
-        self.free_invokes = free_invokes
-        self.owner_id = owner_id
+    name: str
+    free_invokes: int = 0
+    is_hidden: bool = False
+    description: str = ""
+    aspect_type: AspectType = AspectType.CHARACTER
+    attached_to_id: Optional[str] = None
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Aspect':
@@ -49,7 +40,8 @@ class Aspect:
             description=data.get("description", ""),
             is_hidden=data.get("is_hidden", False),
             free_invokes=data.get("free_invokes", 0),
-            owner_id=data.get("owner_id")
+            attached_to_id=data.get("attached_to_id"),
+            aspect_type=AspectType(data.get("aspect_type", AspectType.CHARACTER.value))
         )
     
     def to_dict(self) -> Dict[str, Any]:
@@ -63,11 +55,12 @@ class Aspect:
             "name": self.name,
             "description": self.description,
             "is_hidden": self.is_hidden,
-            "free_invokes": self.free_invokes
+            "free_invokes": self.free_invokes,
+            "aspect_type": self.aspect_type.value
         }
         
-        if self.owner_id:
-            data["owner_id"] = self.owner_id
+        if self.attached_to_id:
+            data["attached_to_id"] = self.attached_to_id
             
         return data
         
@@ -174,3 +167,6 @@ class Aspect:
                 self.description == other.description and 
                 self.is_hidden == other.is_hidden and 
                 self.free_invokes == other.free_invokes)
+        
+    def get_aspect_type_display(self) -> str:
+        return self.aspect_type.value.title()
