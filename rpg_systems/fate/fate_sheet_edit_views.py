@@ -3,7 +3,6 @@ from discord import ui, SelectOption
 from core.shared_views import PaginatedSelectView, EditNameModal, EditNotesModal
 from rpg_systems.fate.aspect import Aspect
 from rpg_systems.fate.fate_character import FateCharacter, get_character, SYSTEM
-from rpg_systems.fate.fate_sheet import FateSheet
 from data.repositories.repository_factory import repositories
 from rpg_systems.fate.consequence_track import ConsequenceTrack, Consequence
 from rpg_systems.fate.stress_track import StressBox, StressTrack
@@ -13,7 +12,6 @@ class FateSheetEditView(ui.View):
         super().__init__(timeout=120)
         self.editor_id = editor_id
         self.char_id = char_id
-        self.add_item(RollButton(char_id, editor_id))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.editor_id:
@@ -41,7 +39,7 @@ class FateSheetEditView(ui.View):
                 self.char_id,
                 character.name if character else "",
                 SYSTEM,
-                lambda editor_id, char_id: (FateSheet().format_full_sheet(get_character(char_id)), FateSheetEditView(editor_id, char_id))
+                lambda editor_id, char_id: (get_character(char_id).format_full_sheet(), FateSheetEditView(editor_id, char_id))
             )
         )
 
@@ -70,7 +68,7 @@ class FateSheetEditView(ui.View):
                 self.char_id,
                 notes,
                 SYSTEM,
-                lambda editor_id, char_id: (FateSheet().format_full_sheet(get_character(char_id)), FateSheetEditView(editor_id, char_id))
+                lambda editor_id, char_id: (get_character(char_id).format_full_sheet(), FateSheetEditView(editor_id, char_id))
             )
         )
 
@@ -179,7 +177,7 @@ class EditAspectsView(ui.View):
             elif cid == "done":
                 await interaction.response.edit_message(
                     content="✅ Done editing aspects.", 
-                    embed=FateSheet().format_full_sheet(self.char), 
+                    embed=self.char.format_full_sheet(), 
                     view=FateSheetEditView(interaction.user.id, self.char_id)
                 )
                 return
@@ -188,7 +186,7 @@ class EditAspectsView(ui.View):
             repositories.character.upsert_character(interaction.guild.id, self.char, system=SYSTEM)
             self.load_data()
             self.render()
-            await interaction.response.edit_message(embed=FateSheet().format_full_sheet(self.char), view=self)
+            await interaction.response.edit_message(embed=self.char.format_full_sheet(), view=self)
         
         return callback
     
@@ -313,7 +311,7 @@ class EditStressTracksView(ui.View):
             elif cid == "done":
                 await interaction.response.edit_message(
                     content="✅ Done editing stress tracks.", 
-                    embed=FateSheet().format_full_sheet(self.char), 
+                    embed=self.char.format_full_sheet(), 
                     view=FateSheetEditView(interaction.user.id, self.char_id)
                 )
         
@@ -585,7 +583,7 @@ class EditConsequencesView(ui.View):
             if not all_consequences and cid not in ["add_track", "done"]:
                 await interaction.response.edit_message(
                     content="✅ Done editing consequences.", 
-                    embed=FateSheet().format_full_sheet(self.char), 
+                    embed=self.char.format_full_sheet(), 
                     view=FateSheetEditView(interaction.user.id, self.char_id)
                 )
                 return
@@ -621,7 +619,7 @@ class EditConsequencesView(ui.View):
             elif cid == "done":
                 await interaction.response.edit_message(
                     content="✅ Done editing consequences.", 
-                    embed=FateSheet().format_full_sheet(self.char), 
+                    embed=self.char.format_full_sheet(), 
                     view=FateSheetEditView(interaction.user.id, self.char_id)
                 )
                 return
@@ -874,7 +872,7 @@ class EditStuntsView(ui.View):
             elif cid == "done":
                 await interaction.response.edit_message(
                     content="✅ Done editing stunts.", 
-                    embed=FateSheet().format_full_sheet(self.char), 
+                    embed=self.char.format_full_sheet(), 
                     view=FateSheetEditView(interaction.user.id, self.char_id)
                 )
                 return
@@ -888,7 +886,7 @@ class EditStuntsView(ui.View):
         return callback
 
 class SkillManagementView(ui.View):
-    def __init__(self, character, editor_id, char_id):
+    def __init__(self, character: FateCharacter, editor_id, char_id):
         super().__init__(timeout=120)
         self.character = character
         self.editor_id = editor_id
@@ -942,14 +940,14 @@ class SkillManagementView(ui.View):
 
         skill_options = [SelectOption(label=k, value=k) for k in sorted(skills.keys())]
 
-        async def on_skill_selected(view, interaction2, skill):
+        async def on_skill_selected(view, interaction2: discord.Interaction, skill):
             # Remove the selected skill
             skills = self.character.skills
             if skill in skills:
                 del skills[skill]
                 self.character.skills = skills
                 repositories.character.upsert_character(interaction2.guild.id, self.character, system=SYSTEM)
-                embed = FateSheet().format_full_sheet(self.character)
+                embed = self.character.format_full_sheet()
                 view = FateSheetEditView(interaction2.user.id, self.char_id)
                 await interaction2.response.edit_message(
                     content=f"✅ Removed skill: **{skill}**",
@@ -979,36 +977,12 @@ class SkillManagementView(ui.View):
     @ui.button(label="Cancel", style=discord.ButtonStyle.secondary, row=1)
     async def cancel(self, interaction: discord.Interaction, button: ui.Button):
         character = get_character(self.char_id)
-        embed = FateSheet().format_full_sheet(character)
+        embed = character.format_full_sheet()
         view = FateSheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(
             content="Operation cancelled.",
             embed=embed,
             view=view
-        )
-
-class RollButton(ui.Button):
-    def __init__(self, char_id, editor_id):
-        super().__init__(label="Roll", style=discord.ButtonStyle.primary, row=0)
-        self.char_id = char_id
-        self.editor_id = editor_id
-
-    async def callback(self, interaction: discord.Interaction):
-        if interaction.user.id != self.editor_id:
-            await interaction.response.send_message("You can't roll for this character.", ephemeral=True)
-            return
-        character = get_character(self.char_id)
-        skills = character.skills if character else {}
-        skill_options = [SelectOption(label=k, value=k) for k in sorted(skills.keys())]
-
-        async def on_skill_selected(view, interaction2, skill):
-            result = FateSheet().roll(character, skill=skill)
-            await interaction2.response.send_message(result, ephemeral=True)
-
-        await interaction.response.send_message(
-            "Select a skill to roll:",
-            view=PaginatedSelectView(skill_options, on_skill_selected, interaction.user.id, prompt="Select a skill to roll:"),
-            ephemeral=True
         )
 
 class EditAspectModal(ui.Modal, title="Edit Aspect"):
@@ -1070,7 +1044,7 @@ class EditAspectModal(ui.Modal, title="Edit Aspect"):
         from rpg_systems.fate.fate_sheet_edit_views import EditAspectsView
         await interaction.response.edit_message(
             content="✅ Aspect updated.", 
-            embed=FateSheet().format_full_sheet(character), 
+            embed=character.format_full_sheet(), 
             view=EditAspectsView(interaction.guild.id, interaction.user.id, self.char_id)
         )
 
@@ -1142,7 +1116,7 @@ class AddAspectModal(ui.Modal, title="Add Aspect"):
         from rpg_systems.fate.fate_sheet_edit_views import EditAspectsView
         await interaction.response.edit_message(
             content="✅ Aspect added.", 
-            embed=FateSheet().format_full_sheet(character), 
+            embed=character.format_full_sheet(), 
             view=EditAspectsView(interaction.guild.id, interaction.user.id, self.char_id)
         )
 
@@ -1176,7 +1150,7 @@ class EditFatePointsModal(ui.Modal, title="Edit Fate Points/Refresh"):
         from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
         await interaction.response.edit_message(
             content="✅ Fate Points and Refresh updated.", 
-            embed=FateSheet().format_full_sheet(character), 
+            embed=character.format_full_sheet(), 
             view=FateSheetEditView(interaction.user.id, self.char_id)
         )
 
@@ -1213,7 +1187,7 @@ class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
         
         # Local import to avoid circular dependency
         from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
-        embed = FateSheet().format_full_sheet(character)
+        embed = character.format_full_sheet()
         view = FateSheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(content=f"✅ {self.skill} updated.", embed=embed, view=view)
 
@@ -1256,7 +1230,7 @@ class AddSkillModal(ui.Modal, title="Add New Skill"):
         
         # Local import to avoid circular dependency
         from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
-        embed = FateSheet().format_full_sheet(character)
+        embed = character.format_full_sheet()
         view = FateSheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(
             content=f"✅ Added new skill: **{skill_name}** (+{value_int if value_int >= 0 else value_int})",
@@ -1295,7 +1269,7 @@ class BulkEditSkillsModal(ui.Modal, title="Bulk Edit Skills"):
         
         # Local import to avoid circular dependency
         from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
-        embed = FateSheet().format_full_sheet(character)
+        embed = character.format_full_sheet()
         view = FateSheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(
             content="✅ Skills updated!",

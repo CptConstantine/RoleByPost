@@ -315,6 +315,140 @@ class FateCharacter(BaseCharacter):
         # Add Fate-specific validation here if needed (e.g., pyramid structure)
         return skills_dict
 
+    def format_full_sheet(self) -> discord.Embed:
+        """Format the character sheet for Fate system"""
+        embed = discord.Embed(title=f"{self.name}", color=discord.Color.purple())
+
+        # --- Aspects ---
+        aspects = self.aspects
+        if aspects:
+            aspect_lines = []
+            for aspect in aspects:
+                aspect_lines.append(aspect.get_short_aspect_string(is_owner=True))
+                
+            embed.add_field(name="Aspects", value="\n".join(aspect_lines), inline=False)
+        else:
+            embed.add_field(name="Aspects", value="None", inline=False)
+
+        # --- Skills ---
+        # Only display skills > 0
+        skills = {k: v for k, v in self.skills.items() if v > 0}
+        if skills:
+            sorted_skills = sorted(skills.items(), key=lambda x: -x[1])
+            skill_lines = [f"**{k}**: +{v}" for k, v in sorted_skills]
+            embed.add_field(name="Skills", value="\n".join(skill_lines), inline=False)
+        else:
+            embed.add_field(name="Skills", value="None", inline=False)
+
+        # --- Stress Tracks ---
+        stress_tracks = self.stress_tracks
+        if stress_tracks:
+            stress_lines = []
+            for track in stress_tracks:
+                # Format boxes with their values
+                box_display = []
+                for box in track.boxes:
+                    if box.is_filled:
+                        box_display.append(f"[☒{box.value}]")
+                    else:
+                        box_display.append(f"[☐{box.value}]")
+                
+                stress_line = f"**{track.track_name}**: {' '.join(box_display)}"
+                if track.linked_skill:
+                    stress_line += f" (linked to {track.linked_skill})"
+                stress_lines.append(stress_line)
+            
+            embed.add_field(name="Stress", value="\n".join(stress_lines), inline=False)
+        else:
+            embed.add_field(name="Stress", value="None", inline=False)
+
+        # --- Consequences ---
+        consequence_tracks = self.consequence_tracks
+        if consequence_tracks:
+            consequence_lines = []
+            for track in consequence_tracks:
+                for consequence in track.consequences:
+                    if consequence.aspect:
+                        consequence_lines.append(f"**{consequence.name}** ({consequence.severity}): {consequence.aspect.name}")
+                    else:
+                        consequence_lines.append(f"**{consequence.name}** ({consequence.severity}): _Empty_")
+            
+            embed.add_field(name="Consequences", value="\n".join(consequence_lines), inline=False)
+        else:
+            embed.add_field(name="Consequences", value="None", inline=False)
+
+        # --- Fate Points / Refresh ---
+        fp = self.fate_points
+        refresh = self.refresh
+        embed.add_field(name="Fate Points", value=f"{fp}/{refresh}", inline=True)
+
+        # --- Stunts ---
+        stunts = self.stunts
+        if stunts:
+            stunt_lines = [f"• {stunt_name}" for stunt_name in stunts.keys()]
+            embed.add_field(name="Stunts", value="\n".join(stunt_lines), inline=False)
+        else:
+            embed.add_field(name="Stunts", value="None", inline=False)
+            
+        # --- Notes ---
+        notes = self.notes
+        # If notes is a list, join them for display
+        notes_display = "\n".join(notes) if notes else "_No notes_"
+        embed.add_field(name="Notes", value=notes_display, inline=False)
+
+        return embed
+
+    def format_npc_scene_entry(self, is_gm: bool) -> str:
+        """Format NPC entry for scene display"""
+        # Get the character's aspects
+        aspect_lines = []
+        for aspect in self.aspects:
+            # Use the Aspect.get_short_aspect_string method for consistent formatting
+            aspect_str = aspect.get_short_aspect_string(is_gm=is_gm)
+            if aspect_str:  # Skip empty strings (hidden aspects for non-GMs)
+                aspect_lines.append(aspect_str)
+                
+        aspect_str = ", ".join(aspect_lines) if aspect_lines else "_No aspects set_"
+        lines = [f"**{self.name}** - {aspect_str}"]
+        
+        # Add stress and consequences for GM view
+        if is_gm:
+            # Show stress tracks if any boxes are filled
+            stress_tracks = self.stress_tracks
+            filled_tracks = []
+            for track in stress_tracks:
+                filled_boxes = [box for box in track.boxes if box.is_filled]
+                if filled_boxes:
+                    box_display = ' '.join(f"[☒{box.value}]" for box in filled_boxes)
+                    filled_tracks.append(f"**{track.track_name}**: {box_display}")
+            
+            if filled_tracks:
+                lines.append(f"**Stress:** {', '.join(filled_tracks)}")
+            
+            # Show filled consequences
+            consequence_tracks = self.consequence_tracks
+            filled_consequences = []
+            for track in consequence_tracks:
+                for consequence in track.consequences:
+                    if consequence.aspect:
+                        filled_consequences.append(f"{consequence.name}: {consequence.aspect.name}")
+            
+            if filled_consequences:
+                cons_display = ', '.join(filled_consequences)
+                lines.append(f"**Consequences:** {cons_display}")
+        
+        if is_gm and self.notes:
+            notes_display = "\n".join(self.notes)
+            lines.append(f"**Notes:** *{notes_display}*")
+        
+        # Add stunts to NPC scene entry when viewed by GM
+        if is_gm and self.stunts:
+            stunt_names = list(self.stunts.keys())
+            if stunt_names:
+                lines.append(f"**Stunts:** {', '.join(stunt_names)}")
+        
+        return "\n".join(lines)
+
 def get_character(char_id) -> FateCharacter:
     character = repositories.character.get_by_id(str(char_id))
     return character if character else None

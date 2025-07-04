@@ -14,16 +14,6 @@ def get_specific_character(system: str):
     else:
         raise ValueError(f"Unknown system: {system}")
 
-def get_specific_sheet(system: str):
-    if system == "fate":
-        return fate_sheet.FateSheet()
-    elif system == "mgt2e":
-        return mgt2e_sheet.MGT2ESheet()
-    elif system == "generic":
-        return generic_character.GenericSheet()
-    else:
-        raise ValueError(f"Unknown system: {system}")
-
 def get_specific_sheet_view(system: str, editor_id: str, char_id: str):
     if system == "fate":
         return fate_sheet_edit_views.FateSheetEditView(editor_id=editor_id, char_id=char_id)
@@ -59,7 +49,7 @@ def get_specific_initiative_view(guild_id: str, channel_id: str, initiative: Bas
         )
     else:
         raise ValueError(f"Unknown initiative type: {initiative.type}")
-    
+
 def get_specific_roll_formula(system: str, roll_parameters_dict: dict = None):
     if system == "fate":
         return fate_roll_modifiers.FateRollModifiers(roll_parameters_dict)
@@ -79,7 +69,7 @@ def get_specific_roll_formula_view(system: str, roll_formula_obj, difficulty: in
         return generic_character.GenericRollModifiersView(roll_formula_obj, difficulty)
     else:
         raise ValueError(f"Unknown system: {system}")
-    
+
 def get_specific_scene_view(system, guild_id=None, channel_id=None, scene_id=None, message_id=None):
     """Get the appropriate scene view for the given system"""
     if system == "fate":

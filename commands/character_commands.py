@@ -128,11 +128,10 @@ class CharacterCommands(commands.Cog):
         if character.is_npc and not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only the GM can view NPCs.", ephemeral=True)
             return
-        
+
         system = repositories.server.get_system(interaction.guild.id)
-        sheet_obj = factories.get_specific_sheet(system)
         sheet_view = factories.get_specific_sheet_view(system, interaction.user.id, character.id)
-        embed = sheet_obj.format_full_sheet(character)
+        embed = character.format_full_sheet()  # Call method directly on character
         await interaction.response.send_message(embed=embed, view=sheet_view, ephemeral=True)
 
     @character_group.command(name="export", description="Export your character or an NPC (if GM) as a JSON file")

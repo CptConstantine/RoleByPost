@@ -251,6 +251,18 @@ class BaseEntity(BaseRpgObj):
     def avatar_url(self, url):
         self.data["avatar_url"] = url
 
+    def format_full_sheet(self) -> discord.Embed:
+        """Return a Discord Embed representing the full entity sheet. Override in subclasses."""
+        embed = discord.Embed(
+            title=f"{self.name or 'Entity'}",
+            color=discord.Color.greyple()
+        )
+        notes = self.notes
+        if notes:
+            notes_display = "\n".join(notes) if notes else "_No notes_"
+            embed.add_field(name="Notes", value=notes_display, inline=False)
+        return embed
+
     def apply_defaults(self, entity_type: EntityType = None, guild_id: str = None):
         """Apply system-specific default fields to an entity."""
         if entity_type is None:
@@ -332,25 +344,15 @@ class BaseCharacter(BaseEntity):
     @is_npc.setter
     def is_npc(self, value: bool):
         self.data["entity_type"] = "npc" if value else "pc"
-    """
-    @staticmethod
-    def build_entity_dict(id, name, owner_id, is_npc=False, notes=None, avatar_url=None, system_specific_fields=None):
-        character = {
-            "id": str(id),
-            "name": name,
-            "owner_id": str(owner_id),
-            "entity_type": "npc" if is_npc else "pc",
-            "notes": notes or [],
-            "avatar_url": avatar_url or '',
-        }
-        
-        # Add any additional fields
-        if system_specific_fields:
-            for key, value in system_specific_fields.items():
-                character[key] = value
-            
-        return character
-    """
+
+    def format_npc_scene_entry(self, is_gm: bool) -> str:
+        """Return a string for displaying this character in a scene summary. Override in subclasses."""
+        lines = [f"**{self.name or 'NPC'}**"]
+        if is_gm and self.notes:
+            notes_display = "\n".join(self.notes)
+            lines.append(f"**Notes:** *{notes_display}*")
+        return "\n".join(lines)
+
     @abstractmethod
     async def edit_requested_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
         """

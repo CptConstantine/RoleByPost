@@ -310,6 +310,63 @@ class MGT2ECharacter(BaseCharacter):
         else:
             return 3
 
+    def format_full_sheet(self) -> discord.Embed:
+        """Format the character sheet for MGT2E system"""
+        # Use the .name property instead of get_name()
+        embed = discord.Embed(
+            title=f"{self.name or 'Traveller'}",
+            color=discord.Color.dark_teal()
+        )
+
+        # --- Attributes ---
+        attributes = self.attributes  # Use property
+        if attributes:
+            attr_lines = [
+                f"**STR**: {attributes.get('STR', 0)}   **DEX**: {attributes.get('DEX', 0)}   **END**: {attributes.get('END', 0)}",
+                f"**INT**: {attributes.get('INT', 0)}   **EDU**: {attributes.get('EDU', 0)}   **SOC**: {attributes.get('SOC', 0)}"
+            ]
+            embed.add_field(name="Attributes", value="\n".join(attr_lines), inline=False)
+        else:
+            embed.add_field(name="Attributes", value="None", inline=False)
+
+        # --- Skills ---
+        skills = self.skills  # Use property
+        trained_skills = self.get_trained_skills(skills)
+        if trained_skills:
+            sorted_skills = sorted(trained_skills.items(), key=lambda x: (x[0]))
+            skill_lines = []
+            for k, v in sorted_skills:
+                skill_lines.append(f"**{k}**: {v}")
+            chunk = ""
+            count = 1
+            for line in skill_lines:
+                if len(chunk) + len(line) + 1 > 1024:
+                    if count == 1:
+                        embed.add_field(name=f"Skills", value=chunk.strip(), inline=False)
+                    chunk = ""
+                    count += 1
+                chunk += line + "\n"
+            if chunk:
+                embed.add_field(name=f"Skills", value=chunk.strip(), inline=False)
+        else:
+            embed.add_field(name="Skills", value="None", inline=False)
+
+        # --- Notes ---
+        notes = self.notes  # Use property, which is a list
+        notes_display = "\n".join(notes) if notes else "_No notes_"
+        embed.add_field(name="Notes", value=notes_display, inline=False)
+
+        return embed
+
+    def format_npc_scene_entry(self, is_gm: bool) -> str:
+        """Format NPC entry for scene display"""
+        # Use .name and .notes properties
+        lines = [f"**{self.name or 'NPC'}**"]
+        if is_gm and self.notes:
+            notes_display = "\n".join(self.notes)
+            lines.append(f"**Notes:** *{notes_display}*")
+        return "\n".join(lines)
+
 def get_character(char_id) -> MGT2ECharacter:
     character = repositories.character.get_by_id(str(char_id))
     return character if character else None

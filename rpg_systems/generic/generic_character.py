@@ -36,6 +36,25 @@ class GenericCharacter(BaseCharacter):
             if current_value in (None, [], {}, 0, False):
                 setattr(self, key, value)
 
+    def format_full_sheet(self) -> discord.Embed:
+        """Format the character sheet for generic system"""
+        embed = discord.Embed(
+            title=f"{self.name or 'Character'}",
+            color=discord.Color.greyple()
+        )
+        notes = self.notes
+        notes_display = "\n".join(notes) if notes else "_No notes_"
+        embed.add_field(name="Notes", value=notes_display, inline=False)
+        return embed
+
+    def format_npc_scene_entry(self, is_gm: bool) -> str:
+        """Format NPC entry for scene display"""
+        lines = [f"**{self.name or 'NPC'}**"]
+        if is_gm and self.notes:
+            notes_display = "\n".join(self.notes)
+            lines.append(f"**Notes:** *{notes_display}*")
+        return "\n".join(lines)
+
     async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: "GenericRollModifiers", difficulty: int = None):
         """
         Opens a view for editing the roll parameters.
@@ -72,24 +91,6 @@ class GenericRollModifiers(RollModifiers):
     def __init__(self, roll_parameters_dict: dict = None):
         super().__init__(roll_parameters_dict)
 
-class GenericSheet(BaseSheet):
-    def format_full_sheet(self, character: BaseCharacter) -> discord.Embed:
-        embed = discord.Embed(
-            title=f"{character.name or 'Character'}",
-            color=discord.Color.greyple()
-        )
-        notes = character.notes
-        notes_display = "\n".join(notes) if notes else "_No notes_"
-        embed.add_field(name="Notes", value=notes_display, inline=False)
-        return embed
-
-    def format_npc_scene_entry(self, npc: BaseCharacter, is_gm: bool):
-        lines = [f"**{npc.name or 'NPC'}**"]
-        if is_gm and npc.notes:
-            notes_display = "\n".join(npc.notes)
-            lines.append(f"**Notes:** *{notes_display}*")
-        return "\n".join(lines)
-
 class GenericSheetEditView(ui.View):
     def __init__(self, editor_id: int, char_id: str):
         super().__init__(timeout=120)
@@ -110,7 +111,7 @@ class GenericSheetEditView(ui.View):
                 self.char_id,
                 character.name if character else "",
                 SYSTEM,
-                lambda editor_id, char_id: (GenericSheet().format_full_sheet(get_character(char_id)), GenericSheetEditView(editor_id, char_id))
+                lambda editor_id, char_id: (get_character(char_id).format_full_sheet(), GenericSheetEditView(editor_id, char_id))
             )
         )
 
@@ -123,7 +124,7 @@ class GenericSheetEditView(ui.View):
                 self.char_id,
                 notes,
                 SYSTEM,
-                lambda editor_id, char_id: (GenericSheet().format_full_sheet(get_character(char_id)), GenericSheetEditView(editor_id, char_id))
+                lambda editor_id, char_id: (get_character(char_id).format_full_sheet(), GenericSheetEditView(editor_id, char_id))
             )
         )
 
