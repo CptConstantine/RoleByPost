@@ -3,6 +3,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from typing import List, Optional
+from core import channel_restriction
 from core.models import BaseEntity, EntityType
 from data.repositories.repository_factory import repositories
 import core.factories as factories
@@ -99,6 +100,7 @@ class EntityCommands(commands.Cog):
         entity_type=entity_type_autocomplete,
         parent_entity=parent_entity_autocomplete
     )
+    @channel_restriction.no_ic_channels()
     async def entity_create(
         self, 
         interaction: discord.Interaction, 
@@ -170,6 +172,7 @@ class EntityCommands(commands.Cog):
     @entity_group.command(name="delete", description="Delete an entity")
     @app_commands.describe(entity_name="Name of the entity to delete")
     @app_commands.autocomplete(entity_name=entity_name_autocomplete)
+    @channel_restriction.no_ic_channels()
     async def entity_delete(self, interaction: discord.Interaction, entity_name: str):
         """Delete an entity with confirmation"""
         entity = repositories.entity.get_by_name(str(interaction.guild.id), entity_name)
@@ -211,6 +214,7 @@ class EntityCommands(commands.Cog):
         entity_name=entity_name_autocomplete,
         new_parent=parent_entity_autocomplete
     )
+    @channel_restriction.no_ic_channels()
     async def entity_transfer(self, interaction: discord.Interaction, entity_name: str, new_parent: str = None):
         """Transfer an entity to a new parent"""
         entity = repositories.entity.get_by_name(str(interaction.guild.id), entity_name)
@@ -258,6 +262,7 @@ class EntityCommands(commands.Cog):
         parent_entity=parent_entity_autocomplete,
         entity_type=entity_type_autocomplete
     )
+    @channel_restriction.no_ic_channels()
     async def entity_list(
         self, 
         interaction: discord.Interaction, 
@@ -319,6 +324,7 @@ class EntityCommands(commands.Cog):
     @entity_group.command(name="view", description="View entity details")
     @app_commands.describe(entity_name="Name of the entity to view")
     @app_commands.autocomplete(entity_name=entity_name_autocomplete)
+    @channel_restriction.no_ic_channels()
     async def entity_view(self, interaction: discord.Interaction, entity_name: str):
         """View detailed information about an entity"""
         entity = repositories.entity.get_by_name(str(interaction.guild.id), entity_name)
@@ -370,6 +376,7 @@ class EntityCommands(commands.Cog):
         new_name="New name for the entity"
     )
     @app_commands.autocomplete(entity_name=entity_name_autocomplete)
+    @channel_restriction.no_ic_channels()
     async def entity_rename(self, interaction: discord.Interaction, entity_name: str, new_name: str):
         """Rename an entity"""
         entity = repositories.entity.get_by_name(str(interaction.guild.id), entity_name)

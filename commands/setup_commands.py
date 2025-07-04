@@ -204,6 +204,22 @@ class SetupCommands(commands.Cog):
         await interaction.response.send_message("✅ OpenAI API key set successfully. You can now use AI features like story recaps.", ephemeral=True)
 
     @openai_group.command(
+        name="remove_api_key",
+        description="GM: Remove the OpenAI API key and disable AI features"
+    )
+    @channel_restriction.no_ic_channels()
+    async def openai_remove_key(self, interaction: discord.Interaction):
+        """Remove the OpenAI API key for this server"""
+        # Check if user has GM permissions
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+            await interaction.response.send_message("❌ Only GMs can remove the API key.", ephemeral=True)
+            return
+
+        repositories.api_key.remove_openai_key(str(interaction.guild.id))
+
+        await interaction.response.send_message("✅ OpenAI API key removed successfully. AI features are now disabled.", ephemeral=True)
+    
+    @openai_group.command(
         name="status",
         description="Check if an OpenAI API key is configured for this server"
     )

@@ -91,3 +91,7 @@ class ApiKeyRepository(BaseRepository[ApiKey]):
             openai_key=api_key
         )
         self.save(key_entity, conflict_columns=['guild_id'])
+    
+    def remove_openai_key(self, guild_id: str) -> None:
+        """Remove OpenAI API key for a guild"""
+        self.delete(F"guild_id = %s", (str(guild_id),))
