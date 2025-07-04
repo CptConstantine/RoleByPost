@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS server_settings (
 );
 
 -- Characters
-CREATE TABLE IF NOT EXISTS characters (
+/* CREATE TABLE IF NOT EXISTS characters (
     id TEXT PRIMARY KEY,
     guild_id TEXT NOT NULL,
     system TEXT,
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS characters (
     system_specific_data JSONB,
     notes JSONB DEFAULT '[]',
     avatar_url TEXT DEFAULT ''
-);
+); */
 
 -- Active characters
 CREATE TABLE IF NOT EXISTS active_characters (
@@ -217,17 +217,44 @@ CREATE TABLE IF NOT EXISTS entities (
     FOREIGN KEY (parent_entity_id) REFERENCES entities(id) ON DELETE CASCADE
 );
 
+-- Add relationships table
+CREATE TABLE IF NOT EXISTS relationships (
+    id TEXT PRIMARY KEY,
+    guild_id TEXT NOT NULL,
+    from_entity_id TEXT NOT NULL,
+    to_entity_id TEXT NOT NULL,
+    relationship_type TEXT NOT NULL,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (from_entity_id) REFERENCES entities(id) ON DELETE CASCADE,
+    FOREIGN KEY (to_entity_id) REFERENCES entities(id) ON DELETE CASCADE,
+    UNIQUE(guild_id, from_entity_id, to_entity_id, relationship_type)
+);
+
 -- Indexes for performance
-CREATE INDEX IF NOT EXISTS idx_character_guild_name ON characters(guild_id, name);
-CREATE INDEX IF NOT EXISTS idx_character_guild_owner ON characters(guild_id, owner_id);
+/* CREATE INDEX IF NOT EXISTS idx_character_guild_name ON characters(guild_id, name);
+CREATE INDEX IF NOT EXISTS idx_character_guild_owner ON characters(guild_id, owner_id); */
 CREATE INDEX IF NOT EXISTS idx_scenes_guild_active ON scenes(guild_id, is_active);
+
 CREATE INDEX IF NOT EXISTS idx_reminders_timestamp ON reminders(timestamp);
+
 CREATE INDEX IF NOT EXISTS idx_initiative_active ON initiative(guild_id, is_active);
+
 CREATE INDEX IF NOT EXISTS idx_pinned_scene_channel ON pinned_scene_messages(guild_id, channel_id);
+
 CREATE INDEX IF NOT EXISTS idx_homebrew_rules_guild ON homebrew_rules(guild_id);
+
 CREATE INDEX IF NOT EXISTS idx_channel_permissions_lookup ON channel_permissions (guild_id, channel_id);
+
 CREATE INDEX IF NOT EXISTS idx_entities_guild_type ON entities(guild_id, entity_type);
 CREATE INDEX IF NOT EXISTS idx_entities_guild_system ON entities(guild_id, system);
 CREATE INDEX IF NOT EXISTS idx_entities_owner ON entities(owner_id);
 CREATE INDEX IF NOT EXISTS idx_entities_parent ON entities(parent_entity_id);
 CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(guild_id, name);
+
+CREATE INDEX IF NOT EXISTS idx_relationships_guild ON relationships(guild_id);
+CREATE INDEX IF NOT EXISTS idx_relationships_from ON relationships(from_entity_id);
+CREATE INDEX IF NOT EXISTS idx_relationships_to ON relationships(to_entity_id);
+CREATE INDEX IF NOT EXISTS idx_relationships_type ON relationships(relationship_type);
+CREATE INDEX IF NOT EXISTS idx_relationships_guild_from ON relationships(guild_id, from_entity_id);
+CREATE INDEX IF NOT EXISTS idx_relationships_guild_to ON relationships(guild_id, to_entity_id);

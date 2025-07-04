@@ -199,3 +199,19 @@ class Entity:
     system_specific_data: Dict[str, Any]
     notes: List[str]
     avatar_url: str
+
+@dataclass
+class Relationship:
+    id: str
+    guild_id: str
+    from_entity_id: str
+    to_entity_id: str
+    relationship_type: str
+    metadata: Dict[str, Any] = None
+    created_at: Optional[datetime] = None
+    
+    def __post_init__(self):
+        if self.metadata is None:
+            self.metadata = {}
+        if self.created_at is None:
+            self.created_at = datetime.now()

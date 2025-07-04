@@ -8,7 +8,7 @@ from data.repositories.repository_factory import repositories
 import core.factories as factories
 
 async def npc_name_autocomplete(interaction: discord.Interaction, current: str):
-    all_chars = repositories.character.get_all_characters(str(interaction.guild.id))
+    all_chars = repositories.character.get_all_by_guild(str(interaction.guild.id))
     active_scene = repositories.scene.get_active_scene(str(interaction.guild.id))
     
     if not active_scene:

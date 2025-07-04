@@ -4,6 +4,7 @@ from enum import Enum
 import json
 from typing import Any, ClassVar, Dict, List, Optional
 import discord
+from data.models import Relationship
 
 class NotesMixin:
     def add_note(self, note: str):
@@ -49,17 +50,6 @@ class BaseRpgObj(ABC, NotesMixin):
     @notes.setter
     def notes(self, value: list):
         self.data["notes"] = value
-
-class BaseSheet(ABC):
-    @abstractmethod
-    def format_full_sheet(self, character: Dict[str, Any]) -> discord.Embed:
-        """Return a Discord Embed representing the full character sheet."""
-        pass
-
-    @abstractmethod
-    def format_npc_scene_entry(self, npc: Dict[str, Any], is_gm: bool) -> str:
-        """Return a string for displaying an NPC in a scene summary."""
-        pass
 
 @dataclass
 class InitiativeParticipant:
@@ -193,6 +183,19 @@ class EntityType(Enum):
     
     def __str__(self):
         return self.value
+    
+class RelationshipType(Enum):
+    """Types of relationships between entities"""
+    OWNS = "owns"           # General ownership (replaces parent_entity_id)
+    CONTROLS = "controls"   # Can speak as/control in combat
+    COMPANION = "companion" # Equal partner relationship
+    MINION = "minion"      # Subordinate but not owned
+    HIRED = "hired"        # Temporary employment
+    ALLIED = "allied"      # Friendly relationship
+    ENEMY = "enemy"        # Hostile relationship
+    
+    def __str__(self):
+        return self.value
 
 @dataclass
 class EntityDefaults:
@@ -268,10 +271,10 @@ class BaseEntity(BaseRpgObj):
         if entity_type is None:
             entity_type = self.entity_type
 
-        if self.ENTITY_DEFAULTS:
+        """ if self.ENTITY_DEFAULTS:
             defaults = self.ENTITY_DEFAULTS.get_defaults(entity_type)
             for key, value in defaults.items():
-                self._apply_default_field(key, value, guild_id)
+                self._apply_default_field(key, value, guild_id) """
     
     def _apply_default_field(self, key: str, value: Any, guild_id: str = None):
         """Apply a single default field. Override in subclasses for custom logic."""
@@ -305,6 +308,72 @@ class BaseEntity(BaseRpgObj):
         if system_specific_fields:
             for key, value in system_specific_fields.items():
                 entity[key] = value
+        
+        return entity
+    
+    def get_children(self, relationship_type: str = None) -> List['BaseEntity']:
+        """Get entities this entity has relationships to"""
+        from data.repositories.repository_factory import repositories
+        if not hasattr(self, '_guild_id'):
+            return []
+        return repositories.relationship.get_children(self._guild_id, self.id, relationship_type)
+    
+    def get_parents(self, relationship_type: str = None) -> List['BaseEntity']:
+        """Get entities that have relationships to this entity"""
+        from data.repositories.repository_factory import repositories
+        if not hasattr(self, '_guild_id'):
+            return []
+        return repositories.relationship.get_parents(self._guild_id, self.id, relationship_type)
+    
+    def get_owner(self) -> Optional['BaseEntity']:
+        """Get the entity that owns this entity (if any)"""
+        owners = self.get_parents(RelationshipType.OWNS.value)
+        return owners[0] if owners else None
+    
+    def get_controlled_entities(self) -> List['BaseEntity']:
+        """Get entities that this entity controls"""
+        return self.get_children(RelationshipType.CONTROLS.value)
+    
+    def can_be_controlled_by(self, user_id: str) -> bool:
+        """Check if a user can control this entity"""
+        # User can control their own entities
+        if self.owner_id == str(user_id):
+            return True
+        
+        # Check if user owns any entities that control this entity
+        controlling_entities = self.get_parents(RelationshipType.CONTROLS.value)
+        for entity in controlling_entities:
+            if entity.owner_id == str(user_id):
+                return True
+        
+        return False
+
+    def add_relationship(self, target_entity: 'BaseEntity', relationship_type: str, metadata: Dict[str, Any] = None) -> 'Relationship':
+        """Add a relationship to another entity"""
+        from data.repositories.repository_factory import repositories
+        if not hasattr(self, '_guild_id'):
+            raise ValueError("Entity must have guild_id to create relationships")
+        
+        return repositories.relationship.create_relationship(
+            self._guild_id, 
+            self.id, 
+            target_entity.id, 
+            relationship_type, 
+            metadata
+        )
+
+    def remove_relationship(self, target_entity: 'BaseEntity', relationship_type: str = None) -> bool:
+        """Remove a relationship to another entity"""
+        from data.repositories.repository_factory import repositories
+        if not hasattr(self, '_guild_id'):
+            return False
+        
+        return repositories.relationship.delete_relationships_by_entities(
+            self._guild_id, 
+            self.id, 
+            target_entity.id, 
+            relationship_type
+        )
                 
         return entity
     

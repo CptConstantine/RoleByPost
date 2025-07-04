@@ -206,7 +206,7 @@ def build_character(id, system, name, owner_id, is_npc, system_specific_data, no
     return CharacterClass.from_dict(character_dict)
 
 
-def get_all_characters(guild_id, system=None):
+def get_all_by_guild(guild_id, system=None):
     """
     Load all characters for a guild (optionally filtered by system).
     Returns a list of system-specific Character class instances.

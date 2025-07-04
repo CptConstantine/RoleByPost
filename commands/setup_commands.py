@@ -13,7 +13,7 @@ from data.repositories.repository_factory import repositories
 
 async def skill_autocomplete(interaction: discord.Interaction, current: str):
     try:
-        all_chars = repositories.character.get_all_characters(str(interaction.guild.id))
+        all_chars = repositories.character.get_all_by_guild(str(interaction.guild.id))
         character = next((c for c in all_chars if not c.is_npc and str(c.owner_id) == str(interaction.user.id)), None)
         if not character:
             return []
@@ -25,7 +25,7 @@ async def skill_autocomplete(interaction: discord.Interaction, current: str):
         return []
 
 async def attribute_autocomplete(interaction: discord.Interaction, current: str):
-    all_chars = repositories.character.get_all_characters(str(interaction.guild.id))
+    all_chars = repositories.character.get_all_by_guild(str(interaction.guild.id))
     character = next((c for c in all_chars if not c.is_npc and str(c.owner_id) == str(interaction.user.id)), None)
     if not character:
         return []
@@ -414,7 +414,7 @@ class SetupCommands(commands.Cog):
         default_initiative = repositories.server_initiative_defaults.get_default_type(guild_id)
         
         # Get character counts
-        all_characters = repositories.character.get_all_characters(guild_id)
+        all_characters = repositories.character.get_all_by_guild(guild_id)
         pcs = [c for c in all_characters if not c.is_npc]
         npcs = [c for c in all_characters if c.is_npc]
         

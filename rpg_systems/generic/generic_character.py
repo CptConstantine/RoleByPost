@@ -1,7 +1,7 @@
 from typing import Any, Dict
 import discord
 from discord import ui
-from core.models import BaseCharacter, BaseSheet, RollModifiers, EntityDefaults, EntityType
+from core.models import BaseCharacter, RollModifiers, EntityDefaults, EntityType
 from core.shared_views import EditNameModal, EditNotesModal, FinalizeRollButton, RollModifiersView
 from core.utils import get_character, roll_formula
 
@@ -19,6 +19,14 @@ class GenericCharacter(BaseCharacter):
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "GenericCharacter":
         return cls(data)
+    
+    def apply_defaults(self, entity_type = None, guild_id = None):
+        super().apply_defaults(entity_type, guild_id)
+
+        if self.ENTITY_DEFAULTS:
+            defaults = self.ENTITY_DEFAULTS.get_defaults(entity_type)
+            for key, value in defaults.items():
+                self._apply_default_field(key, value, guild_id) 
 
     def format_full_sheet(self) -> discord.Embed:
         """Format the character sheet for generic system"""

@@ -7,8 +7,8 @@ from data.repositories.repository_factory import repositories
 import core.factories as factories
 import json
 
-async def pc_name_autocomplete(interaction: discord.Interaction, current: str):
-    all_chars = repositories.character.get_all_characters(interaction.guild.id)
+async def pc_switch_name_autocomplete(interaction: discord.Interaction, current: str):
+    all_chars = repositories.character.get_all_by_guild(interaction.guild.id)
     pcs = [
         c for c in all_chars
         if not c.is_npc and str(c.owner_id) == str(interaction.user.id)
@@ -17,14 +17,14 @@ async def pc_name_autocomplete(interaction: discord.Interaction, current: str):
     return [app_commands.Choice(name=name, value=name) for name in options[:25]]
 
 async def pc_name_gm_autocomplete(interaction: discord.Interaction, current: str):
-    all_chars = repositories.character.get_all_characters(interaction.guild.id)
+    all_chars = repositories.character.get_all_by_guild(interaction.guild.id)
     pcs = [c for c in all_chars if not c.is_npc]
     options = [c.name for c in pcs if current.lower() in c.name.lower()]
     return [app_commands.Choice(name=name, value=name) for name in options[:25]]
 
 async def character_or_npc_autocomplete(interaction: discord.Interaction, current: str):
     """Autocomplete for commands that can target both PCs and NPCs"""
-    all_chars = repositories.character.get_all_characters(interaction.guild.id)
+    all_chars = repositories.character.get_all_by_guild(interaction.guild.id)
     
     # Check if user is GM
     is_gm = await repositories.server.has_gm_permission(interaction.guild.id, interaction.user)
@@ -246,7 +246,7 @@ class CharacterCommands(commands.Cog):
 
     @character_group.command(name="switch", description="Set your active character (PC) for this server")
     @app_commands.describe(char_name="The name of your character to set as active")
-    @app_commands.autocomplete(char_name=pc_name_autocomplete)
+    @app_commands.autocomplete(char_name=pc_switch_name_autocomplete)
     async def switch(self, interaction: discord.Interaction, char_name: str):
         user_chars = repositories.character.get_user_characters(interaction.guild.id, interaction.user.id)
         character = next(
