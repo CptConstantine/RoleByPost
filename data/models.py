@@ -15,7 +15,8 @@ class Character:
     guild_id: str
     name: str
     owner_id: str
-    entity_type: str  # "pc" or "npc"
+    entity_type: str
+    parent_entity_id: Optional[str] = None
     system: Optional[str] = None
     system_specific_data: Optional[Dict[str, Any]] = None
     notes: List[str] = None
@@ -26,6 +27,8 @@ class Character:
             self.notes = []
         if self.system_specific_data is None:
             self.system_specific_data = {}
+        if self.parent_entity_id is None:
+            self.parent_entity_id = ""
     
     @property
     def is_npc(self) -> bool:

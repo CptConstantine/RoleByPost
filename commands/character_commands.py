@@ -2,7 +2,7 @@ import uuid
 import discord
 from discord import app_commands
 from discord.ext import commands
-from core.models import BaseCharacter
+from core.models import BaseCharacter, EntityType
 from data.repositories.repository_factory import repositories
 import core.factories as factories
 import json
@@ -72,7 +72,7 @@ class CharacterCommands(commands.Cog):
         )
         
         character = CharacterClass(character_dict)
-        character.apply_defaults(is_npc=False, guild_id=interaction.guild.id)
+        character.apply_defaults(EntityType.PC, guild_id=interaction.guild.id)
         repositories.character.upsert_character(interaction.guild.id, character, system=system)
         
         # Set as active if no active character exists
@@ -106,7 +106,7 @@ class CharacterCommands(commands.Cog):
         )
         
         character = CharacterClass(character_dict)
-        character.apply_defaults(is_npc=True, guild_id=interaction.guild.id)
+        character.apply_defaults(EntityType.NPC, guild_id=interaction.guild.id)
         repositories.character.upsert_character(interaction.guild.id, character, system=system)
         await interaction.followup.send(f"🤖 Created NPC: **{npc_name}**", ephemeral=True)
 
@@ -192,6 +192,7 @@ class CharacterCommands(commands.Cog):
         is_npc = data.get("is_npc", False)
         notes = data.get("notes", [])
         avatar_url = data.get("avatar_url")
+        parent_entity_id = data.get("parent_entity_id")  # Support importing with parent
         
         # Use the helper method
         character_dict = BaseCharacter.build_entity_dict(
@@ -199,18 +200,19 @@ class CharacterCommands(commands.Cog):
             name=name,
             owner_id=interaction.user.id,  # Always set owner to current user
             is_npc=is_npc,
+            parent_entity_id=parent_entity_id,
             notes=notes,
             avatar_url=avatar_url
         )
         
         # Copy over any system-specific fields
-        system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC if is_npc else CharacterClass.SYSTEM_SPECIFIC_CHARACTER
+        system_fields = CharacterClass.ENTITY_DEFAULTS.get_defaults(EntityType.NPC if is_npc else EntityType.PC)
         for key in system_fields:
             if key in data:
                 character_dict[key] = data[key]
     
         character = CharacterClass(character_dict)
-        character.apply_defaults(is_npc=is_npc, guild_id=interaction.guild.id)
+        character.apply_defaults(entity_type=EntityType.NPC if is_npc else EntityType.PC, guild_id=interaction.guild.id)
         
         if character.is_npc and not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.followup.send("❌ Only GMs can import NPCs.", ephemeral=True)

@@ -296,7 +296,7 @@ class BaseEntity(BaseRpgObj):
             "name": name,
             "owner_id": str(owner_id),
             "entity_type": entity_type.value,
-            "parent_entity_id": parent_entity_id or '',  # Keep as empty string for internal consistency
+            "parent_entity_id": parent_entity_id or '',
             "notes": notes or [],
             "avatar_url": avatar_url or '',
         }
@@ -344,6 +344,32 @@ class BaseCharacter(BaseEntity):
     @is_npc.setter
     def is_npc(self, value: bool):
         self.data["entity_type"] = "npc" if value else "pc"
+
+    @staticmethod
+    def build_entity_dict(
+        id: str, 
+        name: str, 
+        owner_id: str, 
+        is_npc: bool,
+        parent_entity_id: str = None,
+        notes: List[str] = None, 
+        avatar_url: str = None, 
+        system_specific_fields: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
+        """Helper method to create a standardized character dictionary."""
+        # Convert is_npc to EntityType
+        entity_type = EntityType.NPC if is_npc else EntityType.PC
+        
+        return BaseEntity.build_entity_dict(
+            id=id,
+            name=name,
+            owner_id=owner_id,
+            entity_type=entity_type,
+            parent_entity_id=parent_entity_id,
+            notes=notes,
+            avatar_url=avatar_url,
+            system_specific_fields=system_specific_fields
+        )
 
     def format_npc_scene_entry(self, is_gm: bool) -> str:
         """Return a string for displaying this character in a scene summary. Override in subclasses."""

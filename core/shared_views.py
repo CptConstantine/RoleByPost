@@ -148,52 +148,49 @@ class SceneNotesEditView(discord.ui.View):
             self.add_item(SceneNotesButton(guild_id))
 
 class EditNameModal(ui.Modal, title="Edit Character Name"):
-    def __init__(self, char_id: str, current_name: str, system: str, make_view_embed):
+    def __init__(self, char_id: str, system: str):
         super().__init__()
-        self.char_id = char_id
+        self.character = get_character(char_id)
         self.system = system
-        self.make_view_embed = make_view_embed
         self.name_input = ui.TextInput(
             label="New Name",
-            default=current_name,
+            default=self.character.name if self.character.name else "",
             max_length=100
         )
         self.add_item(self.name_input)
 
     async def on_submit(self, interaction: Interaction):
-        character = get_character(self.char_id)
-        if not character:
+        if not self.character:
             await interaction.response.send_message("❌ Character not found.", ephemeral=True)
             return
         new_name = self.name_input.value.strip()
         if not new_name:
             await interaction.response.send_message("❌ Name cannot be empty.", ephemeral=True)
             return
-        character.name = new_name
-        repositories.character.upsert_character(interaction.guild.id, character, self.system)
-        embed, view = self.make_view_embed(interaction.user.id, self.char_id)
+        self.character.name = new_name
+        repositories.character.upsert_character(interaction.guild.id, self.character, self.system)
+        embed = self.character.format_full_sheet()
+        view = factories.get_specific_sheet_view(self.system, interaction.user.id, self.character.id)
         await interaction.response.edit_message(content="✅ Name updated.", embed=embed, view=view)
 
 class EditNotesModal(ui.Modal, title="Edit Notes"):
-    def __init__(self, char_id: str, notes: str, system: str, make_view_embed):
+    def __init__(self, char_id: str, system: str):
         super().__init__()
-        self.char_id = char_id
+        self.character = get_character(char_id)
         self.system = system
-        self.make_view_embed = make_view_embed
         self.notes_field = ui.TextInput(
             label="Notes",
             style=TextStyle.paragraph,
             required=False,
-            default=notes,
+            default="\n".join(self.character.notes) if self.character.notes else "",
             max_length=2000
         )
         self.add_item(self.notes_field)
 
     async def on_submit(self, interaction: Interaction):
-        character = get_character(self.char_id)
-        character.notes = [line for line in self.notes_field.value.splitlines() if line.strip()]
-        repositories.character.upsert_character(interaction.guild.id, character, self.system)
-        embed, view = self.make_view_embed(interaction.user.id, self.char_id)
+        self.character.notes = [line for line in self.notes_field.value.splitlines() if line.strip()]
+        embed = self.character.format_full_sheet()
+        view = factories.get_specific_sheet_view(self.system, interaction.user.id, self.character.id)
         await interaction.response.edit_message(content="✅ Notes updated.", embed=embed, view=view)
 
 class RequestRollView(ui.View):

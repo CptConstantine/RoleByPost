@@ -200,8 +200,6 @@ class FateCharacter(BaseCharacter):
         Apply system-specific default fields to a character dict.
         This method uses the @property accessors for all fields.
         """
-        super().apply_defaults(entity_type=entity_type, guild_id=guild_id)
-
         # Get the appropriate defaults based on entity type
         system_defaults = self.ENTITY_DEFAULTS.get_defaults(entity_type)
         
@@ -325,10 +323,10 @@ class FateCharacter(BaseCharacter):
             aspect_lines = []
             for aspect in aspects:
                 aspect_lines.append(aspect.get_short_aspect_string(is_owner=True))
-                
-            embed.add_field(name="Aspects", value="\n".join(aspect_lines), inline=False)
+
+            embed.add_field(name="__Aspects__", value="\n".join(aspect_lines), inline=False)
         else:
-            embed.add_field(name="Aspects", value="None", inline=False)
+            embed.add_field(name="__Aspects__", value="None", inline=False)
 
         # --- Skills ---
         # Only display skills > 0
@@ -336,9 +334,9 @@ class FateCharacter(BaseCharacter):
         if skills:
             sorted_skills = sorted(skills.items(), key=lambda x: -x[1])
             skill_lines = [f"**{k}**: +{v}" for k, v in sorted_skills]
-            embed.add_field(name="Skills", value="\n".join(skill_lines), inline=False)
+            embed.add_field(name="__Skills__", value="\n".join(skill_lines), inline=False)
         else:
-            embed.add_field(name="Skills", value="None", inline=False)
+            embed.add_field(name="__Skills__", value="None", inline=False)
 
         # --- Stress Tracks ---
         stress_tracks = self.stress_tracks
@@ -354,47 +352,47 @@ class FateCharacter(BaseCharacter):
                         box_display.append(f"[☐{box.value}]")
                 
                 stress_line = f"**{track.track_name}**: {' '.join(box_display)}"
-                if track.linked_skill:
-                    stress_line += f" (linked to {track.linked_skill})"
                 stress_lines.append(stress_line)
-            
-            embed.add_field(name="Stress", value="\n".join(stress_lines), inline=False)
+
+            embed.add_field(name="__Stress__", value="\n".join(stress_lines), inline=False)
         else:
-            embed.add_field(name="Stress", value="None", inline=False)
+            embed.add_field(name="__Stress__", value="None", inline=False)
 
         # --- Consequences ---
         consequence_tracks = self.consequence_tracks
         if consequence_tracks:
             consequence_lines = []
             for track in consequence_tracks:
+                if track.name:
+                    consequence_lines.append(f"**{track.name}**:")
                 for consequence in track.consequences:
                     if consequence.aspect:
-                        consequence_lines.append(f"**{consequence.name}** ({consequence.severity}): {consequence.aspect.name}")
+                        consequence_lines.append(f"{consequence.name} ({consequence.severity}): {consequence.aspect.name}")
                     else:
-                        consequence_lines.append(f"**{consequence.name}** ({consequence.severity}): _Empty_")
+                        consequence_lines.append(f"{consequence.name} ({consequence.severity}):")
             
-            embed.add_field(name="Consequences", value="\n".join(consequence_lines), inline=False)
+            embed.add_field(name="__Consequences__", value="\n".join(consequence_lines), inline=False)
         else:
-            embed.add_field(name="Consequences", value="None", inline=False)
+            embed.add_field(name="__Consequences__", value="None", inline=False)
 
         # --- Fate Points / Refresh ---
         fp = self.fate_points
         refresh = self.refresh
-        embed.add_field(name="Fate Points", value=f"{fp}/{refresh}", inline=True)
+        embed.add_field(name="__Fate Points__", value=f"{fp}/{refresh}", inline=True)
 
         # --- Stunts ---
         stunts = self.stunts
         if stunts:
             stunt_lines = [f"• {stunt_name}" for stunt_name in stunts.keys()]
-            embed.add_field(name="Stunts", value="\n".join(stunt_lines), inline=False)
+            embed.add_field(name="__Stunts__", value="\n".join(stunt_lines), inline=False)
         else:
-            embed.add_field(name="Stunts", value="None", inline=False)
-            
+            embed.add_field(name="__Stunts__", value="None", inline=False)
+
         # --- Notes ---
         notes = self.notes
         # If notes is a list, join them for display
         notes_display = "\n".join(notes) if notes else "_No notes_"
-        embed.add_field(name="Notes", value=notes_display, inline=False)
+        embed.add_field(name="__Notes__", value=notes_display, inline=False)
 
         return embed
 

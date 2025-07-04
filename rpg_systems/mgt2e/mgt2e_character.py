@@ -149,8 +149,6 @@ class MGT2ECharacter(BaseCharacter):
         Apply system-specific default fields to a character.
         This method uses the @property accessors for all fields.
         """
-        super().apply_defaults(entity_type=entity_type, guild_id=guild_id)
-        
         # Get the appropriate defaults based on entity type
         system_defaults = self.ENTITY_DEFAULTS.get_defaults(entity_type)
         

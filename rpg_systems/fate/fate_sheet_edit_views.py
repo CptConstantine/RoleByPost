@@ -33,28 +33,11 @@ class FateSheetEditView(ui.View):
 
     @ui.button(label="Edit Name", style=discord.ButtonStyle.secondary, row=2)
     async def edit_name(self, interaction: discord.Interaction, button: ui.Button):
-        character = get_character(self.char_id)
-        await interaction.response.send_modal(
-            EditNameModal(
-                self.char_id,
-                character.name if character else "",
-                SYSTEM,
-                lambda editor_id, char_id: (get_character(char_id).format_full_sheet(), FateSheetEditView(editor_id, char_id))
-            )
-        )
+        await interaction.response.send_modal(EditNameModal(self.char_id, SYSTEM))
 
     @ui.button(label="Edit Notes", style=discord.ButtonStyle.secondary, row=2)
     async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
-        character = get_character(self.char_id)
-        notes = "\n".join(character.notes) if character and character.notes else ""
-        await interaction.response.send_modal(
-            EditNotesModal(
-                self.char_id,
-                notes,
-                SYSTEM,
-                lambda editor_id, char_id: (get_character(char_id).format_full_sheet(), FateSheetEditView(editor_id, char_id))
-            )
-        )
+        await interaction.response.send_modal(EditNotesModal(self.char_id, SYSTEM))
 
     @ui.button(label="Edit Aspects", style=discord.ButtonStyle.secondary, row=2)
     async def edit_aspects(self, interaction: discord.Interaction, button: ui.Button):
@@ -410,8 +393,6 @@ class AddStressBoxModal(ui.Modal, title="Add Stress Box"):
         
         # Add the new stress box to the track
         track = stress_tracks[self.track_index]
-        from rpg_systems.fate.stress_track import StressBox
-        new_box = StressBox(value=value, is_filled=False)
         track.add_box(value, is_filled=False)
         
         # Save changes
@@ -788,8 +769,8 @@ class EditStuntsView(ui.View):
         self.page = 0
 
         self.char = None
-        self.stunts = {}  # Dictionary of {name: description}
-        self.stunt_names = []  # List of stunt names for pagination
+        self.stunts = {}
+        self.stunt_names = []
         self.max_page = 0
         self.load_data()
         self.render()
@@ -1119,8 +1100,6 @@ class AddAspectModal(ui.Modal, title="Add Aspect"):
             embed=character.format_full_sheet(), 
             view=EditAspectsView(interaction.guild.id, interaction.user.id, self.char_id)
         )
-
-
 
 class EditFatePointsModal(ui.Modal, title="Edit Fate Points/Refresh"):
     fate_points = ui.TextInput(label="Fate Points", required=True)

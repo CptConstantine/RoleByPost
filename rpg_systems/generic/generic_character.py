@@ -20,22 +20,6 @@ class GenericCharacter(BaseCharacter):
     def from_dict(cls, data: Dict[str, Any]) -> "GenericCharacter":
         return cls(data)
 
-    def apply_defaults(self, entity_type: EntityType, guild_id=None):
-        """
-        Apply system-specific default fields to a character.
-        Generic system has no specific fields beyond base character.
-        """
-        super().apply_defaults(entity_type=entity_type, guild_id=guild_id)
-
-        # Get the appropriate defaults based on entity type
-        system_defaults = self.ENTITY_DEFAULTS.get_defaults(entity_type)
-        
-        # Apply any system-specific defaults (none for generic system)
-        for key, value in system_defaults.items():
-            current_value = getattr(self, key, None)
-            if current_value in (None, [], {}, 0, False):
-                setattr(self, key, value)
-
     def format_full_sheet(self) -> discord.Embed:
         """Format the character sheet for generic system"""
         embed = discord.Embed(
@@ -105,26 +89,19 @@ class GenericSheetEditView(ui.View):
 
     @ui.button(label="Edit Name", style=discord.ButtonStyle.secondary, row=0)
     async def edit_name(self, interaction: discord.Interaction, button: ui.Button):
-        character = get_character(self.char_id)
         await interaction.response.send_modal(
             EditNameModal(
                 self.char_id,
-                character.name if character else "",
-                SYSTEM,
-                lambda editor_id, char_id: (get_character(char_id).format_full_sheet(), GenericSheetEditView(editor_id, char_id))
+                SYSTEM
             )
         )
 
     @ui.button(label="Edit Notes", style=discord.ButtonStyle.secondary, row=0)
     async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
-        character = get_character(self.char_id)
-        notes = "\n".join(character.notes) if character and character.notes else ""
         await interaction.response.send_modal(
             EditNotesModal(
                 self.char_id,
-                notes,
-                SYSTEM,
-                lambda editor_id, char_id: (get_character(char_id).format_full_sheet(), GenericSheetEditView(editor_id, char_id))
+                SYSTEM
             )
         )
 

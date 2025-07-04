@@ -87,6 +87,8 @@ def get_specific_entity(system: str, entity_type: str):
     elif system == "fate":
         if entity_type == "generic":
             return GenericEntity
+        elif entity_type == "pc" or entity_type == "npc":
+            return fate_character.FateCharacter
         else:
             raise ValueError(f"Unknown entity type '{entity_type}' for Fate system")
     elif system == "mgt2e":
