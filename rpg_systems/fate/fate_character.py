@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Union
 import discord
-from core.models import BaseCharacter
+from core.models import BaseCharacter, EntityDefaults, EntityType
 from core.utils import roll_formula
 from data.repositories.repository_factory import repositories
 from rpg_systems.fate.aspect import Aspect
@@ -12,6 +12,63 @@ from rpg_systems.fate.consequence_track import ConsequenceTrack, Consequence
 SYSTEM = "fate"
 
 class FateCharacter(BaseCharacter):
+    ENTITY_DEFAULTS = EntityDefaults({
+        EntityType.PC: {
+            "refresh": 3,  
+            "fate_points": 3,
+            "skills": {},
+            "aspects": [],
+            "stress_tracks": [
+                {
+                    "track_name": "Physical",
+                    "boxes": [{"value": 1, "is_filled": False}, {"value": 2, "is_filled": False}],
+                    "linked_skill": "Physique"
+                },
+                {
+                    "track_name": "Mental",
+                    "boxes": [{"value": 1, "is_filled": False}, {"value": 2, "is_filled": False}],
+                    "linked_skill": "Will"
+                }
+            ],
+            "consequence_tracks": [
+                {
+                    "name": "Consequences",
+                    "consequences": [
+                        {"name": "Mild", "severity": 2, "aspect": None},
+                        {"name": "Moderate", "severity": 4, "aspect": None},
+                        {"name": "Severe", "severity": 6, "aspect": None}
+                    ]
+                }
+            ],
+            "stunts": {}  # Added stunts as a dictionary: {name: description}
+        },
+        EntityType.NPC: {
+            "refresh": 0,
+            "fate_points": 0,
+            "skills": {},
+            "aspects": [],
+            "stress_tracks": [
+                {
+                    "track_name": "Physical",
+                    "boxes": [{"value": 1, "is_filled": False}, {"value": 2, "is_filled": False}],
+                    "linked_skill": "Physique"
+                },
+                {
+                    "track_name": "Mental",
+                    "boxes": [{"value": 1, "is_filled": False}, {"value": 2, "is_filled": False}],
+                    "linked_skill": "Will"
+                }
+            ],
+            "consequence_tracks": [
+                {
+                    "name": "Consequences",
+                    "consequences": [{"name": "Mild", "severity": 2, "aspect": None}]
+                }
+            ],
+            "stunts": {}  # Added stunts for NPCs too
+        }
+    })
+
     DEFAULT_SKILLS = {
         "Athletics": 0,
         "Burglary": 0,
@@ -31,60 +88,6 @@ class FateCharacter(BaseCharacter):
         "Shoot": 0,
         "Stealth": 0,
         "Will": 0
-    }
-    SYSTEM_SPECIFIC_CHARACTER = {
-        "refresh": 3,  
-        "fate_points": 3,
-        "skills": {},
-        "aspects": [],
-        "stress_tracks": [
-            {
-                "track_name": "Physical",
-                "boxes": [{"value": 1, "is_filled": False}, {"value": 2, "is_filled": False}],
-                "linked_skill": "Physique"
-            },
-            {
-                "track_name": "Mental",
-                "boxes": [{"value": 1, "is_filled": False}, {"value": 2, "is_filled": False}],
-                "linked_skill": "Will"
-            }
-        ],
-        "consequence_tracks": [
-            {
-                "name": "Consequences",
-                "consequences": [
-                    {"name": "Mild", "severity": 2, "aspect": None},
-                    {"name": "Moderate", "severity": 4, "aspect": None},
-                    {"name": "Severe", "severity": 6, "aspect": None}
-                ]
-            }
-        ],
-        "stunts": {}  # Added stunts as a dictionary: {name: description}
-    }
-    SYSTEM_SPECIFIC_NPC = {
-        "refresh": 0,
-        "fate_points": 0,
-        "skills": {},
-        "aspects": [],
-        "stress_tracks": [
-            {
-                "track_name": "Physical",
-                "boxes": [{"value": 1, "is_filled": False}, {"value": 2, "is_filled": False}],
-                "linked_skill": "Physique"
-            },
-            {
-                "track_name": "Mental",
-                "boxes": [{"value": 1, "is_filled": False}, {"value": 2, "is_filled": False}],
-                "linked_skill": "Will"
-            }
-        ],
-        "consequence_tracks": [
-            {
-                "name": "Consequences",
-                "consequences": [{"name": "Mild", "severity": 2, "aspect": None}]
-            }
-        ],
-        "stunts": {}  # Added stunts for NPCs too
     }
 
     def __init__(self, data: Dict[str, Any]):
@@ -192,13 +195,16 @@ class FateCharacter(BaseCharacter):
     def stunts(self, value: Dict[str, str]):
         self.data["stunts"] = value
 
-    def apply_defaults(self, is_npc=False, guild_id=None):
+    def apply_defaults(self, entity_type: EntityType, guild_id=None):
         """
         Apply system-specific default fields to a character dict.
         This method uses the @property accessors for all fields.
         """
-        super().apply_defaults(is_npc=is_npc, guild_id=guild_id)
-        system_defaults = self.SYSTEM_SPECIFIC_NPC if is_npc else self.SYSTEM_SPECIFIC_CHARACTER
+        super().apply_defaults(entity_type=entity_type, guild_id=guild_id)
+
+        # Get the appropriate defaults based on entity type
+        system_defaults = self.ENTITY_DEFAULTS.get_defaults(entity_type)
+        
         for key, value in system_defaults.items():
             if key == "skills":
                 # Use per-guild default if available

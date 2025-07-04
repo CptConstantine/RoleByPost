@@ -1,7 +1,7 @@
 from typing import List, Optional
 from .base_repository import BaseRepository
 from data.models import Character, ActiveCharacter
-from core.models import BaseCharacter, EntityJSONEncoder
+from core.models import BaseCharacter, EntityJSONEncoder, EntityType
 import json
 import uuid
 import core.factories as factories
@@ -59,11 +59,12 @@ class CharacterRepository(BaseRepository[Character]):
         CharacterClass = factories.get_specific_character(character.system)
         
         # Create the character dict using the helper method
-        character_dict = BaseCharacter.build_character_dict(
+        character_dict = BaseCharacter.build_entity_dict(
             id=character.id,
             name=character.name,
             owner_id=character.owner_id,
-            is_npc=character.is_npc,
+            entity_type=EntityType.NPC if character.is_npc else EntityType.PC,
+            parent_entity_id=None,
             notes=character.notes,
             avatar_url=character.avatar_url,
             system_specific_fields=character.system_specific_data
@@ -139,20 +140,15 @@ class CharacterRepository(BaseRepository[Character]):
         npc_characters = [c for c in characters if c.is_npc]
         return self._convert_list_to_base_characters(npc_characters)
     
-    def upsert_character(self, guild_id, character: BaseCharacter, system=None) -> None:
+    def upsert_character(self, guild_id, character: BaseCharacter, system: str) -> None:
         """Save or update a BaseCharacter by converting it to Character first"""
-        from .repository_factory import repositories
-        
-        # Get system if not provided
-        if not system:
-            system = repositories.server.get_system(guild_id)
         CharacterClass = factories.get_specific_character(system)
 
         # Use the system's defined fields
         if character.is_npc:
-            system_fields = CharacterClass.SYSTEM_SPECIFIC_NPC
+            system_fields = CharacterClass.ENTITY_DEFAULTS.get_defaults(EntityType.NPC)
         else:
-            system_fields = CharacterClass.SYSTEM_SPECIFIC_CHARACTER
+            system_fields = CharacterClass.ENTITY_DEFAULTS.get_defaults(EntityType.PC)
 
         system_specific_data = {}
         for key in system_fields:

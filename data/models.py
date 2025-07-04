@@ -183,3 +183,16 @@ class ZoneAspect:
     zone_name: str
     aspect_name: str
     aspect: Dict[str, Any]
+
+@dataclass
+class Entity:
+    id: str
+    guild_id: str
+    name: str
+    owner_id: str
+    entity_type: str
+    parent_entity_id: Optional[str]
+    system: str
+    system_specific_data: Dict[str, Any]
+    notes: List[str]
+    avatar_url: str

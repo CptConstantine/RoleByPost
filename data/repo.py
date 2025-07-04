@@ -193,7 +193,7 @@ def build_character(id, system, name, owner_id, is_npc, system_specific_data, no
     system_specific = json.loads(system_specific_data)
     
     # Use the helper method
-    character_dict = BaseCharacter.build_character_dict(
+    character_dict = BaseCharacter.build_entity_dict(
         id=id,
         name=name,
         owner_id=owner_id,
@@ -233,7 +233,7 @@ def get_all_characters(guild_id, system=None):
             system_specific = json.loads(system_specific_data)
             
             # Use the helper method
-            character_dict = BaseCharacter.build_character_dict(
+            character_dict = BaseCharacter.build_entity_dict(
                 id=id,
                 name=name,
                 owner_id=owner_id,
@@ -1123,7 +1123,7 @@ def get_npcs_by_guild(guild_id) -> BaseCharacter:
             CharacterClass = factories.get_specific_character(system)
             system_specific = json.loads(system_specific_data) if system_specific_data else {}
 
-            character_dict = BaseCharacter.build_character_dict(
+            character_dict = BaseCharacter.build_entity_dict(
                 id=id,
                 name=name,
                 owner_id=owner_id,
@@ -1149,7 +1149,7 @@ def get_pcs_by_guild(guild_id) -> BaseCharacter:
             CharacterClass = factories.get_specific_character(system)
             system_specific = json.loads(system_specific_data) if system_specific_data else {}
 
-            character_dict = BaseCharacter.build_character_dict(
+            character_dict = BaseCharacter.build_entity_dict(
                 id=id,
                 name=name,
                 owner_id=owner_id,

@@ -366,7 +366,10 @@ class RemoveStressBoxModal(ui.Modal, title="Remove Stress Box"):
         
         # Remove the stress box from the track
         removed_box = track.boxes.pop(box_index)
-        
+
+        if not track.boxes:
+            stress_tracks.remove(track)
+
         # Save changes
         character.stress_tracks = stress_tracks
         repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)

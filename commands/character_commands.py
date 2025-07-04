@@ -64,7 +64,7 @@ class CharacterCommands(commands.Cog):
         
         # Create a new Character instance using the helper method
         char_id = str(uuid.uuid4())
-        character_dict = BaseCharacter.build_character_dict(
+        character_dict = BaseCharacter.build_entity_dict(
             id=char_id,
             name=char_name,
             owner_id=interaction.user.id,
@@ -98,7 +98,7 @@ class CharacterCommands(commands.Cog):
             
         # Create a new Character instance using the helper method
         npc_id = str(uuid.uuid4())
-        character_dict = BaseCharacter.build_character_dict(
+        character_dict = BaseCharacter.build_entity_dict(
             id=npc_id,
             name=npc_name,
             owner_id=interaction.user.id,
@@ -195,7 +195,7 @@ class CharacterCommands(commands.Cog):
         avatar_url = data.get("avatar_url")
         
         # Use the helper method
-        character_dict = BaseCharacter.build_character_dict(
+        character_dict = BaseCharacter.build_entity_dict(
             id=id,
             name=name,
             owner_id=interaction.user.id,  # Always set owner to current user
@@ -237,7 +237,8 @@ class CharacterCommands(commands.Cog):
             return
             
         character.owner_id = new_owner.id
-        repositories.character.upsert_character(interaction.guild.id, character)
+        system = repositories.server.get_system(interaction.guild.id)
+        repositories.character.upsert_character(interaction.guild.id, character, system=system)
         await interaction.response.send_message(
             f"✅ Ownership of `{char_name}` transferred to {new_owner.display_name}.", ephemeral=True
         )
@@ -302,7 +303,8 @@ class CharacterCommands(commands.Cog):
         
         # Save the avatar URL to the character
         character.avatar_url = avatar_url
-        repositories.character.upsert_character(interaction.guild.id, character)
+        system = repositories.server.get_system(interaction.guild.id)
+        repositories.character.upsert_character(interaction.guild.id, character, system=system)
 
         # Show a preview
         embed = discord.Embed(

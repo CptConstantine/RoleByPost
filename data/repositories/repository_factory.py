@@ -1,3 +1,4 @@
+from data.repositories.entity_repository import EntityRepository
 from .channel_permission_repository import ChannelPermissionRepository
 from .server_repository import ServerRepository
 from .homebrew_repository import HomebrewRepository
@@ -54,6 +55,8 @@ class RepositoryFactory:
 
         # Channel permission repositories
         self._channel_permissions_repo = None
+
+        self._entity_repo = None
     
     # Core repositories
     @property
@@ -201,6 +204,11 @@ class RepositoryFactory:
             self._channel_permissions_repo = ChannelPermissionRepository()
         return self._channel_permissions_repo
     
+    @property
+    def entity(self) -> EntityRepository:
+        if self._entity_repo is None:
+            self._entity_repo = EntityRepository()
+        return self._entity_repo
 
 # Global repository factory instance
 repositories = RepositoryFactory()

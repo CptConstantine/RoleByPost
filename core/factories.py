@@ -1,5 +1,5 @@
 from core import initiative_types, initiative_views, scene_views
-from core.models import BaseInitiative
+from core.models import BaseInitiative, GenericEntity
 from rpg_systems.fate import fate_character, fate_roll_modifiers, fate_roll_views, fate_scene_views, fate_sheet, fate_sheet_edit_views
 from rpg_systems.mgt2e import mgt2e_character, mgt2e_roll_modifiers, mgt2e_roll_views, mgt2e_scene_views, mgt2e_sheet, mgt2e_sheet_edit_views
 from rpg_systems.generic import generic_character
@@ -88,3 +88,21 @@ def get_specific_scene_view(system, guild_id=None, channel_id=None, scene_id=Non
         return mgt2e_scene_views.MGT2ESceneView(guild_id, channel_id, scene_id, message_id)
     else:
         return scene_views.GenericSceneView(guild_id, channel_id, scene_id, message_id)
+
+def get_specific_entity(system: str, entity_type: str):
+    """Get the appropriate entity class for the given system and entity type"""
+    if system == "generic":
+        # Generic system only supports generic entities
+        return GenericEntity
+    elif system == "fate":
+        if entity_type == "generic":
+            return GenericEntity
+        else:
+            raise ValueError(f"Unknown entity type '{entity_type}' for Fate system")
+    elif system == "mgt2e":
+        if entity_type == "generic":
+            return GenericEntity
+        else:
+            raise ValueError(f"Unknown entity type '{entity_type}' for MGT2E system")
+    else:
+        raise ValueError(f"Unknown system: {system}")

@@ -1,15 +1,17 @@
 from typing import Any, Dict
 import discord
 from discord import ui
-from core.models import BaseCharacter, BaseSheet, RollModifiers
+from core.models import BaseCharacter, BaseSheet, RollModifiers, EntityDefaults, EntityType
 from core.shared_views import EditNameModal, EditNotesModal, FinalizeRollButton, RollModifiersView
 from core.utils import get_character, roll_formula
 
 SYSTEM = "generic"
 
 class GenericCharacter(BaseCharacter):
-    SYSTEM_SPECIFIC_CHARACTER = {}
-    SYSTEM_SPECIFIC_NPC = {}
+    ENTITY_DEFAULTS = EntityDefaults({
+        EntityType.PC: { },
+        EntityType.NPC: { }
+    })
 
     def __init__(self, data: Dict[str, Any]):
         super().__init__(data)
@@ -18,9 +20,21 @@ class GenericCharacter(BaseCharacter):
     def from_dict(cls, data: Dict[str, Any]) -> "GenericCharacter":
         return cls(data)
 
-    def apply_defaults(self, is_npc=False, guild_id=None):
-        # No system-specific fields for generic
-        pass
+    def apply_defaults(self, entity_type: EntityType, guild_id=None):
+        """
+        Apply system-specific default fields to a character.
+        Generic system has no specific fields beyond base character.
+        """
+        super().apply_defaults(entity_type=entity_type, guild_id=guild_id)
+
+        # Get the appropriate defaults based on entity type
+        system_defaults = self.ENTITY_DEFAULTS.get_defaults(entity_type)
+        
+        # Apply any system-specific defaults (none for generic system)
+        for key, value in system_defaults.items():
+            current_value = getattr(self, key, None)
+            if current_value in (None, [], {}, 0, False):
+                setattr(self, key, value)
 
     async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: "GenericRollModifiers", difficulty: int = None):
         """
@@ -84,7 +98,7 @@ class GenericSheetEditView(ui.View):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.editor_id:
-            await interaction.response.send_message("You can’t edit this character.", ephemeral=True)
+            await interaction.response.send_message("You can't edit this character.", ephemeral=True)
             return False
         return True
 

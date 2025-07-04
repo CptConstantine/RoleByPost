@@ -1,7 +1,7 @@
 from collections import defaultdict
 from typing import Any, Dict
 import discord
-from core.models import BaseCharacter, RollModifiers
+from core.models import BaseCharacter, EntityType, RollModifiers
 from core.utils import roll_formula
 from rpg_systems.mgt2e.mgt2e_roll_modifiers import MGT2ERollModifiers
 from rpg_systems.mgt2e.mgt2e_roll_views import MGT2ERollModifiersView
@@ -10,6 +10,17 @@ from data.repositories.repository_factory import repositories
 SYSTEM = "mgt2e"
 
 class MGT2ECharacter(BaseCharacter):
+    ENTITY_DEFAULTS = {
+        EntityType.PC: {
+            "attributes": {"STR": 0, "DEX": 0, "END": 0, "INT": 0, "EDU": 0, "SOC": 0},
+            "skills": {}
+        },
+        EntityType.NPC: {
+            "attributes": {"STR": 0, "DEX": 0, "END": 0, "INT": 0, "EDU": 0, "SOC": 0},
+            "skills": {}
+        }
+    }
+
     DEFAULT_SKILLS = {
         "Admin": -3,
         "Advocate": -3,
@@ -109,14 +120,6 @@ class MGT2ECharacter(BaseCharacter):
         "Tactics (Naval)": -3,
         "Vacc Suit": -3
     }
-    SYSTEM_SPECIFIC_CHARACTER = {
-        "attributes": {"STR": 0, "DEX": 0, "END": 0, "INT": 0, "EDU": 0, "SOC": 0},
-        "skills": {}
-    }
-    SYSTEM_SPECIFIC_NPC = {
-        "attributes": {"STR": 0, "DEX": 0, "END": 0, "INT": 0, "EDU": 0, "SOC": 0},
-        "skills": {}
-    }
 
     def __init__(self, data: Dict[str, Any]):
         super().__init__(data)
@@ -141,13 +144,16 @@ class MGT2ECharacter(BaseCharacter):
     def skills(self, value: Dict[str, int]):
         self.data["skills"] = value
 
-    def apply_defaults(self, is_npc=False, guild_id=None):
+    def apply_defaults(self, entity_type: EntityType, guild_id=None):
         """
-        Apply system-specific default fields to a character dict.
+        Apply system-specific default fields to a character.
         This method uses the @property accessors for all fields.
         """
-        super().apply_defaults(is_npc=is_npc, guild_id=guild_id)
-        system_defaults = self.SYSTEM_SPECIFIC_NPC if is_npc else self.SYSTEM_SPECIFIC_CHARACTER
+        super().apply_defaults(entity_type=entity_type, guild_id=guild_id)
+        
+        # Get the appropriate defaults based on entity type
+        system_defaults = self.ENTITY_DEFAULTS.get_defaults(entity_type)
+        
         for key, value in system_defaults.items():
             if key == "skills":
                 # Use per-guild default if available
@@ -163,7 +169,8 @@ class MGT2ECharacter(BaseCharacter):
                 self.skills = updated_skills
             else:
                 # Use property setters for all other fields
-                if not hasattr(self, key) or getattr(self, key) in (None, [], {}, 0, False):
+                current_value = getattr(self, key, None)
+                if current_value in (None, [], {}, 0, False):
                     setattr(self, key, value)
     
     async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: MGT2ERollModifiers, difficulty: int = None):

@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
+from enum import Enum
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List, Optional
 import discord
 
 class NotesMixin:
@@ -184,10 +185,31 @@ class EntityJSONEncoder(json.JSONEncoder):
             return obj.to_dict()
         return super().default(obj)
 
+class EntityType(Enum):
+    """Standard entity types across all systems"""
+    PC = "pc"
+    NPC = "npc"
+    GENERIC = "generic"
+    
+    def __str__(self):
+        return self.value
+
+@dataclass
+class EntityDefaults:
+    """Configuration for entity defaults by type"""
+    defaults_by_type: Dict[EntityType, Dict[str, Any]]
+    
+    def get_defaults(self, entity_type: EntityType) -> Dict[str, Any]:
+        return self.defaults_by_type.get(entity_type, {})
+
 class BaseEntity(BaseRpgObj):
     """
     Abstract base class for a "thing".
     """
+    # Override in subclasses
+    ENTITY_DEFAULTS: ClassVar[Optional[EntityDefaults]] = None
+    SUPPORTED_ENTITY_TYPES: ClassVar[List[EntityType]] = [EntityType.GENERIC]
+
     def __init__(self, data: Dict[str, Any]):
         self.data = data
 
@@ -197,12 +219,21 @@ class BaseEntity(BaseRpgObj):
         return cls(data)
 
     @property
-    def entity_type(self) -> str:
-        return self.data.get("entity_type")
+    def entity_type(self) -> EntityType:
+        entity_type_str = self.data.get("entity_type", "generic")
+        return EntityType(entity_type_str)
 
     @entity_type.setter
-    def entity_type(self, value: str):
-        self.data["entity_type"] = value
+    def entity_type(self, value: EntityType):
+        self.data["entity_type"] = value.value
+
+    @property
+    def parent_entity_id(self) -> str:
+        return self.data.get("parent_entity_id")
+
+    @parent_entity_id.setter
+    def parent_entity_id(self, value: str):
+        self.data["parent_entity_id"] = value
 
     @property
     def name(self) -> str:
@@ -220,20 +251,79 @@ class BaseEntity(BaseRpgObj):
     def avatar_url(self, url):
         self.data["avatar_url"] = url
 
+    def apply_defaults(self, entity_type: EntityType = None, guild_id: str = None):
+        """Apply system-specific default fields to an entity."""
+        if entity_type is None:
+            entity_type = self.entity_type
+
+        if self.ENTITY_DEFAULTS:
+            defaults = self.ENTITY_DEFAULTS.get_defaults(entity_type)
+            for key, value in defaults.items():
+                self._apply_default_field(key, value, guild_id)
+    
+    def _apply_default_field(self, key: str, value: Any, guild_id: str = None):
+        """Apply a single default field. Override in subclasses for custom logic."""
+        current_value = getattr(self, key, None)
+        if current_value in (None, [], {}, 0, False):
+            setattr(self, key, value)
+
+    @staticmethod
+    def build_entity_dict(
+        id: str, 
+        name: str, 
+        owner_id: str, 
+        entity_type: EntityType,
+        parent_entity_id: str = None,
+        notes: List[str] = None, 
+        avatar_url: str = None, 
+        system_specific_fields: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
+        """Helper method to create a standardized entity dictionary."""
+        entity = {
+            "id": str(id),
+            "name": name,
+            "owner_id": str(owner_id),
+            "entity_type": entity_type.value,
+            "parent_entity_id": parent_entity_id or '',  # Keep as empty string for internal consistency
+            "notes": notes or [],
+            "avatar_url": avatar_url or '',
+        }
+        
+        # Add system-specific fields
+        if system_specific_fields:
+            for key, value in system_specific_fields.items():
+                entity[key] = value
+                
+        return entity
+    
+class GenericEntity(BaseEntity):
+    """Generic system entity - simple entity with basic properties"""
+    
+    ENTITY_DEFAULTS = EntityDefaults({
+        EntityType.GENERIC: { }
+    })
+    
+    def __init__(self, data: Dict[str, Any]):
+        super().__init__(data)
+        self.entity_type = EntityType.GENERIC
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "GenericEntity":
+        return cls(data)
+    
+    def apply_defaults(self, entity_type: EntityType = None, guild_id: str = None):
+        """Apply defaults for generic entities"""
+        super().apply_defaults(entity_type=entity_type, guild_id=guild_id)
+
 class BaseCharacter(BaseEntity):
     """
     Abstract base class for a character (PC or NPC).
     System-specific character classes should inherit from this and implement all methods.
     """
-    SYSTEM_SPECIFIC_CHARACTER = {}
-    SYSTEM_SPECIFIC_NPC = {}
+    SUPPORTED_ENTITY_TYPES: ClassVar[List[EntityType]] = [EntityType.PC, EntityType.NPC]
 
     def __init__(self, data: Dict[str, Any]):
         super().__init__(data)
-        if not hasattr(self, 'SYSTEM_SPECIFIC_CHARACTER'):
-            raise NotImplementedError("SYSTEM_SPECIFIC_CHARACTER must be defined in the subclass.")
-        if not hasattr(self, 'SYSTEM_SPECIFIC_NPC'):
-            raise NotImplementedError("SYSTEM_SPECIFIC_NPC must be defined in the subclass.")
 
     @property
     def is_npc(self) -> bool:
@@ -242,24 +332,9 @@ class BaseCharacter(BaseEntity):
     @is_npc.setter
     def is_npc(self, value: bool):
         self.data["entity_type"] = "npc" if value else "pc"
-
+    """
     @staticmethod
-    def build_character_dict(id, name, owner_id, is_npc=False, notes=None, avatar_url=None, system_specific_fields=None):
-        """
-        Helper method to create a standardized character dictionary.
-        
-        Args:
-            id (str): Unique character ID
-            name (str): Character name
-            owner_id (str): ID of the character's owner
-            is_npc (bool): Whether the character is an NPC
-            notes (list): List of character notes
-            avatar_url (str): URL to character's avatar image
-            additional_fields: Any additional system-specific fields
-            
-        Returns:
-            dict: A properly formatted character dictionary
-        """
+    def build_entity_dict(id, name, owner_id, is_npc=False, notes=None, avatar_url=None, system_specific_fields=None):
         character = {
             "id": str(id),
             "name": name,
@@ -275,12 +350,7 @@ class BaseCharacter(BaseEntity):
                 character[key] = value
             
         return character
-
-    @abstractmethod
-    def apply_defaults(self, is_npc=False, guild_id=None):
-        """Apply system-specific default fields to a character dict."""
-        pass
-    
+    """
     @abstractmethod
     async def edit_requested_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
         """

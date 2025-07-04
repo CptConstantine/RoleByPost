@@ -413,6 +413,9 @@ class EditGameAspectsModal(discord.ui.Modal, title="Edit Game Aspects"):
                     is_hidden=False,
                     free_invokes=free_invokes
                 ))
+                
+        # Clear existing game aspects first, then add new ones
+        repositories.fate_game_aspects.clear_game_aspects(str(self.parent_view.guild_id))
         
         # Update game aspects in DB
         for aspect in aspects:
