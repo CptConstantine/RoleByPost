@@ -192,7 +192,6 @@ class CharacterCommands(commands.Cog):
         is_npc = data.get("is_npc", False)
         notes = data.get("notes", [])
         avatar_url = data.get("avatar_url")
-        parent_entity_id = data.get("parent_entity_id")  # Support importing with parent
         
         # Use the helper method
         character_dict = BaseCharacter.build_entity_dict(
@@ -200,7 +199,6 @@ class CharacterCommands(commands.Cog):
             name=name,
             owner_id=interaction.user.id,  # Always set owner to current user
             is_npc=is_npc,
-            parent_entity_id=parent_entity_id,
             notes=notes,
             avatar_url=avatar_url
         )

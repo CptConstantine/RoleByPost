@@ -12,18 +12,12 @@ class EntityRepository(BaseRepository[Entity]):
         super().__init__('entities')
     
     def to_dict(self, entity: Entity) -> dict:
-        # Convert empty string parent_entity_id to None for proper foreign key handling
-        parent_entity_id = entity.parent_entity_id
-        if parent_entity_id == '':
-            parent_entity_id = None
-
         return {
             'id': entity.id,
             'guild_id': entity.guild_id,
             'name': entity.name,
             'owner_id': entity.owner_id,
             'entity_type': entity.entity_type,
-            'parent_entity_id': parent_entity_id,
             'system': entity.system,
             'system_specific_data': json.dumps(entity.system_specific_data, cls=EntityJSONEncoder),
             'notes': json.dumps(entity.notes),
@@ -45,18 +39,12 @@ class EntityRepository(BaseRepository[Entity]):
         elif notes is None:
             notes = []
         
-        # Handle parent_entity_id - convert None to empty string for consistency
-        parent_entity_id = data.get('parent_entity_id')
-        if parent_entity_id is None:
-            parent_entity_id = ''
-        
         return Entity(
             id=data['id'],
             guild_id=data['guild_id'],
             name=data['name'],
             owner_id=data['owner_id'],
             entity_type=data['entity_type'],
-            parent_entity_id=parent_entity_id,
             system=data['system'],
             system_specific_data=system_specific_data,
             notes=notes,
@@ -77,7 +65,6 @@ class EntityRepository(BaseRepository[Entity]):
             name=entity.name,
             owner_id=entity.owner_id,
             entity_type=EntityType(entity.entity_type),
-            parent_entity_id=entity.parent_entity_id if entity.parent_entity_id else None,
             notes=entity.notes,
             avatar_url=entity.avatar_url,
             system_specific_fields=entity.system_specific_data
@@ -111,27 +98,10 @@ class EntityRepository(BaseRepository[Entity]):
         
         return self._convert_list_to_base_entities(entities)
     
-    def get_all_by_parent(self, guild_id: str, parent_entity_id: str) -> List[BaseEntity]:
-        """Get all entities owned by a parent entity"""
-        query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND parent_entity_id = %s ORDER BY name"
-        entities = self.execute_query(query, (str(guild_id), parent_entity_id))
-        return self._convert_list_to_base_entities(entities)
-    
     def get_all_by_owner(self, guild_id: str, owner_id: str) -> List[BaseEntity]:
         """Get all entities owned by a user"""
         query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND owner_id = %s ORDER BY name"
         entities = self.execute_query(query, (str(guild_id), str(owner_id)))
-        return self._convert_list_to_base_entities(entities)
-    
-    def get_top_level_entities(self, guild_id: str, entity_type: str = None) -> List[BaseEntity]:
-        """Get entities that have no parent (top-level entities)"""
-        if entity_type:
-            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND entity_type = %s AND (parent_entity_id IS NULL OR parent_entity_id = '') ORDER BY name"
-            entities = self.execute_query(query, (str(guild_id), entity_type))
-        else:
-            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND (parent_entity_id IS NULL OR parent_entity_id = '') ORDER BY name"
-            entities = self.execute_query(query, (str(guild_id),))
-        
         return self._convert_list_to_base_entities(entities)
     
     def upsert_entity(self, guild_id: str, entity: BaseEntity, system: str) -> None:
@@ -146,11 +116,6 @@ class EntityRepository(BaseRepository[Entity]):
 
         notes = entity.notes or []
         
-        # Handle parent_entity_id - convert empty string to None for proper foreign key handling
-        parent_entity_id = entity.parent_entity_id
-        if parent_entity_id == '':
-            parent_entity_id = None
-        
         # Create Entity from BaseEntity
         storage_entity = Entity(
             id=entity.id,
@@ -158,7 +123,6 @@ class EntityRepository(BaseRepository[Entity]):
             name=entity.name,
             owner_id=entity.owner_id,
             entity_type=entity.entity_type.value,
-            parent_entity_id=parent_entity_id,
             system=system,
             system_specific_data=system_specific_data,
             notes=notes,
@@ -167,20 +131,20 @@ class EntityRepository(BaseRepository[Entity]):
         
         self.save(storage_entity, conflict_columns=['id'])
     
-    def delete_entity(self, entity_id: str) -> bool:
-        """Delete an entity by ID"""
-        deleted_count = self.delete("id = %s", (entity_id,))
-        return deleted_count > 0
-    
-    def transfer_entity(self, entity_id: str, new_parent_id: str = None) -> bool:
-        """Transfer an entity to a new parent (or make it top-level if new_parent_id is None)"""
-        # Convert empty string to None for proper foreign key handling
-        if new_parent_id == '':
-            new_parent_id = None
-
-        query = f"UPDATE {self.table_name} SET parent_entity_id = %s WHERE id = %s"
-        self.execute_query(query, (new_parent_id, entity_id))
-        return True
+    def delete_entity(self, guild_id: str, entity_id: str) -> None:
+        """Delete an entity and all its relationships"""
+        entity = self.get_by_id(entity_id)
+        if entity:
+            # Delete all relationships involving this entity
+            from .repository_factory import repositories
+            repositories.relationship.delete_all_relationships_for_entity(
+                guild_id,
+                entity_id
+            )
+            
+            # Delete the entity itself
+            query = f"DELETE FROM {self.table_name} WHERE id = %s"
+            self.execute_query(query, (entity_id,))
     
     def rename_entity(self, entity_id: str, new_name: str) -> bool:
         """Rename an entity"""

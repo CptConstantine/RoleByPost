@@ -186,7 +186,7 @@ class EntityType(Enum):
     
 class RelationshipType(Enum):
     """Types of relationships between entities"""
-    OWNS = "owns"           # General ownership (replaces parent_entity_id)
+    OWNS = "owns"           # General ownership
     CONTROLS = "controls"   # Can speak as/control in combat
     COMPANION = "companion" # Equal partner relationship
     MINION = "minion"      # Subordinate but not owned
@@ -229,14 +229,6 @@ class BaseEntity(BaseRpgObj):
     @entity_type.setter
     def entity_type(self, value: EntityType):
         self.data["entity_type"] = value.value
-
-    @property
-    def parent_entity_id(self) -> str:
-        return self.data.get("parent_entity_id")
-
-    @parent_entity_id.setter
-    def parent_entity_id(self, value: str):
-        self.data["parent_entity_id"] = value
 
     @property
     def name(self) -> str:
@@ -288,7 +280,6 @@ class BaseEntity(BaseRpgObj):
         name: str, 
         owner_id: str, 
         entity_type: EntityType,
-        parent_entity_id: str = None,
         notes: List[str] = None, 
         avatar_url: str = None, 
         system_specific_fields: Dict[str, Any] = None
@@ -299,7 +290,6 @@ class BaseEntity(BaseRpgObj):
             "name": name,
             "owner_id": str(owner_id),
             "entity_type": entity_type.value,
-            "parent_entity_id": parent_entity_id or '',
             "notes": notes or [],
             "avatar_url": avatar_url or '',
         }
@@ -310,20 +300,16 @@ class BaseEntity(BaseRpgObj):
                 entity[key] = value
         
         return entity
-    
-    def get_children(self, relationship_type: str = None) -> List['BaseEntity']:
+
+    def get_children(self, guild_id: str, relationship_type: RelationshipType = None) -> List['BaseEntity']:
         """Get entities this entity has relationships to"""
         from data.repositories.repository_factory import repositories
-        if not hasattr(self, '_guild_id'):
-            return []
-        return repositories.relationship.get_children(self._guild_id, self.id, relationship_type)
-    
-    def get_parents(self, relationship_type: str = None) -> List['BaseEntity']:
+        return repositories.relationship.get_children(guild_id, self.id, relationship_type.value if relationship_type else None)
+
+    def get_parents(self, guild_id: str, relationship_type: RelationshipType = None) -> List['BaseEntity']:
         """Get entities that have relationships to this entity"""
         from data.repositories.repository_factory import repositories
-        if not hasattr(self, '_guild_id'):
-            return []
-        return repositories.relationship.get_parents(self._guild_id, self.id, relationship_type)
+        return repositories.relationship.get_parents(guild_id, self.id, relationship_type.value if relationship_type else None)
     
     def get_owner(self) -> Optional['BaseEntity']:
         """Get the entity that owns this entity (if any)"""
@@ -348,31 +334,25 @@ class BaseEntity(BaseRpgObj):
         
         return False
 
-    def add_relationship(self, target_entity: 'BaseEntity', relationship_type: str, metadata: Dict[str, Any] = None) -> 'Relationship':
+    def add_relationship(self, guild_id: str, target_entity: 'BaseEntity', relationship_type: RelationshipType, metadata: Dict[str, Any] = None) -> 'Relationship':
         """Add a relationship to another entity"""
         from data.repositories.repository_factory import repositories
-        if not hasattr(self, '_guild_id'):
-            raise ValueError("Entity must have guild_id to create relationships")
-        
         return repositories.relationship.create_relationship(
-            self._guild_id, 
+            guild_id, 
             self.id, 
             target_entity.id, 
-            relationship_type, 
+            relationship_type.value, 
             metadata
         )
 
-    def remove_relationship(self, target_entity: 'BaseEntity', relationship_type: str = None) -> bool:
+    def remove_relationship(self, guild_id: str, target_entity: 'BaseEntity', relationship_type: RelationshipType = None) -> bool:
         """Remove a relationship to another entity"""
         from data.repositories.repository_factory import repositories
-        if not hasattr(self, '_guild_id'):
-            return False
-        
         return repositories.relationship.delete_relationships_by_entities(
-            self._guild_id, 
+            guild_id, 
             self.id, 
             target_entity.id, 
-            relationship_type
+            relationship_type.value if relationship_type else None
         )
                 
         return entity
@@ -420,7 +400,6 @@ class BaseCharacter(BaseEntity):
         name: str, 
         owner_id: str, 
         is_npc: bool,
-        parent_entity_id: str = None,
         notes: List[str] = None, 
         avatar_url: str = None, 
         system_specific_fields: Dict[str, Any] = None
@@ -434,7 +413,6 @@ class BaseCharacter(BaseEntity):
             name=name,
             owner_id=owner_id,
             entity_type=entity_type,
-            parent_entity_id=parent_entity_id,
             notes=notes,
             avatar_url=avatar_url,
             system_specific_fields=system_specific_fields

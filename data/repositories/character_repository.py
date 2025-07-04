@@ -11,18 +11,12 @@ class CharacterRepository(BaseRepository[Character]):
         super().__init__('entities')  # Use entities table instead of characters
     
     def to_dict(self, entity: Character) -> dict:
-        # Convert empty string parent_entity_id to None for proper foreign key handling
-        parent_entity_id = entity.parent_entity_id
-        if parent_entity_id == '':
-            parent_entity_id = None
-
         return {
             'id': entity.id,
             'guild_id': entity.guild_id,
             'name': entity.name,
             'owner_id': entity.owner_id,
             'entity_type': entity.entity_type,
-            'parent_entity_id': parent_entity_id,
             'system': entity.system,
             'system_specific_data': json.dumps(entity.system_specific_data, cls=EntityJSONEncoder),
             'notes': json.dumps(entity.notes),
@@ -44,18 +38,12 @@ class CharacterRepository(BaseRepository[Character]):
         elif notes is None:
             notes = []
         
-        # Handle parent_entity_id - convert None to empty string for consistency
-        parent_entity_id = data.get('parent_entity_id')
-        if parent_entity_id is None:
-            parent_entity_id = ''
-        
         return Character(
             id=data['id'],
             guild_id=data['guild_id'],
             name=data['name'],
             owner_id=data['owner_id'],
             entity_type=data['entity_type'],
-            parent_entity_id=parent_entity_id,
             system=data.get('system'),
             system_specific_data=system_specific_data,
             notes=notes,
@@ -76,7 +64,6 @@ class CharacterRepository(BaseRepository[Character]):
             name=character.name,
             owner_id=character.owner_id,
             is_npc=character.entity_type == 'npc',
-            parent_entity_id=character.parent_entity_id if character.parent_entity_id else None,
             notes=character.notes,
             avatar_url=character.avatar_url,
             system_specific_fields=character.system_specific_data
@@ -142,11 +129,6 @@ class CharacterRepository(BaseRepository[Character]):
 
         notes = character.notes or []
         
-        # Handle parent_entity_id - convert empty string to None for proper foreign key handling
-        parent_entity_id = character.parent_entity_id
-        if parent_entity_id == '':
-            parent_entity_id = None
-        
         # Create Character entity from BaseCharacter
         storage_character = Character(
             id=character.id,
@@ -154,7 +136,6 @@ class CharacterRepository(BaseRepository[Character]):
             name=character.name,
             owner_id=character.owner_id,
             entity_type='npc' if character.is_npc else 'pc',
-            parent_entity_id=parent_entity_id,
             system=system,
             system_specific_data=system_specific_data,
             notes=notes,
@@ -163,8 +144,16 @@ class CharacterRepository(BaseRepository[Character]):
         
         self.save(storage_character, conflict_columns=['id'])
 
-    def delete_character(self, character_id: str) -> None:
-        """Delete a character by ID"""
+    def delete_character(self, guild_id: str, character_id: str) -> None:
+        """Delete a character and all its relationships"""
+        # Get the character to find its guild_id
+        character = self.get_by_id(character_id)
+        if character:
+            # Delete all relationships involving this character
+            from .repository_factory import repositories
+            repositories.relationship.delete_all_relationships_for_entity(str(guild_id), character_id)
+            
+        # Delete the character itself
         query = f"DELETE FROM {self.table_name} WHERE id = %s AND entity_type IN ('pc', 'npc')"
         self.execute_query(query, (character_id,))
 

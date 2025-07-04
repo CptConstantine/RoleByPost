@@ -209,12 +209,10 @@ CREATE TABLE IF NOT EXISTS entities (
     name TEXT NOT NULL,
     owner_id TEXT NOT NULL,
     entity_type TEXT NOT NULL,
-    parent_entity_id TEXT,
     system TEXT NOT NULL,
     system_specific_data JSONB DEFAULT '{}',
     notes JSONB DEFAULT '[]',
-    avatar_url TEXT DEFAULT '',
-    FOREIGN KEY (parent_entity_id) REFERENCES entities(id) ON DELETE CASCADE
+    avatar_url TEXT DEFAULT ''
 );
 
 -- Add relationships table
@@ -249,7 +247,6 @@ CREATE INDEX IF NOT EXISTS idx_channel_permissions_lookup ON channel_permissions
 CREATE INDEX IF NOT EXISTS idx_entities_guild_type ON entities(guild_id, entity_type);
 CREATE INDEX IF NOT EXISTS idx_entities_guild_system ON entities(guild_id, system);
 CREATE INDEX IF NOT EXISTS idx_entities_owner ON entities(owner_id);
-CREATE INDEX IF NOT EXISTS idx_entities_parent ON entities(parent_entity_id);
 CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(guild_id, name);
 
 CREATE INDEX IF NOT EXISTS idx_relationships_guild ON relationships(guild_id);

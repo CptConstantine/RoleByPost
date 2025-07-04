@@ -1,5 +1,5 @@
 .env
-data/dbmisc.py
+dbmisc.py
 discord.log
 # Ignore Python virtual environments
 venv/

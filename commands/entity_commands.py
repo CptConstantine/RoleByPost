@@ -4,7 +4,7 @@ from discord import app_commands
 from discord.ext import commands
 from typing import List, Optional
 from core import channel_restriction
-from core.models import BaseEntity, EntityType
+from core.models import BaseEntity, EntityType, RelationshipType
 from data.repositories.repository_factory import repositories
 import core.factories as factories
 
@@ -132,14 +132,19 @@ class EntityCommands(commands.Cog):
             await interaction.followup.send(f"❌ An entity named `{name}` already exists.", ephemeral=True)
             return
         
-        # Resolve parent entity if specified
-        parent_entity_id = None
+        # Validate parent entity if specified
+        parent = None
         if parent_entity and parent_entity.strip():
             parent = repositories.entity.get_by_name(str(interaction.guild.id), parent_entity)
             if not parent:
                 await interaction.followup.send(f"❌ Parent entity `{parent_entity}` not found.", ephemeral=True)
                 return
-            parent_entity_id = parent.id
+            
+            # Check if user can use this entity as a parent
+            is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+            if not is_gm and str(parent.owner_id) != str(interaction.user.id):
+                await interaction.followup.send("❌ You can only create entities under entities you own.", ephemeral=True)
+                return
         
         # Create the entity
         entity_id = str(uuid.uuid4())
@@ -157,16 +162,28 @@ class EntityCommands(commands.Cog):
             id=entity_id,
             name=name,
             owner_id=str(interaction.user.id),
-            entity_type=enum_type,
-            parent_entity_id=parent_entity_id
+            entity_type=enum_type
         )
         
         entity = EntityClass(entity_dict)
         entity.apply_defaults(entity_type=enum_type, guild_id=str(interaction.guild.id))
         
+        # Save the entity first
         repositories.entity.upsert_entity(str(interaction.guild.id), entity, system=system)
         
-        parent_info = f" under {parent_entity}" if parent_entity else ""
+        # Create ownership relationship if parent specified
+        if parent:
+            repositories.relationship.create_relationship(
+                guild_id=str(interaction.guild.id),
+                from_entity_id=parent.id,
+                to_entity_id=entity_id,
+                relationship_type=RelationshipType.OWNS.value,
+                metadata={"created_by": str(interaction.user.id)}
+            )
+            parent_info = f" owned by **{parent_entity}**"
+        else:
+            parent_info = ""
+        
         await interaction.followup.send(f"✅ Created {entity_type}: **{name}**{parent_info}", ephemeral=True)
 
     @entity_group.command(name="delete", description="Delete an entity")
@@ -186,13 +203,18 @@ class EntityCommands(commands.Cog):
             await interaction.response.send_message("❌ You can only delete entities you own.", ephemeral=True)
             return
         
-        # Check if entity has children
-        children = repositories.entity.get_all_by_parent(str(interaction.guild.id), entity.id)
-        if children:
-            child_names = [child.name for child in children]
+        # Check if entity owns other entities (through relationships)
+        owned_entities = repositories.relationship.get_children(
+            str(interaction.guild.id), 
+            entity.id, 
+            RelationshipType.OWNS.value
+        )
+        
+        if owned_entities:
+            entity_names = [owned_entity.name for owned_entity in owned_entities]
             await interaction.response.send_message(
-                f"❌ Cannot delete `{entity_name}` because it owns other entities: {', '.join(child_names)}. "
-                f"Transfer or delete these entities first.",
+                f"❌ Cannot delete `{entity_name}` because it owns other entities: {', '.join(entity_names)}.\n"
+                f"Please transfer or delete these entities first, or use `/relationship remove` to remove the ownership relationships.",
                 ephemeral=True
             )
             return
@@ -205,88 +227,60 @@ class EntityCommands(commands.Cog):
             ephemeral=True
         )
 
-    @entity_group.command(name="transfer", description="Transfer an entity to a new parent")
-    @app_commands.describe(
-        entity_name="Name of the entity to transfer",
-        new_parent="New parent entity (leave empty to make top-level)"
-    )
-    @app_commands.autocomplete(
-        entity_name=entity_name_autocomplete,
-        new_parent=parent_entity_autocomplete
-    )
-    @channel_restriction.no_ic_channels()
-    async def entity_transfer(self, interaction: discord.Interaction, entity_name: str, new_parent: str = None):
-        """Transfer an entity to a new parent"""
-        entity = repositories.entity.get_by_name(str(interaction.guild.id), entity_name)
-        if not entity:
-            await interaction.response.send_message(f"❌ Entity `{entity_name}` not found.", ephemeral=True)
-            return
-        
-        # Check permissions
-        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
-        if not is_gm and str(entity.owner_id) != str(interaction.user.id):
-            await interaction.response.send_message("❌ You can only transfer entities you own.", ephemeral=True)
-            return
-        
-        # Resolve new parent
-        new_parent_id = None
-        new_parent_name = "top-level"
-        if new_parent and new_parent.strip():
-            parent = repositories.entity.get_by_name(str(interaction.guild.id), new_parent)
-            if not parent:
-                await interaction.response.send_message(f"❌ Parent entity `{new_parent}` not found.", ephemeral=True)
-                return
-            
-            # Prevent circular ownership
-            if parent.id == entity.id:
-                await interaction.response.send_message("❌ An entity cannot own itself.", ephemeral=True)
-                return
-            
-            new_parent_id = parent.id
-            new_parent_name = parent.name
-        
-        # Perform transfer
-        repositories.entity.transfer_entity(entity.id, new_parent_id)
-        
-        await interaction.response.send_message(
-            f"✅ Transferred `{entity_name}` to {new_parent_name}.",
-            ephemeral=True
-        )
-
     @entity_group.command(name="list", description="List entities")
     @app_commands.describe(
-        parent_entity="Parent entity to list children of (leave empty for top-level)",
-        entity_type="Filter by entity type"
+        owner_entity="Entity to list owned entities of (leave empty for top-level)",
+        entity_type="Filter by entity type",
+        show_relationships="Show ownership relationships"
     )
     @app_commands.autocomplete(
-        parent_entity=parent_entity_autocomplete,
+        owner_entity=parent_entity_autocomplete,
         entity_type=entity_type_autocomplete
     )
     @channel_restriction.no_ic_channels()
     async def entity_list(
         self, 
         interaction: discord.Interaction, 
-        parent_entity: str = None, 
-        entity_type: str = None
+        owner_entity: str = None, 
+        entity_type: str = None,
+        show_relationships: bool = False
     ):
         """List entities with optional filtering"""
         await interaction.response.defer(ephemeral=True)
         
         # Determine what entities to show
-        if parent_entity and parent_entity.strip():
-            # List children of specific parent
-            parent = repositories.entity.get_by_name(str(interaction.guild.id), parent_entity)
-            if not parent:
-                await interaction.followup.send(f"❌ Parent entity `{parent_entity}` not found.", ephemeral=True)
+        if owner_entity and owner_entity.strip():
+            # List entities owned by specific entity
+            owner = repositories.entity.get_by_name(str(interaction.guild.id), owner_entity)
+            if not owner:
+                await interaction.followup.send(f"❌ Owner entity `{owner_entity}` not found.", ephemeral=True)
                 return
             
-            entities = repositories.entity.get_all_by_parent(str(interaction.guild.id), parent.id)
-            title = f"Entities owned by {parent.name}"
+            entities = repositories.relationship.get_children(
+                str(interaction.guild.id), 
+                owner.id, 
+                RelationshipType.OWNS.value
+            )
+            title = f"Entities owned by {owner.name}"
         else:
-            # List top-level entities
-            entities = repositories.entity.get_top_level_entities(str(interaction.guild.id), entity_type)
+            # List top-level entities (those without owners)
+            all_entities = repositories.entity.get_all_by_guild(str(interaction.guild.id))
+            
+            # Filter to only entities that are not owned by other entities
+            entities = []
+            for entity in all_entities:
+                owners = repositories.relationship.get_parents(
+                    str(interaction.guild.id), 
+                    entity.id, 
+                    RelationshipType.OWNS.value
+                )
+                if not owners:  # No owners = top-level
+                    entities.append(entity)
+            
             title = "Top-level entities"
             if entity_type:
+                # Apply entity type filter
+                entities = [e for e in entities if e.entity_type.value == entity_type]
                 title += f" ({entity_type})"
         
         if not entities:
@@ -296,28 +290,62 @@ class EntityCommands(commands.Cog):
         # Create embed
         embed = discord.Embed(title=title, color=discord.Color.blue())
         
-        # Group by entity type
-        by_type = {}
-        for entity in entities:
-            type_name = entity.entity_type.value
-            if type_name not in by_type:
-                by_type[type_name] = []
-            by_type[type_name].append(entity)
-        
-        # Add fields for each type
-        for type_name, type_entities in by_type.items():
-            entity_list = []
-            for entity in type_entities:
-                # Show children count if any
-                children = repositories.entity.get_all_by_parent(str(interaction.guild.id), entity.id)
-                children_info = f" ({len(children)} children)" if children else ""
-                entity_list.append(f"• {entity.name}{children_info}")
+        if show_relationships:
+            # Show detailed relationship information
+            entity_info = []
+            for entity in entities:
+                # Get owned entities
+                owned_entities = repositories.relationship.get_children(
+                    str(interaction.guild.id), 
+                    entity.id, 
+                    RelationshipType.OWNS.value
+                )
+                
+                # Get controlled entities
+                controlled_entities = repositories.relationship.get_children(
+                    str(interaction.guild.id), 
+                    entity.id, 
+                    RelationshipType.CONTROLS.value
+                )
+                
+                info = f"**{entity.name}** ({entity.entity_type.value})"
+                if owned_entities:
+                    owned_names = [e.name for e in owned_entities]
+                    info += f"\n  *Owns: {', '.join(owned_names)}*"
+                if controlled_entities:
+                    controlled_names = [e.name for e in controlled_entities]
+                    info += f"\n  *Controls: {', '.join(controlled_names)}*"
+                
+                entity_info.append(info)
             
-            embed.add_field(
-                name=f"{type_name.title()} ({len(type_entities)})",
-                value="\n".join(entity_list)[:1024],  # Discord field limit
-                inline=False
-            )
+            embed.description = "\n\n".join(entity_info)
+        else:
+            # Group by entity type for simple view
+            by_type = {}
+            for entity in entities:
+                type_name = entity.entity_type.value
+                if type_name not in by_type:
+                    by_type[type_name] = []
+                by_type[type_name].append(entity)
+            
+            # Add fields for each type
+            for type_name, type_entities in by_type.items():
+                entity_list = []
+                for entity in type_entities:
+                    # Show owned entities count if any
+                    owned_entities = repositories.relationship.get_children(
+                        str(interaction.guild.id), 
+                        entity.id, 
+                        RelationshipType.OWNS.value
+                    )
+                    owned_info = f" ({len(owned_entities)} owned)" if owned_entities else ""
+                    entity_list.append(f"• {entity.name}{owned_info}")
+                
+                embed.add_field(
+                    name=f"{type_name.title()} ({len(type_entities)})",
+                    value="\n".join(entity_list)[:1024],  # Discord field limit
+                    inline=False
+                )
         
         await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -344,22 +372,48 @@ class EntityCommands(commands.Cog):
         owner_name = owner.display_name if owner else f"User {entity.owner_id}"
         embed.add_field(name="Owner", value=owner_name, inline=True)
         
-        # Add parent info
-        if entity.parent_entity_id:
-            parent = repositories.entity.get_by_id(entity.parent_entity_id)
-            parent_name = parent.name if parent else "Unknown"
-            embed.add_field(name="Parent", value=parent_name, inline=True)
-        else:
-            embed.add_field(name="Parent", value="None (top-level)", inline=True)
+        # Add relationship information
+        # Entities this entity owns
+        owned_entities = repositories.relationship.get_children(
+            str(interaction.guild.id), 
+            entity.id, 
+            RelationshipType.OWNS.value
+        )
+        if owned_entities:
+            owned_names = [e.name for e in owned_entities[:5]]  # Show first 5
+            owned_text = ", ".join(owned_names)
+            if len(owned_entities) > 5:
+                owned_text += f" (+{len(owned_entities) - 5} more)"
+            embed.add_field(name=f"Owns ({len(owned_entities)})", value=owned_text, inline=False)
         
-        # Add children info
-        children = repositories.entity.get_all_by_parent(str(interaction.guild.id), entity.id)
-        if children:
-            child_names = [child.name for child in children[:5]]  # Show first 5
-            children_text = ", ".join(child_names)
-            if len(children) > 5:
-                children_text += f" (+{len(children) - 5} more)"
-            embed.add_field(name=f"Children ({len(children)})", value=children_text, inline=False)
+        # Entities that own this entity
+        owners = repositories.relationship.get_parents(
+            str(interaction.guild.id), 
+            entity.id, 
+            RelationshipType.OWNS.value
+        )
+        if owners:
+            owner_names = [e.name for e in owners]
+            embed.add_field(name="Owned By", value=", ".join(owner_names), inline=False)
+        
+        # Control relationships
+        controlled_entities = repositories.relationship.get_children(
+            str(interaction.guild.id), 
+            entity.id, 
+            RelationshipType.CONTROLS.value
+        )
+        if controlled_entities:
+            controlled_names = [e.name for e in controlled_entities]
+            embed.add_field(name="Controls", value=", ".join(controlled_names), inline=False)
+        
+        controllers = repositories.relationship.get_parents(
+            str(interaction.guild.id), 
+            entity.id, 
+            RelationshipType.CONTROLS.value
+        )
+        if controllers:
+            controller_names = [e.name for e in controllers]
+            embed.add_field(name="Controlled By", value=", ".join(controller_names), inline=False)
         
         # Add notes if any
         if entity.notes:
@@ -411,7 +465,8 @@ class ConfirmDeleteEntityView(discord.ui.View):
 
     @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
     async def confirm_delete(self, interaction: discord.Interaction, button: discord.ui.Button):
-        repositories.entity.delete_entity(self.entity.id)
+        # Delete the entity (this will also delete all relationships)
+        repositories.entity.delete_entity(str(interaction.guild.id), self.entity.id)
         await interaction.response.edit_message(
             content=f"✅ Deleted entity `{self.entity.name}`.",
             view=None

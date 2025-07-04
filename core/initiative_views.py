@@ -104,32 +104,6 @@ class BasePinnedInitiativeView(ABC, discord.ui.View):
         """Update the initiative message instead of sending a new one"""
         message = await self.get_pinned_initiative_message(interaction)
         
-        """ try:
-            # Always use message.edit rather than interaction.response.edit_message
-            # This ensures we're updating the pinned message, not responding to the interaction
-            await message.edit(content=content, embed=embed, view=view)
-            
-            # If the interaction hasn't been responded to yet, send a deferred message update
-            # or acknowledge the interaction to prevent "interaction failed" errors
-            if not interaction.response.is_done():
-                await interaction.response.defer(ephemeral=True, thinking=False)
-                
-            return message
-        except Exception as e:
-            logging.error(f"Error updating initiative message: {e}")
-            # Fallback to sending a new message if editing fails
-            if not interaction.response.is_done():
-                await interaction.response.send_message(
-                    "⚠️ Failed to update the initiative message. The previous initiative message may have been deleted.",
-                    ephemeral=True
-                )
-            else:
-                await interaction.followup.send(
-                    "⚠️ Failed to update the initiative message. The previous initiative message may have been deleted.",
-                    ephemeral=True
-                )
-            return None """
-        
         if embed is None or content is None:
             embed, content = await self.create_initiative_content()
         

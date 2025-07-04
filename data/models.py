@@ -16,7 +16,6 @@ class Character:
     name: str
     owner_id: str
     entity_type: str
-    parent_entity_id: Optional[str] = None
     system: Optional[str] = None
     system_specific_data: Optional[Dict[str, Any]] = None
     notes: List[str] = None
@@ -27,8 +26,6 @@ class Character:
             self.notes = []
         if self.system_specific_data is None:
             self.system_specific_data = {}
-        if self.parent_entity_id is None:
-            self.parent_entity_id = ""
     
     @property
     def is_npc(self) -> bool:
@@ -194,7 +191,6 @@ class Entity:
     name: str
     owner_id: str
     entity_type: str
-    parent_entity_id: Optional[str]
     system: str
     system_specific_data: Dict[str, Any]
     notes: List[str]
