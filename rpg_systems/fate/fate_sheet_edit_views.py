@@ -43,6 +43,19 @@ class FateSheetEditView(ui.View):
             )
         )
 
+    @ui.button(label="Edit Notes", style=discord.ButtonStyle.secondary, row=2)
+    async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
+        character = get_character(self.char_id)
+        notes = "\n".join(character.notes) if character and character.notes else ""
+        await interaction.response.send_modal(
+            EditNotesModal(
+                self.char_id,
+                notes,
+                SYSTEM,
+                lambda editor_id, char_id: (get_character(char_id).format_full_sheet(), FateSheetEditView(editor_id, char_id))
+            )
+        )
+
     @ui.button(label="Edit Aspects", style=discord.ButtonStyle.secondary, row=2)
     async def edit_aspects(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.edit_message(content="Editing aspects:", view=EditAspectsView(interaction.guild.id, self.editor_id, self.char_id))
@@ -59,20 +72,7 @@ class FateSheetEditView(ui.View):
             ephemeral=True
         )
 
-    @ui.button(label="Edit Notes", style=discord.ButtonStyle.secondary, row=2)
-    async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
-        character = get_character(self.char_id)
-        notes = "\n".join(character.notes) if character and character.notes else ""
-        await interaction.response.send_modal(
-            EditNotesModal(
-                self.char_id,
-                notes,
-                SYSTEM,
-                lambda editor_id, char_id: (get_character(char_id).format_full_sheet(), FateSheetEditView(editor_id, char_id))
-            )
-        )
-
-    @ui.button(label="Edit Stunts", style=discord.ButtonStyle.secondary, row=3)
+    @ui.button(label="Edit Stunts", style=discord.ButtonStyle.secondary, row=2)
     async def edit_stunts(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.edit_message(content="Editing stunts:", view=EditStuntsView(interaction.guild.id, self.editor_id, self.char_id))
 

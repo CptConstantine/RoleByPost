@@ -1,7 +1,7 @@
 from core import initiative_types, initiative_views, scene_views
 from core.models import BaseInitiative, GenericEntity
-from rpg_systems.fate import fate_character, fate_roll_modifiers, fate_roll_views, fate_scene_views, fate_sheet, fate_sheet_edit_views
-from rpg_systems.mgt2e import mgt2e_character, mgt2e_roll_modifiers, mgt2e_roll_views, mgt2e_scene_views, mgt2e_sheet, mgt2e_sheet_edit_views
+from rpg_systems.fate import fate_character, fate_roll_modifiers, fate_roll_views, fate_scene_views, fate_sheet_edit_views
+from rpg_systems.mgt2e import mgt2e_character, mgt2e_roll_modifiers, mgt2e_roll_views, mgt2e_scene_views, mgt2e_sheet_edit_views
 from rpg_systems.generic import generic_character
 
 def get_specific_character(system: str):
