@@ -4,6 +4,7 @@ from enum import Enum
 import json
 from typing import Any, ClassVar, Dict, List, Optional
 import discord
+import discord.ui as ui
 from data.models import Relationship
 
 class NotesMixin:
@@ -177,25 +178,34 @@ class EntityJSONEncoder(json.JSONEncoder):
 
 class EntityType(Enum):
     """Standard entity types across all systems"""
+    GENERIC = "generic"
     PC = "pc"
     NPC = "npc"
-    GENERIC = "generic"
+    COMPANION = "companion"  # A character that is not a PC but is controlled by a player
+    ITEM = "item"  # Generic item, can be used in inventory
     
     def __str__(self):
         return self.value
+    
+    @staticmethod
+    def get_type_from_str(entity_type_str: str) -> 'EntityType':
+        """Get the EntityType enum member from a string."""
+        try:
+            return EntityType(entity_type_str.lower())
+        except ValueError:
+            raise ValueError(f"Unknown entity type: {entity_type_str}")
     
 class RelationshipType(Enum):
     """Types of relationships between entities"""
-    OWNS = "owns"           # General ownership
-    CONTROLS = "controls"   # Can speak as/control in combat
-    COMPANION = "companion" # Equal partner relationship
-    MINION = "minion"      # Subordinate but not owned
-    HIRED = "hired"        # Temporary employment
-    ALLIED = "allied"      # Friendly relationship
-    ENEMY = "enemy"        # Hostile relationship
+    POSSESSES = "possesses" # For Inventory
+    CONTROLS = "controls"   # Can speak as this entity
     
     def __str__(self):
         return self.value
+    
+    @staticmethod
+    def get_all_dict() -> Dict[str, 'RelationshipType']:
+        return {name: member for name, member in RelationshipType.__members__.items()}
 
 @dataclass
 class EntityDefaults:
@@ -313,7 +323,7 @@ class BaseEntity(BaseRpgObj):
     
     def get_owner(self) -> Optional['BaseEntity']:
         """Get the entity that owns this entity (if any)"""
-        owners = self.get_parents(RelationshipType.OWNS.value)
+        owners = self.get_parents(RelationshipType.POSSESSES.value)
         return owners[0] if owners else None
     
     def get_controlled_entities(self) -> List['BaseEntity']:
@@ -394,30 +404,6 @@ class BaseCharacter(BaseEntity):
     def is_npc(self, value: bool):
         self.data["entity_type"] = "npc" if value else "pc"
 
-    @staticmethod
-    def build_entity_dict(
-        id: str, 
-        name: str, 
-        owner_id: str, 
-        is_npc: bool,
-        notes: List[str] = None, 
-        avatar_url: str = None, 
-        system_specific_fields: Dict[str, Any] = None
-    ) -> Dict[str, Any]:
-        """Helper method to create a standardized character dictionary."""
-        # Convert is_npc to EntityType
-        entity_type = EntityType.NPC if is_npc else EntityType.PC
-        
-        return BaseEntity.build_entity_dict(
-            id=id,
-            name=name,
-            owner_id=owner_id,
-            entity_type=entity_type,
-            notes=notes,
-            avatar_url=avatar_url,
-            system_specific_fields=system_specific_fields
-        )
-
     def format_npc_scene_entry(self, is_gm: bool) -> str:
         """Return a string for displaying this character in a scene summary. Override in subclasses."""
         lines = [f"**{self.name or 'NPC'}**"]
@@ -441,3 +427,116 @@ class BaseCharacter(BaseEntity):
         Should return a discord.ui.View or send a message with the result.
         """
         pass
+
+class GenericCompanion(BaseCharacter):
+    """
+    System-agnostic companion class that any system can use if there is no system-specific companion implementation.
+    """
+    ENTITY_DEFAULTS = EntityDefaults({
+        EntityType.COMPANION: { }
+    })
+    
+    SUPPORTED_ENTITY_TYPES: ClassVar[List[EntityType]] = [EntityType.COMPANION]
+    
+    def __init__(self, data: Dict[str, Any]):
+        super().__init__(data)
+        if self.entity_type != EntityType.COMPANION:
+            self.entity_type = EntityType.COMPANION
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "GenericCompanion":
+        return cls(data)
+    
+    def format_full_sheet(self) -> discord.Embed:
+        """Format the companion sheet"""
+        embed = discord.Embed(
+            title=f"{self.name or 'Companion'} (Companion)",
+            color=discord.Color.blue()
+        )
+        
+        # Add notes
+        notes = self.notes
+        if notes:
+            notes_display = "\n".join(notes)
+            embed.add_field(name="Notes", value=notes_display, inline=False)
+        
+        return embed
+    
+    def format_npc_scene_entry(self, is_gm: bool) -> str:
+        """Format companion entry for scene display"""
+        lines = [f"**{self.name or 'Companion'}** (Companion)"]
+        
+        if is_gm and self.notes:
+            notes_display = "\n".join(self.notes)
+            lines.append(f"**Notes:** *{notes_display}*")
+        
+        return "\n".join(lines)
+    
+    async def edit_requested_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
+        """Handle roll request for companions - uses generic system"""
+        from rpg_systems.generic.generic_character import GenericRollModifiers, GenericRollModifiersView
+        
+        roll_formula_obj = GenericRollModifiers(roll_parameters)
+        view = GenericRollModifiersView(roll_formula_obj, difficulty)
+        
+        await interaction.response.send_message(
+            content=f"Rolling for {self.name}. Adjust as needed:",
+            view=view,
+            ephemeral=True
+        )
+    
+    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
+        """Send roll result for companions"""
+        from core.utils import roll_formula
+        
+        # Get modifiers and calculate total
+        modifiers = roll_formula_obj.get_modifiers(self)
+        total_modifier = sum(int(mod) for mod in modifiers.values() if str(mod).lstrip('-').isdigit())
+        
+        # Roll dice
+        result = roll_formula("1d20", total_modifier)
+        
+        # Format result message
+        modifier_text = " + ".join([f"{k}: {v}" for k, v in modifiers.items()]) if modifiers else "No modifiers"
+        
+        embed = discord.Embed(
+            title=f"🎲 {self.name} Roll Result",
+            description=f"**Result:** {result}",
+            color=discord.Color.blue()
+        )
+        
+        embed.add_field(name="Modifiers", value=modifier_text, inline=False)
+        
+        if difficulty:
+            success = result >= difficulty
+            embed.add_field(
+                name="Success", 
+                value=f"{'✅ Success' if success else '❌ Failure'} (Target: {difficulty})",
+                inline=False
+            )
+        
+        await interaction.response.send_message(embed=embed)
+
+class GenericCompanionSheetEditView(ui.View):
+    """Generic sheet edit view for companions - simpler than full character sheets"""
+    
+    def __init__(self, editor_id: int, char_id: str):
+        super().__init__(timeout=120)
+        self.editor_id = editor_id
+        self.char_id = char_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.editor_id:
+            await interaction.response.send_message("You can't edit this character.", ephemeral=True)
+            return False
+        return True
+
+    @ui.button(label="Edit Name", style=discord.ButtonStyle.secondary, row=0)
+    async def edit_name(self, interaction: discord.Interaction, button: ui.Button):
+        from core.shared_views import EditNameModal
+        await interaction.response.send_modal(EditNameModal(self.char_id, "generic"))
+
+    @ui.button(label="Edit Notes", style=discord.ButtonStyle.secondary, row=0)
+    async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
+        from core.shared_views import EditNotesModal
+        await interaction.response.send_modal(EditNotesModal(self.char_id, "generic"))

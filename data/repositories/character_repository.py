@@ -1,9 +1,8 @@
 from typing import List, Optional
 from .base_repository import BaseRepository
 from data.models import Character, ActiveCharacter
-from core.models import BaseCharacter, EntityJSONEncoder, EntityType
+from core.models import BaseCharacter, BaseEntity, EntityJSONEncoder, EntityType
 import json
-import uuid
 import core.factories as factories
 
 class CharacterRepository(BaseRepository[Character]):
@@ -56,14 +55,14 @@ class CharacterRepository(BaseRepository[Character]):
             return None
             
         # Get the system-specific character class
-        CharacterClass = factories.get_specific_character(character.system)
+        CharacterClass = factories.get_specific_character(character.system, EntityType(character.entity_type))
         
         # Create the character dict using the helper method
-        character_dict = BaseCharacter.build_entity_dict(
+        character_dict = BaseEntity.build_entity_dict(
             id=character.id,
             name=character.name,
             owner_id=character.owner_id,
-            is_npc=character.entity_type == 'npc',
+            entity_type=EntityType.get_type_from_str(character.entity_type),
             notes=character.notes,
             avatar_url=character.avatar_url,
             system_specific_fields=character.system_specific_data
@@ -77,30 +76,30 @@ class CharacterRepository(BaseRepository[Character]):
 
     def get_by_id(self, id: str) -> Optional[BaseCharacter]:
         """Get character by ID"""
-        query = f"SELECT * FROM {self.table_name} WHERE id = %s AND entity_type IN ('pc', 'npc')"
+        query = f"SELECT * FROM {self.table_name} WHERE id = %s"
         character = self.execute_query(query, (str(id),), fetch_one=True)
         return self._convert_to_base_character(character)
 
     def get_by_name(self, guild_id: str, name: str) -> Optional[BaseCharacter]:
         """Get character by name within a guild"""
-        query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND name = %s AND entity_type IN ('pc', 'npc')"
+        query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND name = %s"
         character = self.execute_query(query, (str(guild_id), name), fetch_one=True)
         return self._convert_to_base_character(character)
 
     def get_all_by_guild(self, guild_id: str, system: str = None) -> List[BaseCharacter]:
         """Get all characters for a guild, optionally filtered by system"""
         if system:
-            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND system = %s AND entity_type IN ('pc', 'npc') ORDER BY name"
+            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND system = %s ORDER BY name"
             characters = self.execute_query(query, (str(guild_id), system))
         else:
-            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND entity_type IN ('pc', 'npc') ORDER BY name"
+            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s ORDER BY name"
             characters = self.execute_query(query, (str(guild_id),))
         return self._convert_list_to_base_characters(characters)
 
     def get_user_characters(self, guild_id: int, user_id: int, include_npcs: bool = False) -> List[BaseCharacter]:
         """Get all characters owned by a user"""
         if include_npcs:
-            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND owner_id = %s AND entity_type IN ('pc', 'npc') ORDER BY name"
+            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND owner_id = %s ORDER BY name"
         else:
             query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND owner_id = %s AND entity_type = 'pc' ORDER BY name"
         
@@ -115,13 +114,10 @@ class CharacterRepository(BaseRepository[Character]):
 
     def upsert_character(self, guild_id, character: BaseCharacter, system: str) -> None:
         """Save or update a BaseCharacter by converting it to Character first"""
-        CharacterClass = factories.get_specific_character(system)
+        CharacterClass = factories.get_specific_character(system, character.entity_type)
 
         # Use the system's defined fields
-        if character.is_npc:
-            system_fields = CharacterClass.ENTITY_DEFAULTS.get_defaults(EntityType.NPC)
-        else:
-            system_fields = CharacterClass.ENTITY_DEFAULTS.get_defaults(EntityType.PC)
+        system_fields = CharacterClass.ENTITY_DEFAULTS.get_defaults(character.entity_type)
 
         system_specific_data = {}
         for key in system_fields:
@@ -154,7 +150,7 @@ class CharacterRepository(BaseRepository[Character]):
             repositories.relationship.delete_all_relationships_for_entity(str(guild_id), character_id)
             
         # Delete the character itself
-        query = f"DELETE FROM {self.table_name} WHERE id = %s AND entity_type IN ('pc', 'npc')"
+        query = f"DELETE FROM {self.table_name} WHERE id = %s"
         self.execute_query(query, (character_id,))
 
     def get_character_by_name(self, guild_id: int, name: str) -> Optional[BaseCharacter]:

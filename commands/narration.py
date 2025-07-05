@@ -1,6 +1,6 @@
 import re
 import discord
-from core.models import BaseCharacter
+from core.models import BaseCharacter, BaseEntity, EntityType
 import core.factories as factories
 from data.repositories.repository_factory import repositories
 
@@ -103,7 +103,7 @@ async def process_narration(message: discord.Message):
                 alias = npc_name  # Use the NPC name as an alias if no alias was provided
             
             # Create a temporary character for display
-            character_dict = BaseCharacter.build_entity_dict(f"temp_{npc_name.lower().replace(' ', '_')}", npc_name, user_id, is_npc=True, notes=[])
+            character_dict = BaseEntity.build_entity_dict(f"temp_{npc_name.lower().replace(' ', '_')}", npc_name, user_id, entity_type=EntityType.NPC, notes=[])
             CharacterClass = factories.get_specific_character(repositories.server.get_system(guild_id))
             character = CharacterClass.from_dict(character_dict)
     else:

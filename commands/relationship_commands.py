@@ -74,24 +74,17 @@ class RelationshipCommands(commands.Cog):
 
     async def relationship_type_autocomplete(self, interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
         """Autocomplete for relationship types"""
-        relationship_types = [
-            ("Owns", RelationshipType.OWNS.value),
-            ("Controls", RelationshipType.CONTROLS.value),
-            ("Companion", RelationshipType.COMPANION.value),
-            ("Minion", RelationshipType.MINION.value),
-            ("Hired", RelationshipType.HIRED.value),
-            ("Allied", RelationshipType.ALLIED.value),
-            ("Enemy", RelationshipType.ENEMY.value),
-        ]
+        relationship_types = RelationshipType.get_all_dict()
         
         # Filter based on current input
         if current:
-            relationship_types = [(name, value) for name, value in relationship_types 
-                                if current.lower() in name.lower()]
+            filtered_types = {name: value for name, value in relationship_types.items() if current.lower() in name.lower()}
+        else:
+            filtered_types = relationship_types
         
         return [
-            app_commands.Choice(name=name, value=value)
-            for name, value in relationship_types
+            app_commands.Choice(name=name, value=value.value)
+            for name, value in filtered_types.items()
         ]
 
     # Create the relationship command group
@@ -110,7 +103,7 @@ class RelationshipCommands(commands.Cog):
     async def create_relationship(self, interaction: discord.Interaction, from_entity: str, to_entity: str, relationship_type: str, description: str = None):
         """Create a relationship between two entities"""
         # Check GM permissions for certain relationship types
-        if relationship_type in [RelationshipType.OWNS.value, RelationshipType.CONTROLS.value]:
+        if relationship_type in [RelationshipType.POSSESSES.value, RelationshipType.CONTROLS.value]:
             if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
                 await interaction.response.send_message("❌ Only GMs can create ownership and control relationships.", ephemeral=True)
                 return
@@ -163,23 +156,24 @@ class RelationshipCommands(commands.Cog):
     @app_commands.autocomplete(relationship_type=relationship_type_autocomplete)
     async def remove_relationship(self, interaction: discord.Interaction, from_entity: str, to_entity: str, relationship_type: str = None):
         """Remove a relationship between two entities"""
-        # Check GM permissions for certain relationship types
-        if relationship_type in [RelationshipType.OWNS.value, RelationshipType.CONTROLS.value]:
-            if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-                await interaction.response.send_message("❌ Only GMs can remove ownership and control relationships.", ephemeral=True)
-                return
         
         # Get the entities - try both character and entity repositories
-        from_char = self._find_entity_by_name(interaction.guild.id, from_entity)
-        to_char = self._find_entity_by_name(interaction.guild.id, to_entity)
+        from_entity = self._find_entity_by_name(interaction.guild.id, from_entity)
+        to_entity = self._find_entity_by_name(interaction.guild.id, to_entity)
         
-        if not from_char or not to_char:
+        if not from_entity or not to_entity:
             await interaction.response.send_message("❌ One or both entities not found.", ephemeral=True)
             return
         
+        # Check permissions for certain relationship types
+        if relationship_type in [RelationshipType.POSSESSES.value, RelationshipType.CONTROLS.value]:
+            if from_entity.owner_id != interaction.user.id and not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+                await interaction.response.send_message("❌ Only owners or GMs can remove ownership and control relationships.", ephemeral=True)
+                return
+        
         # Remove the relationship
         success = repositories.relationship.delete_relationships_by_entities(
-            str(interaction.guild.id), from_char.id, to_char.id, relationship_type
+            str(interaction.guild.id), from_entity.id, to_entity.id, relationship_type
         )
         
         if success:
@@ -283,10 +277,10 @@ class RelationshipCommands(commands.Cog):
             return
         
         # Remove existing ownership relationships
-        existing_owners = repositories.relationship.get_parents(str(interaction.guild.id), owned_char.id, RelationshipType.OWNS.value)
+        existing_owners = repositories.relationship.get_parents(str(interaction.guild.id), owned_char.id, RelationshipType.POSSESSES.value)
         for owner in existing_owners:
             repositories.relationship.delete_relationships_by_entities(
-                str(interaction.guild.id), owner.id, owned_char.id, RelationshipType.OWNS.value
+                str(interaction.guild.id), owner.id, owned_char.id, RelationshipType.POSSESSES.value
             )
         
         # Create new ownership relationship
@@ -294,7 +288,7 @@ class RelationshipCommands(commands.Cog):
             str(interaction.guild.id),
             new_owner_char.id,
             owned_char.id,
-            RelationshipType.OWNS.value,
+            RelationshipType.POSSESSES.value,
             {"transferred_by": str(interaction.user.id)}
         )
         

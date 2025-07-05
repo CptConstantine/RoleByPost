@@ -12,23 +12,10 @@ import core.factories as factories
 async def entity_type_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
     """Autocomplete for entity types based on current system"""
     system = repositories.server.get_system(str(interaction.guild.id))
-    
-    # Get available entity types for the current system
-    entity_types = []
-    if system == "generic":
-        entity_types = ["generic"]
-    elif system == "fate":
-        entity_types = ["generic"]
-    elif system == "mgt2e":
-        entity_types = ["generic"]
-    else:
-        entity_types = ["generic"]
+    valid_types = factories.get_system_entity_types(system)
     
     # Filter based on user input
-    filtered_types = [
-        entity_type for entity_type in entity_types 
-        if current.lower() in entity_type.lower()
-    ]
+    filtered_types = [entity_type for entity_type in valid_types if current.lower() in entity_type.value.lower()]
     
     return [
         app_commands.Choice(name=entity_type.title(), value=entity_type)
@@ -57,7 +44,7 @@ async def entity_name_autocomplete(interaction: discord.Interaction, current: st
         for entity in filtered_entities[:25]
     ]
 
-async def parent_entity_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+async def top_level_entity_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
     """Autocomplete for parent entities - entities that can own other entities"""
     is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
     
@@ -93,20 +80,17 @@ class EntityCommands(commands.Cog):
     @entity_group.command(name="create", description="Create a new entity")
     @app_commands.describe(
         entity_type="Type of entity to create",
-        name="Name for the new entity",
-        parent_entity="Optional: Parent entity that will own this entity"
+        name="Name for the new entity"
     )
     @app_commands.autocomplete(
-        entity_type=entity_type_autocomplete,
-        parent_entity=parent_entity_autocomplete
+        entity_type=entity_type_autocomplete
     )
     @channel_restriction.no_ic_channels()
     async def entity_create(
         self, 
         interaction: discord.Interaction, 
         entity_type: str, 
-        name: str,
-        parent_entity: str = None
+        name: str
     ):
         """Create a new entity"""
         await interaction.response.defer(ephemeral=True)
@@ -114,15 +98,9 @@ class EntityCommands(commands.Cog):
         system = repositories.server.get_system(str(interaction.guild.id))
         
         # Validate entity type for current system
-        valid_types = []
-        if system == "generic":
-            valid_types = ["generic"]
-        elif system == "fate":
-            valid_types = ["generic"]
-        elif system == "mgt2e":
-            valid_types = ["generic"]
+        valid_types = factories.get_system_entity_types(system)
         
-        if entity_type not in valid_types:
+        if entity_type not in [type.value for type in valid_types]:
             await interaction.followup.send(f"❌ Invalid entity type '{entity_type}' for {system.upper()} system.", ephemeral=True)
             return
         
@@ -132,59 +110,23 @@ class EntityCommands(commands.Cog):
             await interaction.followup.send(f"❌ An entity named `{name}` already exists.", ephemeral=True)
             return
         
-        # Validate parent entity if specified
-        parent = None
-        if parent_entity and parent_entity.strip():
-            parent = repositories.entity.get_by_name(str(interaction.guild.id), parent_entity)
-            if not parent:
-                await interaction.followup.send(f"❌ Parent entity `{parent_entity}` not found.", ephemeral=True)
-                return
-            
-            # Check if user can use this entity as a parent
-            is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
-            if not is_gm and str(parent.owner_id) != str(interaction.user.id):
-                await interaction.followup.send("❌ You can only create entities under entities you own.", ephemeral=True)
-                return
-        
         # Create the entity
         entity_id = str(uuid.uuid4())
         EntityClass = factories.get_specific_entity(system, entity_type)
-        
-        # Map entity type string to EntityType enum
-        if entity_type == "generic":
-            enum_type = EntityType.GENERIC
-        elif entity_type == "extra":
-            enum_type = EntityType.GENERIC  # Fate extras use generic type with system-specific handling
-        else:
-            enum_type = EntityType.GENERIC  # Default for system-specific types
-        
         entity_dict = BaseEntity.build_entity_dict(
             id=entity_id,
             name=name,
             owner_id=str(interaction.user.id),
-            entity_type=enum_type
+            entity_type=entity_type
         )
         
         entity = EntityClass(entity_dict)
-        entity.apply_defaults(entity_type=enum_type, guild_id=str(interaction.guild.id))
+        entity.apply_defaults(entity_type=entity_type, guild_id=str(interaction.guild.id))
         
         # Save the entity first
         repositories.entity.upsert_entity(str(interaction.guild.id), entity, system=system)
         
-        # Create ownership relationship if parent specified
-        if parent:
-            repositories.relationship.create_relationship(
-                guild_id=str(interaction.guild.id),
-                from_entity_id=parent.id,
-                to_entity_id=entity_id,
-                relationship_type=RelationshipType.OWNS.value,
-                metadata={"created_by": str(interaction.user.id)}
-            )
-            parent_info = f" owned by **{parent_entity}**"
-        else:
-            parent_info = ""
-        
-        await interaction.followup.send(f"✅ Created {entity_type}: **{name}**{parent_info}", ephemeral=True)
+        await interaction.followup.send(f"✅ Created {entity_type}: **{name}**", ephemeral=True)
 
     @entity_group.command(name="delete", description="Delete an entity")
     @app_commands.describe(entity_name="Name of the entity to delete")
@@ -207,7 +149,7 @@ class EntityCommands(commands.Cog):
         owned_entities = repositories.relationship.get_children(
             str(interaction.guild.id), 
             entity.id, 
-            RelationshipType.OWNS.value
+            RelationshipType.POSSESSES.value
         )
         
         if owned_entities:
@@ -234,7 +176,7 @@ class EntityCommands(commands.Cog):
         show_relationships="Show ownership relationships"
     )
     @app_commands.autocomplete(
-        owner_entity=parent_entity_autocomplete,
+        owner_entity=top_level_entity_autocomplete,
         entity_type=entity_type_autocomplete
     )
     @channel_restriction.no_ic_channels()
@@ -259,7 +201,7 @@ class EntityCommands(commands.Cog):
             entities = repositories.relationship.get_children(
                 str(interaction.guild.id), 
                 owner.id, 
-                RelationshipType.OWNS.value
+                RelationshipType.POSSESSES.value
             )
             title = f"Entities owned by {owner.name}"
         else:
@@ -272,7 +214,7 @@ class EntityCommands(commands.Cog):
                 owners = repositories.relationship.get_parents(
                     str(interaction.guild.id), 
                     entity.id, 
-                    RelationshipType.OWNS.value
+                    RelationshipType.POSSESSES.value
                 )
                 if not owners:  # No owners = top-level
                     entities.append(entity)
@@ -298,7 +240,7 @@ class EntityCommands(commands.Cog):
                 owned_entities = repositories.relationship.get_children(
                     str(interaction.guild.id), 
                     entity.id, 
-                    RelationshipType.OWNS.value
+                    RelationshipType.POSSESSES.value
                 )
                 
                 # Get controlled entities
@@ -336,7 +278,7 @@ class EntityCommands(commands.Cog):
                     owned_entities = repositories.relationship.get_children(
                         str(interaction.guild.id), 
                         entity.id, 
-                        RelationshipType.OWNS.value
+                        RelationshipType.POSSESSES.value
                     )
                     owned_info = f" ({len(owned_entities)} owned)" if owned_entities else ""
                     entity_list.append(f"• {entity.name}{owned_info}")
@@ -377,7 +319,7 @@ class EntityCommands(commands.Cog):
         owned_entities = repositories.relationship.get_children(
             str(interaction.guild.id), 
             entity.id, 
-            RelationshipType.OWNS.value
+            RelationshipType.POSSESSES.value
         )
         if owned_entities:
             owned_names = [e.name for e in owned_entities[:5]]  # Show first 5
@@ -390,7 +332,7 @@ class EntityCommands(commands.Cog):
         owners = repositories.relationship.get_parents(
             str(interaction.guild.id), 
             entity.id, 
-            RelationshipType.OWNS.value
+            RelationshipType.POSSESSES.value
         )
         if owners:
             owner_names = [e.name for e in owners]

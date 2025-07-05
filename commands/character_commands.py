@@ -2,7 +2,7 @@ import uuid
 import discord
 from discord import app_commands
 from discord.ext import commands
-from core.models import BaseCharacter, EntityType, RelationshipType
+from core.models import BaseCharacter, BaseEntity, EntityType, RelationshipType
 from data.repositories.repository_factory import repositories
 import core.factories as factories
 import json
@@ -23,7 +23,7 @@ async def pc_name_gm_autocomplete(interaction: discord.Interaction, current: str
     return [app_commands.Choice(name=name, value=name) for name in options[:25]]
 
 async def character_or_npc_autocomplete(interaction: discord.Interaction, current: str):
-    """Autocomplete for commands that can target both PCs and NPCs"""
+    """Autocomplete for commands that can target PCs, NPCs, and companions"""
     all_chars = repositories.character.get_all_by_guild(interaction.guild.id)
     
     # Check if user is GM
@@ -32,12 +32,65 @@ async def character_or_npc_autocomplete(interaction: discord.Interaction, curren
     # Filter characters based on permissions
     options = []
     for c in all_chars:
-        if c.is_npc and is_gm:
+        if c.entity_type == EntityType.NPC and is_gm:
             # GMs can see all NPCs
             options.append(c.name)
-        elif not c.is_npc and (str(c.owner_id) == str(interaction.user.id) or is_gm):
+        elif c.entity_type == EntityType.PC and (str(c.owner_id) == str(interaction.user.id) or is_gm):
             # Users can see their own PCs, GMs can see all PCs
             options.append(c.name)
+        elif c.entity_type == EntityType.COMPANION:
+            # Users can see companions they own or that are controlled by their characters
+            if str(c.owner_id) == str(interaction.user.id) or is_gm:
+                options.append(c.name)
+            else:
+                # Check if user owns any characters that control this companion
+                controlling_chars = repositories.relationship.get_parents(
+                    str(interaction.guild.id),
+                    c.id,
+                    RelationshipType.CONTROLS.value
+                )
+                
+                user_controls_companion = any(
+                    str(controller.owner_id) == str(interaction.user.id) 
+                    for controller in controlling_chars
+                )
+                
+                if user_controls_companion:
+                    options.append(c.name)
+    
+    # Filter by current input
+    filtered_options = [name for name in options if current.lower() in name.lower()]
+    return [app_commands.Choice(name=name, value=name) for name in filtered_options[:25]]
+
+async def companion_autocomplete(interaction: discord.Interaction, current: str):
+    """Autocomplete specifically for companion entities"""
+    all_chars = repositories.character.get_all_by_guild(interaction.guild.id)
+    
+    # Check if user is GM
+    is_gm = await repositories.server.has_gm_permission(interaction.guild.id, interaction.user)
+    
+    # Filter for companions only
+    options = []
+    for c in all_chars:
+        if c.entity_type == EntityType.COMPANION:
+            # Users can see companions they own or that are controlled by their characters
+            if str(c.owner_id) == str(interaction.user.id) or is_gm:
+                options.append(c.name)
+            else:
+                # Check if user owns any characters that control this companion
+                controlling_chars = repositories.relationship.get_parents(
+                    str(interaction.guild.id),
+                    c.id,
+                    RelationshipType.CONTROLS.value
+                )
+                
+                user_controls_companion = any(
+                    str(controller.owner_id) == str(interaction.user.id) 
+                    for controller in controlling_chars
+                )
+                
+                if user_controls_companion:
+                    options.append(c.name)
     
     # Filter by current input
     filtered_options = [name for name in options if current.lower() in name.lower()]
@@ -70,15 +123,15 @@ class CharacterCommands(commands.Cog):
         self.bot = bot
 
     character_group = app_commands.Group(name="character", description="Character management commands")
+
+    companion_group = app_commands.Group(name="companion", description="Companion management commands", parent=character_group)
     
     create_group = app_commands.Group(name="create", description="Create characters and NPCs", parent=character_group)
     
     @create_group.command(name="pc", description="Create a new player character (PC) with a required name")
     @app_commands.describe(
-        char_name="The name of your new character",
-        owner="Optional: Entity that will own this character (for companions, minions, etc.)"
+        char_name="The name of your new character"
     )
-    @app_commands.autocomplete(owner=owner_entity_autocomplete)
     async def create_pc(self, interaction: discord.Interaction, char_name: str, owner: str = None):
         await interaction.response.defer(ephemeral=True)
         system = repositories.server.get_system(interaction.guild.id)
@@ -88,58 +141,29 @@ class CharacterCommands(commands.Cog):
             await interaction.followup.send(f"❌ A character named `{char_name}` already exists.", ephemeral=True)
             return
         
-        # Validate owner entity if specified
-        owner_entity = None
-        if owner and owner.strip():
-            owner_entity = repositories.character.get_character_by_name(interaction.guild.id, owner)
-            if not owner_entity:
-                await interaction.followup.send(f"❌ Owner entity `{owner}` not found.", ephemeral=True)
-                return
-            
-            # Check if user can use this entity as an owner
-            is_gm = await repositories.server.has_gm_permission(interaction.guild.id, interaction.user)
-            if not is_gm and str(owner_entity.owner_id) != str(interaction.user.id):
-                await interaction.followup.send("❌ You can only create characters owned by entities you control.", ephemeral=True)
-                return
-        
         # Create a new Character instance using the helper method
         char_id = str(uuid.uuid4())
-        character_dict = BaseCharacter.build_entity_dict(
+        character_dict = BaseEntity.build_entity_dict(
             id=char_id,
             name=char_name,
             owner_id=interaction.user.id,
-            is_npc=False
+            entity_type=EntityType.PC
         )
         
         character = CharacterClass(character_dict)
         character.apply_defaults(EntityType.PC, guild_id=interaction.guild.id)
         repositories.character.upsert_character(interaction.guild.id, character, system=system)
         
-        # Create ownership relationship if owner specified
-        if owner_entity:
-            repositories.relationship.create_relationship(
-                guild_id=str(interaction.guild.id),
-                from_entity_id=owner_entity.id,
-                to_entity_id=char_id,
-                relationship_type=RelationshipType.OWNS.value,
-                metadata={"created_by": str(interaction.user.id)}
-            )
-            owner_info = f" owned by **{owner}**"
-        else:
-            owner_info = ""
-        
         # Set as active if no active character exists
         if not repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id):
             repositories.active_character.set_active_character(str(interaction.guild.id), str(interaction.user.id), char_id)
         
-        await interaction.followup.send(f'📝 Created {system.upper()} character: **{char_name}**{owner_info}.', ephemeral=True)
+        await interaction.followup.send(f'📝 Created {system.upper()} character: **{char_name}**.', ephemeral=True)
 
     @create_group.command(name="npc", description="GM: Create a new NPC with a required name")
     @app_commands.describe(
-        npc_name="The name of the new NPC",
-        owner="Optional: Entity that will own this NPC (for companions, minions, etc.)"
+        npc_name="The name of the new NPC"
     )
-    @app_commands.autocomplete(owner=owner_entity_autocomplete)
     async def create_npc(self, interaction: discord.Interaction, npc_name: str, owner: str = None):
         await interaction.response.defer(ephemeral=True)
         if not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
@@ -153,72 +177,34 @@ class CharacterCommands(commands.Cog):
             await interaction.followup.send(f"❌ An NPC named `{npc_name}` already exists.", ephemeral=True)
             return
         
-        # Validate owner entity if specified
-        owner_entity = None
-        if owner and owner.strip():
-            owner_entity = repositories.character.get_character_by_name(interaction.guild.id, owner)
-            if not owner_entity:
-                await interaction.followup.send(f"❌ Owner entity `{owner}` not found.", ephemeral=True)
-                return
-            
         # Create a new Character instance using the helper method
         npc_id = str(uuid.uuid4())
-        character_dict = BaseCharacter.build_entity_dict(
+        character_dict = BaseEntity.build_entity_dict(
             id=npc_id,
             name=npc_name,
             owner_id=interaction.user.id,
-            is_npc=True
+            entity_type=EntityType.NPC
         )
         
         character = CharacterClass(character_dict)
         character.apply_defaults(EntityType.NPC, guild_id=interaction.guild.id)
         repositories.character.upsert_character(interaction.guild.id, character, system=system)
         
-        # Create ownership relationship if owner specified
-        if owner_entity:
-            repositories.relationship.create_relationship(
-                guild_id=str(interaction.guild.id),
-                from_entity_id=owner_entity.id,
-                to_entity_id=npc_id,
-                relationship_type=RelationshipType.OWNS.value,
-                metadata={"created_by": str(interaction.user.id)}
-            )
-            owner_info = f" owned by **{owner}**"
-        else:
-            owner_info = ""
-        
-        await interaction.followup.send(f"🤖 Created NPC: **{npc_name}**{owner_info}", ephemeral=True)
+        await interaction.followup.send(f"🤖 Created NPC: **{npc_name}**", ephemeral=True)
 
     @character_group.command(name="list", description="List characters and NPCs")
     @app_commands.describe(
         show_npcs="Show NPCs (GM only)",
-        owned_by="Filter by owner entity",
         show_relationships="Show ownership relationships"
     )
-    @app_commands.autocomplete(owned_by=character_or_npc_autocomplete)
-    async def list_characters(self, interaction: discord.Interaction, show_npcs: bool = False, owned_by: str = None, show_relationships: bool = False):
+    async def list_characters(self, interaction: discord.Interaction, show_npcs: bool = False, show_relationships: bool = False):
         await interaction.response.defer(ephemeral=True)
         
         system = repositories.server.get_system(interaction.guild.id)
         
         # Get characters based on filters
-        if owned_by:
-            owner_entity = repositories.character.get_character_by_name(interaction.guild.id, owned_by)
-            if not owner_entity:
-                await interaction.followup.send(f"❌ Owner entity '{owned_by}' not found.", ephemeral=True)
-                return
-            
-            # Get entities owned by this entity
-            owned_entities = repositories.relationship.get_children(
-                str(interaction.guild.id), 
-                owner_entity.id, 
-                RelationshipType.OWNS.value
-            )
-            characters = owned_entities
-            title = f"Characters owned by {owned_by}"
-        else:
-            characters = repositories.character.get_all_by_guild(interaction.guild.id, system)
-            title = "Characters"
+        characters = repositories.character.get_all_by_guild(interaction.guild.id, system)
+        title = "Characters"
         
         # Filter by user's permissions
         if not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
@@ -246,32 +232,24 @@ class CharacterCommands(commands.Cog):
             # Show detailed relationship information
             character_info = []
             for char in characters:
-                owners = repositories.relationship.get_parents(
-                    str(interaction.guild.id), 
-                    char.id, 
-                    RelationshipType.OWNS.value
-                )
-                
                 controlled_by = repositories.relationship.get_parents(
                     str(interaction.guild.id), 
                     char.id, 
                     RelationshipType.CONTROLS.value
                 )
                 
-                owned_entities = repositories.relationship.get_children(
-                    str(interaction.guild.id), 
-                    char.id, 
-                    RelationshipType.OWNS.value
+                controls_entities = repositories.relationship.get_children(
+                    str(interaction.guild.id),
+                    char.id,
+                    RelationshipType.CONTROLS.value
                 )
                 
                 info = f"**{char.name}** ({'NPC' if char.is_npc else 'PC'})"
-                if owners:
-                    info += f"\n  *Owned by: {', '.join([o.name for o in owners])}*"
                 if controlled_by:
                     info += f"\n  *Controlled by: {', '.join([c.name for c in controlled_by])}*"
-                if owned_entities:
-                    info += f"\n  *Owns: {', '.join([e.name for e in owned_entities])}*"
-                
+                if controls_entities:
+                    info += f"\n  *Controls: {', '.join([e.name for e in controls_entities])}*"
+
                 character_info.append(info)
             
             embed.description = "\n\n".join(character_info)
@@ -283,13 +261,7 @@ class CharacterCommands(commands.Cog):
             if pcs:
                 pc_lines = []
                 for char in pcs:
-                    owned_entities = repositories.relationship.get_children(
-                        str(interaction.guild.id), 
-                        char.id, 
-                        RelationshipType.OWNS.value
-                    )
-                    owned_info = f" ({len(owned_entities)} owned)" if owned_entities else ""
-                    pc_lines.append(f"• {char.name}{owned_info}")
+                    pc_lines.append(f"• {char.name}")
                 
                 embed.add_field(
                     name=f"Player Characters ({len(pcs)})",
@@ -300,14 +272,8 @@ class CharacterCommands(commands.Cog):
             if npcs:
                 npc_lines = []
                 for char in npcs:
-                    owned_entities = repositories.relationship.get_children(
-                        str(interaction.guild.id), 
-                        char.id, 
-                        RelationshipType.OWNS.value
-                    )
-                    owned_info = f" ({len(owned_entities)} owned)" if owned_entities else ""
-                    npc_lines.append(f"• {char.name}{owned_info}")
-                
+                    npc_lines.append(f"• {char.name}")
+
                 embed.add_field(
                     name=f"NPCs ({len(npcs)})",
                     value="\n".join(npc_lines)[:1024],
@@ -336,17 +302,17 @@ class CharacterCommands(commands.Cog):
                 return
 
         # Check if this character owns other entities
-        owned_entities = repositories.relationship.get_children(
+        possesses_entities = repositories.relationship.get_children(
             str(interaction.guild.id), 
             character.id, 
-            RelationshipType.OWNS.value
+            RelationshipType.POSSESSES.value
         )
         
-        if owned_entities:
-            entity_names = [entity.name for entity in owned_entities]
+        if possesses_entities:
+            entity_names = [entity.name for entity in possesses_entities]
             await interaction.response.send_message(
-                f"❌ Cannot delete **{char_name}** because it owns other entities: {', '.join(entity_names)}.\n"
-                f"Please transfer or delete these entities first, or use `/relationship remove` to remove the ownership relationships.",
+                f"❌ Cannot delete **{char_name}** because it possesses other entities: {', '.join(entity_names)}.\n"
+                f"Please transfer or delete these entities first, or use `/relationship remove` to remove the possession relationships.",
                 ephemeral=True
             )
             return
@@ -360,8 +326,9 @@ class CharacterCommands(commands.Cog):
             ephemeral=True
         )
 
-    @character_group.command(name="sheet", description="View a character or NPC's full sheet")
-    @app_commands.describe(char_name="Leave blank to view your character, or enter an NPC name")
+    @character_group.command(name="sheet", description="View a character, NPC, or companion's full sheet")
+    @app_commands.describe(char_name="Leave blank to view your active character, or enter a character/NPC/companion name")
+    @app_commands.autocomplete(char_name=character_or_npc_autocomplete)
     async def sheet(self, interaction: discord.Interaction, char_name: str = None):
         character = None
         if not char_name:
@@ -375,179 +342,53 @@ class CharacterCommands(commands.Cog):
                 await interaction.response.send_message("❌ Character not found.", ephemeral=True)
                 return
 
-        if character.is_npc and not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
-            await interaction.response.send_message("❌ Only the GM can view NPCs.", ephemeral=True)
-            return
-
-        system = repositories.server.get_system(interaction.guild.id)
-        sheet_view = factories.get_specific_sheet_view(system, interaction.user.id, character.id)
-        embed = character.format_full_sheet()  # Call method directly on character
-        await interaction.response.send_message(embed=embed, view=sheet_view, ephemeral=True)
-
-    @character_group.command(name="export", description="Export your character or an NPC (if GM) as a JSON file")
-    @app_commands.describe(char_name="Leave blank to export your character, or enter an NPC name")
-    async def export(self, interaction: discord.Interaction, char_name: str = None):
-        await interaction.response.defer(ephemeral=True)
-        system = repositories.server.get_system(interaction.guild.id)
+        # Check permissions based on entity type
+        is_gm = await repositories.server.has_gm_permission(interaction.guild.id, interaction.user)
         
-        if char_name is None:
-            # Get user's PC
-            user_chars = repositories.character.get_user_characters(interaction.guild.id, interaction.user.id)
-            character = user_chars[0] if user_chars else None
-            if not character:
-                await interaction.followup.send("❌ You don't have a character to export.", ephemeral=True)
+        if character.entity_type == EntityType.NPC:
+            # NPCs can only be viewed by GMs
+            if not is_gm:
+                await interaction.response.send_message("❌ Only the GM can view NPCs.", ephemeral=True)
                 return
-        else:
-            character = repositories.character.get_character_by_name(interaction.guild.id, char_name)
-            if not character:
-                await interaction.followup.send("❌ Character not found.", ephemeral=True)
-                return
+        elif character.entity_type == EntityType.COMPANION:
+            # Companions can be viewed by their owner or by the owner of characters that control them
+            if str(character.owner_id) != str(interaction.user.id) and not is_gm:
+                # Check if user owns any characters that control this companion
+                controlling_chars = repositories.relationship.get_parents(
+                    str(interaction.guild.id),
+                    character.id,
+                    RelationshipType.CONTROLS.value
+                )
                 
-            if character.is_npc and not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
-                await interaction.followup.send("❌ Only the GM can export NPCs.", ephemeral=True)
+                user_controls_companion = any(
+                    str(controller.owner_id) == str(interaction.user.id) 
+                    for controller in controlling_chars
+                )
+                
+                if not user_controls_companion:
+                    await interaction.response.send_message(
+                        "❌ You can only view companions you own or that are controlled by your characters.", 
+                        ephemeral=True
+                    )
+                    return
+        elif character.entity_type == EntityType.PC:
+            # PCs can be viewed by their owner or GM
+            if str(character.owner_id) != str(interaction.user.id) and not is_gm:
+                await interaction.response.send_message("❌ You can only view your own characters.", ephemeral=True)
                 return
-            elif not character.is_npc and str(character.owner_id) != str(interaction.user.id):
-                await interaction.followup.send("❌ You can only export your own character.", ephemeral=True)
-                return
-        
-        # Export character data including relationships
-        export_data = character.data.copy()
-        export_data["system"] = system
-        
-        # Add relationship information to export
-        relationships = repositories.relationship.get_relationships_for_entity(
-            interaction.guild.id, 
-            character.id
-        )
-            
-        # Export relationships as metadata
-        export_data['relationships'] = []
-        for rel in relationships:
-            # Get the other entity's name for clarity
-            if rel.from_entity_id == character.id:
-                other_entity = repositories.character.get_by_id(rel.to_entity_id)
-                if other_entity:
-                    export_data['relationships'].append({
-                        'type': 'outgoing',
-                        'relationship_type': rel.relationship_type,
-                        'target_name': other_entity.name,
-                        'target_id': rel.to_entity_id,
-                        'metadata': rel.metadata
-                    })
-            else:
-                other_entity = repositories.character.get_by_id(rel.from_entity_id)
-                if other_entity:
-                    export_data['relationships'].append({
-                        'type': 'incoming',
-                        'relationship_type': rel.relationship_type,
-                        'source_name': other_entity.name,
-                        'source_id': rel.from_entity_id,
-                        'metadata': rel.metadata
-                    })
-        
-        import io
-        file_content = json.dumps(export_data, indent=2)
-        file = discord.File(io.BytesIO(file_content.encode('utf-8')), filename=f"{character.name}.json")
-        await interaction.followup.send(f"📁 Exported **{character.name}** with relationship data.", file=file, ephemeral=True)
 
-    @character_group.command(name="import", description="Import a character or NPC from a JSON file. The owner will be set to you")
-    @app_commands.describe(file="A .json file exported from this bot")
-    async def import_char(self, interaction: discord.Interaction, file: discord.Attachment):
-        await interaction.response.defer(ephemeral=True)
-        
-        if not file.filename.endswith('.json'):
-            await interaction.followup.send("❌ Only .json files are supported.", ephemeral=True)
-            return
-            
-        try:
-            file_bytes = await file.read()
-            data = json.loads(file_bytes.decode('utf-8'))
-        except Exception:
-            await interaction.followup.send("❌ Could not decode or parse the file. Make sure it's a valid JSON export from this bot.", ephemeral=True)
-            return
-            
         system = repositories.server.get_system(interaction.guild.id)
-        CharacterClass = factories.get_specific_character(system)
         
-        # Extract key fields from imported data
-        id = data.get("id") or str(uuid.uuid4())
-        name = data.get("name", "Imported Character")
-        is_npc = data.get("is_npc", False)
-        notes = data.get("notes", [])
-        avatar_url = data.get("avatar_url")
-        
-        # Use the helper method
-        character_dict = BaseCharacter.build_entity_dict(
-            id=id,
-            name=name,
-            owner_id=interaction.user.id,  # Always set owner to current user
-            is_npc=is_npc,
-            notes=notes,
-            avatar_url=avatar_url
+        # Get appropriate sheet view based on entity type
+        sheet_view = factories.get_specific_sheet_view(
+            system, 
+            interaction.user.id, 
+            character.id,
+            entity_type=character.entity_type
         )
         
-        # Copy over any system-specific fields
-        system_fields = CharacterClass.ENTITY_DEFAULTS.get_defaults(EntityType.NPC if is_npc else EntityType.PC)
-        for key in system_fields:
-            if key in data:
-                character_dict[key] = data[key]
-    
-        character = CharacterClass(character_dict)
-        character.apply_defaults(entity_type=EntityType.NPC if is_npc else EntityType.PC, guild_id=interaction.guild.id)
-        
-        if character.is_npc and not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
-            await interaction.followup.send("❌ Only GMs can import NPCs.", ephemeral=True)
-            return
-
-        # Save character first
-        repositories.character.upsert_character(interaction.guild.id, character, system=system)
-        
-        # Handle relationships if they exist in the export
-        relationships_created = 0
-        if 'relationships' in data:
-            for rel_data in data['relationships']:
-                try:
-                    if rel_data['type'] == 'outgoing':
-                        # This character has a relationship TO another entity
-                        # Try to find the target entity by name
-                        target_entity = repositories.character.get_character_by_name(
-                            interaction.guild.id, 
-                            rel_data['target_name']
-                        )
-                        if target_entity:
-                            repositories.relationship.create_relationship(
-                                str(interaction.guild.id),
-                                character.id,
-                                target_entity.id,
-                                rel_data['relationship_type'],
-                                rel_data.get('metadata', {})
-                            )
-                            relationships_created += 1
-                    elif rel_data['type'] == 'incoming':
-                        # Another entity has a relationship TO this character
-                        # Try to find the source entity by name
-                        source_entity = repositories.character.get_character_by_name(
-                            interaction.guild.id, 
-                            rel_data['source_name']
-                        )
-                        if source_entity:
-                            repositories.relationship.create_relationship(
-                                str(interaction.guild.id),
-                                source_entity.id,
-                                character.id,
-                                rel_data['relationship_type'],
-                                rel_data.get('metadata', {})
-                            )
-                            relationships_created += 1
-                except Exception as e:
-                    # Log the error but don't fail the entire import
-                    print(f"Error creating relationship during import: {e}")
-        
-        success_message = f"✅ Imported {'NPC' if character.is_npc else 'character'} **{character.name}**."
-        if relationships_created > 0:
-            success_message += f" Created {relationships_created} relationships."
-        
-        await interaction.followup.send(success_message, ephemeral=True)
+        embed = character.format_full_sheet()
+        await interaction.response.send_message(embed=embed, view=sheet_view, ephemeral=True)
 
     @character_group.command(name="transfer", description="GM: Transfer a PC to another player")
     @app_commands.describe(
@@ -732,6 +573,213 @@ class CharacterCommands(commands.Cog):
         )
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    @create_group.command(name="companion", description="Create a companion for your character")
+    @app_commands.describe(
+        companion_name="The name of the companion",
+        owner_character="The character that will control this companion (defaults to your active character)"
+    )
+    @app_commands.autocomplete(owner_character=pc_switch_name_autocomplete)
+    async def create_companion(self, interaction: discord.Interaction, companion_name: str, owner_character: str = None):
+        """Create a companion controlled by a character"""
+        await interaction.response.defer(ephemeral=True)
+        
+        # Determine the owner character
+        if owner_character:
+            owner_char = repositories.character.get_character_by_name(str(interaction.guild.id), owner_character)
+            if not owner_char:
+                await interaction.followup.send(f"❌ Character '{owner_character}' not found.", ephemeral=True)
+                return
+            
+            # Check if user owns this character or is GM
+            is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+            if not is_gm and str(owner_char.owner_id) != str(interaction.user.id):
+                await interaction.followup.send("❌ You can only create companions for characters you own.", ephemeral=True)
+                return
+        else:
+            # Use active character
+            owner_char = repositories.active_character.get_active_character(str(interaction.guild.id), str(interaction.user.id))
+            if not owner_char:
+                await interaction.followup.send("❌ No active character found. Use `/character switch` or specify an owner character.", ephemeral=True)
+                return
+        
+        # Check if companion name already exists
+        existing = repositories.character.get_character_by_name(str(interaction.guild.id), companion_name)
+        if existing:
+            await interaction.followup.send(f"❌ A character named '{companion_name}' already exists.", ephemeral=True)
+            return
+        
+        # Get system and companion class
+        system = repositories.server.get_system(str(interaction.guild.id))
+        CompanionClass = factories.get_specific_companion(system)
+        
+        # Create companion
+        companion_id = str(uuid.uuid4())
+        companion_dict = BaseEntity.build_entity_dict(
+            id=companion_id,
+            name=companion_name,
+            owner_id=str(interaction.user.id),  # User owns the companion
+            entity_type=EntityType.COMPANION,
+        )
+        
+        companion = CompanionClass(companion_dict)
+        companion.entity_type = EntityType.COMPANION
+        companion.apply_defaults(EntityType.COMPANION, guild_id=str(interaction.guild.id))
+        
+        # Save companion
+        repositories.character.upsert_character(str(interaction.guild.id), companion, system=system)
+        
+        # Create CONTROLS relationship
+        repositories.relationship.create_relationship(
+            str(interaction.guild.id),
+            owner_char.id,
+            companion_id,
+            RelationshipType.CONTROLS.value,
+            {"created_by": str(interaction.user.id)}
+        )
+        
+        await interaction.followup.send(
+            f"🐾 Created companion: **{companion_name}** controlled by **{owner_char.name}**",
+            ephemeral=True
+        )
+
+    @companion_group.command(name="list", description="List companions controlled by your characters")
+    @app_commands.describe(character_name="Optional: Show companions for a specific character")
+    @app_commands.autocomplete(character_name=pc_switch_name_autocomplete)
+    async def list_companions(self, interaction: discord.Interaction, character_name: str = None):
+        """List companions controlled by user's characters"""
+        await interaction.response.defer(ephemeral=True)
+        
+        if character_name:
+            # List companions for specific character
+            character = repositories.character.get_character_by_name(str(interaction.guild.id), character_name)
+            if not character:
+                await interaction.followup.send(f"❌ Character '{character_name}' not found.", ephemeral=True)
+                return
+            
+            # Check permissions
+            is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+            if not is_gm and str(character.owner_id) != str(interaction.user.id):
+                await interaction.followup.send("❌ You can only view companions for characters you own.", ephemeral=True)
+                return
+            
+            companions = repositories.relationship.get_children(
+                str(interaction.guild.id),
+                character.id,
+                RelationshipType.CONTROLS.value
+            )
+            companions = [c for c in companions if c.entity_type == EntityType.COMPANION]
+            
+            if not companions:
+                await interaction.followup.send(f"**{character.name}** has no companions.", ephemeral=True)
+                return
+            
+            embed = discord.Embed(
+                title=f"🐾 Companions controlled by {character.name}",
+                color=discord.Color.blue()
+            )
+            
+            companion_list = [f"• {comp.name}" for comp in companions]
+            embed.description = "\n".join(companion_list)
+            
+        else:
+            # List all companions controlled by user's characters
+            user_chars = repositories.character.get_user_characters(str(interaction.guild.id), str(interaction.user.id))
+            
+            all_companions = []
+            for char in user_chars:
+                companions = repositories.relationship.get_children(
+                    str(interaction.guild.id),
+                    char.id,
+                    RelationshipType.CONTROLS.value
+                )
+                companions = [c for c in companions if c.entity_type == EntityType.COMPANION]
+                
+                for comp in companions:
+                    all_companions.append((char.name, comp.name))
+            
+            if not all_companions:
+                await interaction.followup.send("You have no companions.", ephemeral=True)
+                return
+            
+            embed = discord.Embed(
+                title="🐾 Your Companions",
+                color=discord.Color.blue()
+            )
+            
+            # Group by controlling character
+            by_character = {}
+            for char_name, comp_name in all_companions:
+                if char_name not in by_character:
+                    by_character[char_name] = []
+                by_character[char_name].append(comp_name)
+            
+            for char_name, comp_names in by_character.items():
+                embed.add_field(
+                    name=f"Controlled by {char_name}",
+                    value="\n".join([f"• {name}" for name in comp_names]),
+                    inline=False
+                )
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @companion_group.command(name="transfer", description="Transfer control of a companion to another character")
+    @app_commands.describe(
+        companion_name="The companion to transfer",
+        new_controller="The character that will control the companion"
+    )
+    @app_commands.autocomplete(companion_name=companion_autocomplete)
+    @app_commands.autocomplete(new_controller=character_or_npc_autocomplete)
+    async def transfer_companion(self, interaction: discord.Interaction, companion_name: str, new_controller: str):
+        """Transfer control of a companion to another character"""
+        await interaction.response.defer(ephemeral=True)
+        
+        # Get companion
+        companion = repositories.character.get_character_by_name(str(interaction.guild.id), companion_name)
+        if not companion or companion.entity_type != EntityType.COMPANION:
+            await interaction.followup.send(f"❌ Companion '{companion_name}' not found.", ephemeral=True)
+            return
+        
+        # Get new controller
+        new_controller_char = repositories.character.get_character_by_name(str(interaction.guild.id), new_controller)
+        if not new_controller_char:
+            await interaction.followup.send(f"❌ Character '{new_controller}' not found.", ephemeral=True)
+            return
+        
+        # Check permissions
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        if not is_gm and str(companion.owner_id) != str(interaction.user.id):
+            await interaction.followup.send("❌ You can only transfer companions you own.", ephemeral=True)
+            return
+        
+        # Remove existing control relationships
+        existing_controllers = repositories.relationship.get_parents(
+            str(interaction.guild.id),
+            companion.id,
+            RelationshipType.CONTROLS.value
+        )
+        
+        for controller in existing_controllers:
+            repositories.relationship.delete_relationships_by_entities(
+                str(interaction.guild.id),
+                controller.id,
+                companion.id,
+                RelationshipType.CONTROLS.value
+            )
+        
+        # Create new control relationship
+        repositories.relationship.create_relationship(
+            str(interaction.guild.id),
+            new_controller_char.id,
+            companion.id,
+            RelationshipType.CONTROLS.value,
+            {"transferred_by": str(interaction.user.id)}
+        )
+        
+        await interaction.followup.send(
+            f"✅ **{new_controller}** now controls **{companion_name}**",
+            ephemeral=True
+        )
 
 
 class ConfirmDeleteCharacterView(discord.ui.View):

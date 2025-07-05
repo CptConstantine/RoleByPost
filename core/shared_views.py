@@ -168,7 +168,7 @@ class EditNameModal(ui.Modal, title="Edit Character Name"):
         self.character.name = new_name
         repositories.character.upsert_character(interaction.guild.id, self.character, self.system)
         embed = self.character.format_full_sheet()
-        view = factories.get_specific_sheet_view(self.system, interaction.user.id, self.character.id)
+        view = factories.get_specific_sheet_view(self.system, interaction.user.id, self.character.id, self.character.entity_type)
         await interaction.response.edit_message(content="✅ Name updated.", embed=embed, view=view)
 
 class EditNotesModal(ui.Modal, title="Edit Notes"):
@@ -187,8 +187,9 @@ class EditNotesModal(ui.Modal, title="Edit Notes"):
 
     async def on_submit(self, interaction: Interaction):
         self.character.notes = [line for line in self.notes_field.value.splitlines() if line.strip()]
+        repositories.character.upsert_character(interaction.guild.id, self.character, self.system)
         embed = self.character.format_full_sheet()
-        view = factories.get_specific_sheet_view(self.system, interaction.user.id, self.character.id)
+        view = factories.get_specific_sheet_view(self.system, interaction.user.id, self.character.id, self.character.entity_type)
         await interaction.response.edit_message(content="✅ Notes updated.", embed=embed, view=view)
 
 class RequestRollView(ui.View):

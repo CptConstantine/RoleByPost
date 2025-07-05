@@ -1,10 +1,15 @@
+from typing import List
 from core import initiative_types, initiative_views, scene_views
-from core.models import BaseInitiative, GenericEntity
+from core.models import BaseInitiative, EntityType, GenericCompanion, GenericCompanionSheetEditView, GenericEntity
 from rpg_systems.fate import fate_character, fate_roll_modifiers, fate_roll_views, fate_scene_views, fate_sheet_edit_views
 from rpg_systems.mgt2e import mgt2e_character, mgt2e_roll_modifiers, mgt2e_roll_views, mgt2e_scene_views, mgt2e_sheet_edit_views
 from rpg_systems.generic import generic_character
 
-def get_specific_character(system: str):
+def get_specific_character(system: str, entity_type: EntityType = None):
+    # If entity_type is COMPANION, use companion-specific views
+    if entity_type == EntityType.COMPANION:
+        return get_specific_companion(system)
+    
     if system == "fate":
         return fate_character.FateCharacter
     elif system == "mgt2e":
@@ -13,8 +18,20 @@ def get_specific_character(system: str):
         return generic_character.GenericCharacter
     else:
         raise ValueError(f"Unknown system: {system}")
+    
+def get_specific_companion(system: str):
+    """Get the appropriate companion class based on system"""
+    # For now, only GenericCompanion is implemented
+    return GenericCompanion
 
-def get_specific_sheet_view(system: str, editor_id: str, char_id: str):
+def get_specific_sheet_view(system: str, editor_id: str, char_id: str, entity_type: EntityType = None):
+    """Get the appropriate sheet view based on system and entity type"""
+    
+    # If entity_type is COMPANION, use companion-specific views
+    if entity_type == EntityType.COMPANION:
+        return get_specific_companion_sheet_view(system, editor_id, char_id)
+    
+    # Original logic for PCs/NPCs
     if system == "fate":
         return fate_sheet_edit_views.FateSheetEditView(editor_id=editor_id, char_id=char_id)
     elif system == "mgt2e":
@@ -23,6 +40,11 @@ def get_specific_sheet_view(system: str, editor_id: str, char_id: str):
         return generic_character.GenericSheetEditView(editor_id=editor_id, char_id=char_id)
     else:
         raise ValueError(f"Unknown system: {system}")
+
+def get_specific_companion_sheet_view(system: str, editor_id: str, char_id: str):
+    """Get companion sheet view for system, falling back to generic"""
+    # Just Generic for now until system-specific implementations
+    return GenericCompanionSheetEditView(editor_id=editor_id, char_id=char_id)
 
 def get_specific_initiative(initiative_type: str):
     if initiative_type == "popcorn":
@@ -98,3 +120,18 @@ def get_specific_entity(system: str, entity_type: str):
             raise ValueError(f"Unknown entity type '{entity_type}' for MGT2E system")
     else:
         raise ValueError(f"Unknown system: {system}")
+
+def get_system_entity_types(system: str) -> List[EntityType]:
+    """Get the available entity types for the given system"""
+    if system == "fate":
+        return [EntityType.GENERIC, EntityType.PC, EntityType.NPC, EntityType.COMPANION]
+    elif system == "mgt2e":
+        return [EntityType.GENERIC, EntityType.PC, EntityType.NPC, EntityType.COMPANION]
+    else:
+        return [EntityType.GENERIC, EntityType.PC, EntityType.NPC, EntityType.COMPANION]
+    
+def get_specific_companion(system: str):
+    """Get companion class for system, falling back to generic"""
+    # Check if system has a specific companion class
+    # Only GenericCompanion for now until system-specific companions are implemented
+    return GenericCompanion
