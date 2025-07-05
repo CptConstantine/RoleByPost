@@ -1,3 +1,8 @@
+
+DROP TABLE IF EXISTS zone_aspects;
+DROP TABLE IF EXISTS game_aspects;
+DROP TABLE IF EXISTS scene_aspects;
+
 -- Server settings
 CREATE TABLE IF NOT EXISTS server_settings (
     guild_id TEXT PRIMARY KEY,
