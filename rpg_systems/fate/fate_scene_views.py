@@ -32,9 +32,6 @@ class FateSceneView(BasePinnableSceneView):
                 description="This scene no longer exists.",
                 color=discord.Color.red()
             ), "❌ **SCENE ERROR** ❌"
-            
-        # Get system and sheet for formatting
-        sheet = factories.get_specific_sheet(SYSTEM)
         
         # Format scene content - standard part
                 
@@ -125,7 +122,7 @@ class FateSceneView(BasePinnableSceneView):
         for npc_id in npc_ids:
             npc = repositories.character.get_by_id(str(npc_id))
             if npc:
-                lines.append(sheet.format_npc_scene_entry(npc, is_gm=self.is_gm))
+                lines.append(npc.format_npc_scene_entry(is_gm=self.is_gm))
             
         if lines:
             description += "**NPCs:**\n"
@@ -216,7 +213,7 @@ class ManageNPCsButton(ui.Button):
             return
         
         # Get available NPCs
-        npcs = repositories.character.get_npcs_by_guild(str(interaction.guild.id))
+        npcs = repositories.character.get_npcs(str(interaction.guild.id))
         
         # Get NPCs currently in the scene
         scene_npc_ids = repositories.scene_npc.get_scene_npc_ids(str(interaction.guild.id), str(self.parent_view.scene_id))

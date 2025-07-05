@@ -142,7 +142,7 @@ class FateCommands(commands.Cog):
         pc_aspects_by_character = {}
         
         # Get all characters for the guild that aren't NPCs
-        all_characters = repositories.character.get_pcs_by_guild(str(interaction.guild.id))
+        all_characters = repositories.active_character.get_all_active_characters(interaction.guild.id)
         for character in all_characters:
             # Get aspect data for this PC
             character_aspects = []

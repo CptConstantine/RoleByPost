@@ -11,6 +11,10 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
   - System-specific fields and validation (e.g., Fate aspects, Traveller skills).
   - Import/export characters as JSON files for easy transfer between servers.
 
+- **Entity Relationship System**
+  - Create complex relationships between characters, NPCs, and other entities
+  - Hierarchical entity management for companions, minions, and hirelings
+
 - **Scene Management**  
   - Create and manage multiple scenes and keep track of NPCs and notes
   - Switch between scenes to organize different locations or encounters
@@ -101,14 +105,20 @@ The following are the commands that are currently available.
 
 ### Characters
 
-- `/character create pc [name]`  
-  Create a new player character.
+- `/character create pc [name] [owner]`  
+  Create a new player character. Optionally specify an owner entity for companions, minions, etc.
 
-- `/character create npc [name]`  
-  (GM only) Create a new NPC.
+- `/character create npc [name] [owner]`  
+  (GM only) Create a new NPC. Optionally specify an owner entity.
 
 - `/character sheet [char_name]`  
   View a character or NPC's sheet with buttons for editing. Defaults to your active character if no name is given.
+
+- `/character list [show_npcs] [owned_by] [show_relationships]`  
+  List characters and NPCs. Filter by owner or show relationship details.
+
+- `/character delete [char_name]`  
+  Delete a character or NPC.
 
 - `/character export [char_name]`  
   Export your character or an NPC (if GM) as a JSON file.
@@ -121,6 +131,48 @@ The following are the commands that are currently available.
 
 - `/character switch [char_name]`  
   Set your active character (PC) for this server.
+
+- `/character setavatar [avatar_url] [char_name]`  
+  Set your character's avatar image with a URL.
+
+- `/character narration`  
+  Get help with character narration formatting and channel restrictions.
+
+### Entities
+
+- `/entity create [entity_type] [name] [parent_entity]`  
+  Create a new entity. Optionally specify a parent entity that will own this entity.
+
+- `/entity list [owner_entity] [entity_type] [show_relationships]`  
+  List entities with optional filtering by owner or type. Show relationship details if requested.
+
+- `/entity view [entity_name]`  
+  View detailed information about an entity including its relationships.
+
+- `/entity delete [entity_name]`  
+  Delete an entity. Entities that own other entities cannot be deleted until relationships are transferred.
+
+- `/entity rename [entity_name] [new_name]`  
+  Rename an entity.
+
+### Relationships
+
+- `/relationship create [from_entity] [to_entity] [relationship_type] [description]`  
+  Create a relationship between two entities.
+
+- `/relationship remove [from_entity] [to_entity] [relationship_type]`  
+  Remove a relationship between two entities. Leave relationship_type blank to remove all relationships.
+
+- `/relationship list [entity_name]`  
+  List all relationships for an entity, showing both incoming and outgoing relationships.
+
+- `/relationship transfer [owned_entity] [new_owner]`  
+  (GM only) Transfer ownership of an entity to another entity. Removes existing ownership relationships and creates new ones.
+
+**Permissions:**
+- Only GMs can create/remove ownership and control relationships
+- Users can only create relationships involving entities they own
+- GMs can see all entities, users see only their own entities in autocomplete
 
 ### Rolling
 
@@ -288,6 +340,7 @@ All aspect editing supports:
 
 - System specific features
   - Traveller: starships, travel, and maintenance cost calculations
+  - Fate Extras
 - Support for other systems
 
 ---

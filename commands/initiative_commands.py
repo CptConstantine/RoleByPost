@@ -69,7 +69,8 @@ class InitiativeCommands(commands.Cog):
         InitiativeClass = factories.get_specific_initiative(type)
 
         # Gather participants: PCs and scene NPCs
-        pcs = repositories.character.get_non_gm_active_characters(str(guild_id))
+        all_chars = repositories.character.get_all_by_guild(str(guild_id))
+        non_gm_pcs = [c for c in all_chars if not c.is_npc and not repositories.server.has_gm_permission(str(guild_id), c.owner_id)]
         scene = repositories.scene.get_active_scene(str(guild_id))
         npcs = repositories.scene_npc.get_scene_npcs(str(guild_id), scene.name)
         participants = [
@@ -79,7 +80,7 @@ class InitiativeCommands(commands.Cog):
                 owner_id=str(c.owner_id),
                 is_npc=bool(c.is_npc)
             )
-            for c in pcs + npcs
+            for c in non_gm_pcs + npcs
         ]
 
         if not participants:

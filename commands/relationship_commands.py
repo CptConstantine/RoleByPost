@@ -11,23 +11,66 @@ class RelationshipCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    async def character_or_npc_autocomplete(self, interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
-        """Autocomplete for any character or NPC name"""
+    async def entity_autocomplete(self, interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+        """Autocomplete for any entity name - shows all entities if GM, owned entities if not GM"""
         if not interaction.guild:
             return []
         
-        # Get all characters and NPCs
-        characters = repositories.character.get_all_by_guild(str(interaction.guild.id))
+        # Check if user is GM
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        
+        if is_gm:
+            # GMs can see all entities (both characters and other entities)
+            characters = repositories.character.get_all_by_guild(str(interaction.guild.id))
+            other_entities = repositories.entity.get_all_by_guild(str(interaction.guild.id))
+            
+            # Combine both lists, avoiding duplicates
+            all_entities = []
+            character_ids = {char.id for char in characters}
+            
+            # Add all characters
+            all_entities.extend(characters)
+            
+            # Add other entities that aren't already in the character list
+            for entity in other_entities:
+                if entity.id not in character_ids:
+                    all_entities.append(entity)
+        else:
+            # Users can only see entities they own
+            user_characters = repositories.character.get_user_characters(str(interaction.guild.id), str(interaction.user.id))
+            user_entities = repositories.entity.get_all_by_owner(str(interaction.guild.id), str(interaction.user.id))
+            
+            # Combine both lists, avoiding duplicates
+            all_entities = []
+            character_ids = {char.id for char in user_characters}
+            
+            # Add user's characters
+            all_entities.extend(user_characters)
+            
+            # Add user's other entities that aren't already in the character list
+            for entity in user_entities:
+                if entity.id not in character_ids:
+                    all_entities.append(entity)
         
         # Filter based on current input
         if current:
-            characters = [char for char in characters if current.lower() in char.name.lower()]
+            all_entities = [entity for entity in all_entities if current.lower() in entity.name.lower()]
         
-        # Limit to 25 results
-        return [
-            app_commands.Choice(name=char.name, value=char.name)
-            for char in characters[:25]
-        ]
+        # Format the choices with entity type for clarity
+        choices = []
+        for entity in all_entities[:25]:  # Limit to 25 results
+            if hasattr(entity, 'is_npc'):
+                # This is a character
+                entity_type = "NPC" if entity.is_npc else "PC"
+            else:
+                # This is a regular entity
+                entity_type = entity.entity_type.value.upper()
+            
+            choices.append(
+                app_commands.Choice(name=f"{entity.name} ({entity_type})", value=entity.name)
+            )
+        
+        return choices
 
     async def relationship_type_autocomplete(self, interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
         """Autocomplete for relationship types"""
@@ -61,8 +104,8 @@ class RelationshipCommands(commands.Cog):
         relationship_type="Type of relationship",
         description="Optional description of the relationship"
     )
-    @app_commands.autocomplete(from_entity=character_or_npc_autocomplete)
-    @app_commands.autocomplete(to_entity=character_or_npc_autocomplete)
+    @app_commands.autocomplete(from_entity=entity_autocomplete)
+    @app_commands.autocomplete(to_entity=entity_autocomplete)
     @app_commands.autocomplete(relationship_type=relationship_type_autocomplete)
     async def create_relationship(self, interaction: discord.Interaction, from_entity: str, to_entity: str, relationship_type: str, description: str = None):
         """Create a relationship between two entities"""
@@ -72,9 +115,9 @@ class RelationshipCommands(commands.Cog):
                 await interaction.response.send_message("❌ Only GMs can create ownership and control relationships.", ephemeral=True)
                 return
         
-        # Get the entities
-        from_char = repositories.character.get_character_by_name(interaction.guild.id, from_entity)
-        to_char = repositories.character.get_character_by_name(interaction.guild.id, to_entity)
+        # Get the entities - try both character and entity repositories
+        from_char = self._find_entity_by_name(interaction.guild.id, from_entity)
+        to_char = self._find_entity_by_name(interaction.guild.id, to_entity)
         
         if not from_char:
             await interaction.response.send_message(f"❌ Entity '{from_entity}' not found.", ephemeral=True)
@@ -115,8 +158,8 @@ class RelationshipCommands(commands.Cog):
         to_entity="The entity that is the target of the relationship",
         relationship_type="Type of relationship to remove (leave blank to remove all)"
     )
-    @app_commands.autocomplete(from_entity=character_or_npc_autocomplete)
-    @app_commands.autocomplete(to_entity=character_or_npc_autocomplete)
+    @app_commands.autocomplete(from_entity=entity_autocomplete)
+    @app_commands.autocomplete(to_entity=entity_autocomplete)
     @app_commands.autocomplete(relationship_type=relationship_type_autocomplete)
     async def remove_relationship(self, interaction: discord.Interaction, from_entity: str, to_entity: str, relationship_type: str = None):
         """Remove a relationship between two entities"""
@@ -126,9 +169,9 @@ class RelationshipCommands(commands.Cog):
                 await interaction.response.send_message("❌ Only GMs can remove ownership and control relationships.", ephemeral=True)
                 return
         
-        # Get the entities
-        from_char = repositories.character.get_character_by_name(interaction.guild.id, from_entity)
-        to_char = repositories.character.get_character_by_name(interaction.guild.id, to_entity)
+        # Get the entities - try both character and entity repositories
+        from_char = self._find_entity_by_name(interaction.guild.id, from_entity)
+        to_char = self._find_entity_by_name(interaction.guild.id, to_entity)
         
         if not from_char or not to_char:
             await interaction.response.send_message("❌ One or both entities not found.", ephemeral=True)
@@ -156,11 +199,11 @@ class RelationshipCommands(commands.Cog):
 
     @relationship_group.command(name="list", description="List all relationships for an entity")
     @app_commands.describe(entity_name="The entity to show relationships for")
-    @app_commands.autocomplete(entity_name=character_or_npc_autocomplete)
+    @app_commands.autocomplete(entity_name=entity_autocomplete)
     async def list_relationships(self, interaction: discord.Interaction, entity_name: str):
         """List all relationships for an entity"""
-        # Get the entity
-        entity = repositories.character.get_character_by_name(interaction.guild.id, entity_name)
+        # Get the entity - try both character and entity repositories
+        entity = self._find_entity_by_name(interaction.guild.id, entity_name)
         if not entity:
             await interaction.response.send_message(f"❌ Entity '{entity_name}' not found.", ephemeral=True)
             return
@@ -183,7 +226,7 @@ class RelationshipCommands(commands.Cog):
         for rel in relationships:
             if rel.from_entity_id == entity.id:
                 # This entity has a relationship TO another entity
-                target_entity = repositories.character.get_by_id(rel.to_entity_id)
+                target_entity = self._find_entity_by_id(rel.to_entity_id)
                 if target_entity:
                     rel_name = rel.relationship_type.replace("_", " ").title()
                     description = rel.metadata.get("description", "") if rel.metadata else ""
@@ -193,7 +236,7 @@ class RelationshipCommands(commands.Cog):
                     outgoing_relationships.append(line)
             else:
                 # Another entity has a relationship TO this entity
-                source_entity = repositories.character.get_by_id(rel.from_entity_id)
+                source_entity = self._find_entity_by_id(rel.from_entity_id)
                 if source_entity:
                     rel_name = rel.relationship_type.replace("_", " ").title()
                     description = rel.metadata.get("description", "") if rel.metadata else ""
@@ -223,17 +266,17 @@ class RelationshipCommands(commands.Cog):
         owned_entity="The entity to transfer ownership of",
         new_owner="The entity that will become the new owner"
     )
-    @app_commands.autocomplete(owned_entity=character_or_npc_autocomplete)
-    @app_commands.autocomplete(new_owner=character_or_npc_autocomplete)
+    @app_commands.autocomplete(owned_entity=entity_autocomplete)
+    @app_commands.autocomplete(new_owner=entity_autocomplete)
     async def transfer_ownership(self, interaction: discord.Interaction, owned_entity: str, new_owner: str):
         """Transfer ownership of an entity to another entity (GM only)"""
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can transfer ownership.", ephemeral=True)
             return
         
-        # Get the entities
-        owned_char = repositories.character.get_character_by_name(interaction.guild.id, owned_entity)
-        new_owner_char = repositories.character.get_character_by_name(interaction.guild.id, new_owner)
+        # Get the entities - try both character and entity repositories
+        owned_char = self._find_entity_by_name(interaction.guild.id, owned_entity)
+        new_owner_char = self._find_entity_by_name(interaction.guild.id, new_owner)
         
         if not owned_char or not new_owner_char:
             await interaction.response.send_message("❌ One or both entities not found.", ephemeral=True)
@@ -259,6 +302,28 @@ class RelationshipCommands(commands.Cog):
             f"✅ **{new_owner}** now owns **{owned_entity}**", 
             ephemeral=True
         )
+
+    def _find_entity_by_name(self, guild_id: str, entity_name: str) -> Optional[BaseEntity]:
+        """Helper method to find an entity by name in both character and entity repositories"""
+        # Try character repository first
+        entity = repositories.character.get_character_by_name(guild_id, entity_name)
+        if entity:
+            return entity
+        
+        # Try entity repository
+        entity = repositories.entity.get_by_name(str(guild_id), entity_name)
+        return entity
+
+    def _find_entity_by_id(self, entity_id: str) -> Optional[BaseEntity]:
+        """Helper method to find an entity by ID in both character and entity repositories"""
+        # Try character repository first
+        entity = repositories.character.get_by_id(entity_id)
+        if entity:
+            return entity
+        
+        # Try entity repository
+        entity = repositories.entity.get_by_id(entity_id)
+        return entity
 
 async def setup_relationship_commands(bot: commands.Bot):
     await bot.add_cog(RelationshipCommands(bot))

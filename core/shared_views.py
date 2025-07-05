@@ -110,8 +110,6 @@ class EditSceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
         repositories.scene_notes.set_scene_notes(str(self.guild_id), str(self.scene_id), self.notes.value)
         
         # Rebuild the scene embed and view
-        system = repositories.server.get_system(str(self.guild_id))
-        sheet = factories.get_specific_sheet(system)
         npc_ids = repositories.scene_npc.get_scene_npc_ids(str(self.guild_id), str(self.scene_id))
         is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
         active_scene = repositories.scene.get_active_scene(str(self.guild_id))
@@ -120,7 +118,7 @@ class EditSceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
         for npc_id in npc_ids:
             npc = repositories.character.get_by_id(str(npc_id))
             if npc:
-                lines.append(sheet.format_npc_scene_entry(npc, is_gm))
+                lines.append(npc.format_npc_scene_entry(is_gm))
                 
         notes = repositories.scene_notes.get_scene_notes(str(self.guild_id), str(self.scene_id))
         description = ""

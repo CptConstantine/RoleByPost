@@ -6,18 +6,12 @@ CREATE TABLE IF NOT EXISTS server_settings (
     player_role_id TEXT
 );
 
--- Characters
-/* CREATE TABLE IF NOT EXISTS characters (
-    id TEXT PRIMARY KEY,
-    guild_id TEXT NOT NULL,
-    system TEXT,
-    name TEXT,
-    owner_id TEXT,
-    entity_type TEXT NOT NULL,
-    system_specific_data JSONB,
-    notes JSONB DEFAULT '[]',
-    avatar_url TEXT DEFAULT ''
-); */
+-- Remove any indexes that might exist for the characters table
+DROP INDEX IF EXISTS idx_character_guild_name;
+DROP INDEX IF EXISTS idx_character_guild_owner;
+
+-- Drop the characters table
+DROP TABLE IF EXISTS characters;
 
 -- Active characters
 CREATE TABLE IF NOT EXISTS active_characters (

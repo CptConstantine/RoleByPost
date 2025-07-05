@@ -347,10 +347,6 @@ class GenericSceneView(BasePinnableSceneView):
                 description="This scene no longer exists.",
                 color=discord.Color.red()
             ), "❌ **SCENE ERROR** ❌"
-            
-        # Get system and sheet for formatting
-        system = repositories.server.get_system(str(self.guild_id))
-        sheet = factories.get_specific_sheet(system)
         
         # Get NPCs in scene
         npc_ids = repositories.scene_npc.get_scene_npc_ids(str(self.guild_id), str(self.scene_id))
@@ -361,7 +357,7 @@ class GenericSceneView(BasePinnableSceneView):
             npc = repositories.character.get_by_id(str(npc_id))
             if npc:
                 # Show NPC details for everyone
-                lines.append(sheet.format_npc_scene_entry(npc, is_gm=False))
+                lines.append(npc.format_npc_scene_entry(is_gm=False))
                 
         # Get scene notes
         notes = repositories.scene_notes.get_scene_notes(str(self.guild_id), str(self.scene_id))

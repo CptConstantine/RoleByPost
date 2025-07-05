@@ -196,6 +196,21 @@ class ActiveCharacterRepository(BaseRepository[ActiveCharacter]):
                 return repositories.character._convert_to_base_character(characters[0])
         return None
     
+    def get_all_active_characters(self, guild_id: int) -> List[BaseCharacter]:
+        """Get all active characters in a guild"""
+        from .repository_factory import repositories
+        
+        query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s"
+        active_records = self.execute_query(query, (str(guild_id),))
+        
+        active_characters = []
+        for record in active_records:
+            character = repositories.character.get_by_id(record.char_id)
+            if character:
+                active_characters.append(character)
+        
+        return active_characters
+    
     def set_active_character(self, guild_id: str, user_id: str, character_id: str) -> None:
         """Set a user's active character"""
         active_char = ActiveCharacter(
