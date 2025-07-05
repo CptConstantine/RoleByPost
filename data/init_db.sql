@@ -6,13 +6,6 @@ CREATE TABLE IF NOT EXISTS server_settings (
     player_role_id TEXT
 );
 
--- Remove any indexes that might exist for the characters table
-DROP INDEX IF EXISTS idx_character_guild_name;
-DROP INDEX IF EXISTS idx_character_guild_owner;
-
--- Drop the characters table
-DROP TABLE IF EXISTS characters;
-
 -- Active characters
 CREATE TABLE IF NOT EXISTS active_characters (
     guild_id TEXT NOT NULL,
@@ -173,7 +166,7 @@ CREATE TABLE IF NOT EXISTS channel_permissions (
 );
 
 -- Game aspects (global and scene-specific)
-CREATE TABLE IF NOT EXISTS game_aspects (
+CREATE TABLE IF NOT EXISTS fate_game_aspects (
     id SERIAL PRIMARY KEY,
     guild_id TEXT NOT NULL,
     aspect_name TEXT NOT NULL,
@@ -184,7 +177,7 @@ CREATE TABLE IF NOT EXISTS game_aspects (
 );
 
 -- Zone aspects
-CREATE TABLE IF NOT EXISTS zone_aspects (
+CREATE TABLE IF NOT EXISTS fate_zone_aspects (
     id SERIAL PRIMARY KEY,
     guild_id TEXT NOT NULL,
     scene_id TEXT NOT NULL,
