@@ -49,7 +49,7 @@ class MGT2ESelectSkillButton(ui.Button):
             await interaction.response.send_message("❌ Your character has no skill categories.", ephemeral=True)
             return
         
-        async def on_category_selected(view, interaction, category):
+        async def on_category_selected(view, interaction: discord.Interaction, category):
             skills_in_cat = categories[category]
             
             # If there's only one skill in this category and it's the same as the category name,

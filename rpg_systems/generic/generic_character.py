@@ -97,21 +97,11 @@ class GenericSheetEditView(ui.View):
 
     @ui.button(label="Edit Name", style=discord.ButtonStyle.secondary, row=0)
     async def edit_name(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.send_modal(
-            EditNameModal(
-                self.char_id,
-                SYSTEM
-            )
-        )
+        await interaction.response.send_modal(EditNameModal(self.char_id, SYSTEM))
 
     @ui.button(label="Edit Notes", style=discord.ButtonStyle.secondary, row=0)
     async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.send_modal(
-            EditNotesModal(
-                self.char_id,
-                SYSTEM
-            )
-        )
+        await interaction.response.send_modal(EditNotesModal(self.char_id, SYSTEM))
 
 class GenericRollModifiersView(RollModifiersView):
     """

@@ -21,14 +21,7 @@ class MGT2ESheetEditView(ui.View):
     @ui.button(label="Edit Name", style=discord.ButtonStyle.secondary, row=1)
     async def edit_name(self, interaction: discord.Interaction, button: ui.Button):
         character = get_character(self.char_id)
-        await interaction.response.send_modal(
-            EditNameModal(
-                self.char_id,
-                character.name if character else "",
-                SYSTEM,
-                lambda editor_id, char_id: (get_character(char_id).format_full_sheet(), MGT2ESheetEditView(editor_id, char_id))
-            )
-        )
+        await interaction.response.send_modal(EditNameModal(self.char_id, SYSTEM))
 
     @ui.button(label="Edit Notes", style=discord.ButtonStyle.secondary, row=1)
     async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
@@ -38,14 +31,7 @@ class MGT2ESheetEditView(ui.View):
             await interaction.response.send_message("❌ Only the owner or a GM can edit notes.", ephemeral=True)
             return
         notes = "\n".join(character.notes) if character and character.notes else ""
-        await interaction.response.send_modal(
-            EditNotesModal(
-                self.char_id,
-                notes,
-                SYSTEM,
-                lambda editor_id, char_id: (get_character(char_id).format_full_sheet(), MGT2ESheetEditView(editor_id, char_id))
-            )
-        )
+        await interaction.response.send_modal(EditNotesModal(self.char_id, SYSTEM))
 
     @ui.button(label="Edit Attributes", style=discord.ButtonStyle.secondary, row=1)
     async def edit_attributes(self, interaction: discord.Interaction, button: ui.Button):
