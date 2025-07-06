@@ -348,6 +348,49 @@ class SetupCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @setup_group.command(
+        name="genericdice",
+        description="GM: Set the base dice formula for the Generic system"
+    )
+    @app_commands.describe(
+        base_dice="Dice formula like 1d20, 2d6, 3d6, 1d100, etc."
+    )
+    @channel_restriction.no_ic_channels()
+    async def setup_generic_dice(self, interaction: discord.Interaction, base_dice: str):
+        """Set the base dice formula for the Generic system"""
+        import re
+        
+        # Check GM permissions
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+            await interaction.response.send_message("❌ Only GMs can use this command.", ephemeral=True)
+            return
+        
+        # Check if server is using generic system
+        system = repositories.server.get_system(str(interaction.guild.id))
+        if system != "generic":
+            await interaction.response.send_message(
+                "❌ Base dice configuration is only available for the Generic system.",
+                ephemeral=True
+            )
+            return
+        
+        # Validate dice format
+        base_dice = base_dice.strip()
+        if not re.match(r'^\d*d\d+([+-]\d+)?$', base_dice.replace(' ', '').lower()):
+            await interaction.response.send_message(
+                "❌ Invalid dice format. Use formats like: 1d20, 2d6, 3d6+1, 1d100, etc.",
+                ephemeral=True
+            )
+            return
+        
+        # Save the base dice formula
+        repositories.server.set_generic_base_roll(interaction.guild.id, base_dice)
+        
+        await interaction.response.send_message(
+            f"✅ Base dice formula set to `{base_dice}` for this server.",
+            ephemeral=True
+        )
+
+    @setup_group.command(
         name="status",
         description="GM: View comprehensive server bot configuration and statistics"
     )

@@ -1,4 +1,6 @@
 
+ALTER TABLE server_settings ADD COLUMN IF NOT EXISTS generic_base_roll VARCHAR(20) DEFAULT '1d20';
+
 -- Server settings
 CREATE TABLE IF NOT EXISTS server_settings (
     guild_id TEXT PRIMARY KEY,

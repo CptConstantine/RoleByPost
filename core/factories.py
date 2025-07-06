@@ -31,7 +31,7 @@ def get_specific_companion(system: str):
 
 def get_specific_entity(system: str, entity_type: EntityType):
     """Get the appropriate entity class for the given system and entity type"""
-    if system == EntityType.GENERIC:
+    if system == "generic":
         if entity_type == EntityType.PC or entity_type == EntityType.NPC:
             return generic_entities.GenericCharacter
         elif entity_type == EntityType.COMPANION:

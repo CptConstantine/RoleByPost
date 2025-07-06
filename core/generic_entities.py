@@ -90,7 +90,9 @@ class GenericCharacter(BaseCharacter):
         """
         Prints the roll result
         """
-        result, total = roll_formula(self, "1d20", roll_formula_obj)
+        from data.repositories.repository_factory import repositories
+        base_roll = repositories.server.get_generic_base_roll(interaction.guild.id)
+        result, total = roll_formula(self, base_roll=(base_roll or "1d20"), modifiers=roll_formula_obj)
 
         difficulty_str = ""
         if difficulty:
@@ -122,7 +124,7 @@ class GenericCompanion(BaseCharacter):
         return cls(data)
     
     def get_sheet_edit_view(self, editor_id: int) -> ui.View:
-        return GenericCompanionSheetEditView(editor_id=editor_id, char_id=self.id)
+        return GenericSheetEditView(editor_id=editor_id, char_id=self.id)
     
     def format_full_sheet(self) -> discord.Embed:
         """Format the companion sheet"""
@@ -193,30 +195,6 @@ class GenericCompanion(BaseCharacter):
             )
         
         await interaction.response.send_message(embed=embed)
-
-class GenericCompanionSheetEditView(ui.View):
-    """Generic sheet edit view for companions - simpler than full character sheets"""
-    
-    def __init__(self, editor_id: int, char_id: str):
-        super().__init__(timeout=120)
-        self.editor_id = editor_id
-        self.char_id = char_id
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.editor_id:
-            await interaction.response.send_message("You can't edit this character.", ephemeral=True)
-            return False
-        return True
-
-    @ui.button(label="Edit Name", style=discord.ButtonStyle.secondary, row=0)
-    async def edit_name(self, interaction: discord.Interaction, button: ui.Button):
-        from core.shared_views import EditNameModal
-        await interaction.response.send_modal(EditNameModal(self.char_id, SYSTEM))
-
-    @ui.button(label="Edit Notes", style=discord.ButtonStyle.secondary, row=0)
-    async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
-        from core.shared_views import EditNotesModal
-        await interaction.response.send_modal(EditNotesModal(self.char_id, SYSTEM))
 
 class GenericRollModifiers(RollModifiers):
     """

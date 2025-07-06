@@ -8,6 +8,7 @@ class ServerSettings:
     system: Optional[str] = None
     gm_role_id: Optional[str] = None
     player_role_id: Optional[str] = None
+    generic_base_roll: Optional[str] = None
 
 @dataclass
 class Character:

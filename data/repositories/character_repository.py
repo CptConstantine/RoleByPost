@@ -62,7 +62,7 @@ class CharacterRepository(BaseRepository[Character]):
             id=character.id,
             name=character.name,
             owner_id=character.owner_id,
-            entity_type=EntityType.get_type_from_str(character.entity_type),
+            entity_type=EntityType(character.entity_type),
             notes=character.notes,
             avatar_url=character.avatar_url,
             system_specific_fields=character.system_specific_data
@@ -208,9 +208,7 @@ class ActiveCharacterRepository(BaseRepository[ActiveCharacter]):
         active_record = self.get_active_character_record(guild_id, user_id)
         if active_record:
             # Use find_all_by_column to get Character, then convert
-            character = repositories.entity.get_by_id(active_record.char_id)
-            if character:
-                return self._convert_to_base_character(character)
+            return repositories.entity.get_by_id(active_record.char_id)
         return None
     
     def get_all_active_characters(self, guild_id: int) -> List[BaseCharacter]:

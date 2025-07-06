@@ -12,7 +12,8 @@ class ServerRepository(BaseRepository[ServerSettings]):
             'guild_id': entity.guild_id,
             'system': entity.system,
             'gm_role_id': entity.gm_role_id,
-            'player_role_id': entity.player_role_id
+            'player_role_id': entity.player_role_id,
+            'generic_base_roll': entity.generic_base_roll
         }
     
     def from_dict(self, data: dict) -> ServerSettings:
@@ -20,7 +21,8 @@ class ServerRepository(BaseRepository[ServerSettings]):
             guild_id=data['guild_id'],
             system=data.get('system', 'generic'),
             gm_role_id=data.get('gm_role_id'),
-            player_role_id=data.get('player_role_id')
+            player_role_id=data.get('player_role_id'),
+            generic_base_roll=data.get('generic_base_roll')
         )
     
     def get_by_guild_id(self, guild_id: str) -> Optional[ServerSettings]:
@@ -77,4 +79,15 @@ class ServerRepository(BaseRepository[ServerSettings]):
         """Set player role for a guild"""
         server = self.get_by_guild_id(str(guild_id)) or ServerSettings(guild_id=str(guild_id))
         server.player_role_id = str(role_id)
+        self.save(server, conflict_columns=['guild_id'])
+
+    def get_generic_base_roll(self, guild_id: int) -> Optional[int]:
+        """Get the generic base roll for a guild"""
+        server = self.get_by_guild_id(str(guild_id))
+        return server.generic_base_roll if server else None
+    
+    def set_generic_base_roll(self, guild_id: int, base_roll: str) -> None:
+        """Set the generic base roll for a guild"""
+        server = self.get_by_guild_id(str(guild_id)) or ServerSettings(guild_id=str(guild_id))
+        server.generic_base_roll = base_roll
         self.save(server, conflict_columns=['guild_id'])
