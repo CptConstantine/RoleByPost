@@ -1,15 +1,15 @@
 # rpg_systems/fate/fate_roll_views.py
 import discord
 from discord import ui, SelectOption
-from core.shared_views import FinalizeRollButton, PaginatedSelectView, RollModifiersView
-from rpg_systems.fate.fate_roll_modifiers import FateRollModifiers
+from core.shared_views import FinalizeRollButton, PaginatedSelectView, RollFormulaView
+from rpg_systems.fate.fate_roll_formula import FateRollFormula
 from data.repositories.repository_factory import repositories
 
-class FateRollModifiersView(RollModifiersView):
+class FateRollFormulaView(RollFormulaView):
     """
     Fate-specific roll modifiers view that includes a button to select skills.
     """
-    def __init__(self, roll_formula_obj: FateRollModifiers, difficulty: int = None):
+    def __init__(self, roll_formula_obj: FateRollFormula, difficulty: int = None):
         self.character = None
         super().__init__(roll_formula_obj, self.character, difficulty)
         # Add a button for skill selection
@@ -26,7 +26,7 @@ class FateRollModifiersView(RollModifiersView):
 
 class FateSelectSkillButton(ui.Button):
     """Button that opens a skill selection menu when clicked"""
-    def __init__(self, parent_view: FateRollModifiersView, selected_skill: str = None):
+    def __init__(self, parent_view: FateRollFormulaView, selected_skill: str = None):
         super().__init__(
             label=selected_skill if selected_skill else "Select Skill",
             style=discord.ButtonStyle.primary,

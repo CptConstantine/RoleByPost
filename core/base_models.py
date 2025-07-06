@@ -5,6 +5,7 @@ import json
 from typing import Any, ClassVar, Dict, List, Optional
 import discord
 import discord.ui as ui
+from core.roll_formula import RollFormula
 from data.models import Relationship
 
 class BaseRpgObj(ABC):
@@ -131,36 +132,6 @@ class BaseInitiative(ABC):
                 return p.name
         return "Unknown"
 
-class RollModifiers(ABC):
-    """
-    A flexible container for roll parameters (e.g., skill, attribute, modifiers).
-    Non-modifier properties (like skill, attribute) are stored in a separate dictionary.
-    Modifiers are stored in self.modifiers.
-    """
-    def __init__(self, roll_parameters_dict: dict = None):
-        self.modifiers = {}  # Store direct numeric modifiers (e.g., mod1, mod2)
-        if roll_parameters_dict:
-            for key, modifier in roll_parameters_dict.items():
-                self.modifiers[key] = modifier
-
-    def __getitem__(self, key):
-        return self.modifiers.get(key)
-
-    def __setitem__(self, key, value):
-        self.modifiers[key] = value
-
-    def to_dict(self):
-        return dict(self.modifiers)
-
-    def get_modifiers(self, character: "BaseCharacter") -> Dict[str, str]:
-        """
-        Returns a dictionary of all modifiers
-        """
-        return dict(self.modifiers)
-
-    def __repr__(self):
-        return f"RollModifiers(modifiers={self.modifiers})"
-
 class EntityJSONEncoder(json.JSONEncoder):
     def default(self, obj):
         if hasattr(obj, 'to_dict'):
@@ -174,6 +145,7 @@ class EntityType(Enum):
     NPC = "npc"
     COMPANION = "companion"  # A character that is not a PC but is controlled by a player
     ITEM = "item"  # Generic item, can be used in inventory
+
     FATE_EXTRA = "fate extra" # Fate specific
     
     def __str__(self):
@@ -396,7 +368,7 @@ class BaseCharacter(BaseEntity):
         pass
 
     @abstractmethod
-    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
+    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollFormula, difficulty: int = None):
         """
         Abstract method to handle a roll request for this character.
         Should return a discord.ui.View or send a message with the result.

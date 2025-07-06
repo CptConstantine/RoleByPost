@@ -1,11 +1,11 @@
 from typing import Dict
-from core.base_models import RollModifiers
+from core.base_models import RollFormula
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from rpg_systems.fate.fate_character import FateCharacter
 
-class FateRollModifiers(RollModifiers):
+class FateRollFormula(RollFormula):
     """
     A roll formula specifically for the Fate RPG system.
     It can handle any roll parameters as needed.

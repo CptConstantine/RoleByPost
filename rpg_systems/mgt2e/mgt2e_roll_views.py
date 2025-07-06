@@ -1,19 +1,20 @@
 import discord
 import discord.ui as ui
-from core.shared_views import FinalizeRollButton, PaginatedSelectView, RollModifiersView
-from rpg_systems.mgt2e.mgt2e_roll_modifiers import MGT2ERollModifiers
+from core.shared_views import FinalizeRollButton, PaginatedSelectView, RollFormulaView
+from rpg_systems.mgt2e.mgt2e_roll_formula import MGT2ERollFormula, BoonBane
 from data.repositories.repository_factory import repositories
 
-class MGT2ERollModifiersView(RollModifiersView):
+class MGT2ERollFormulaView(RollFormulaView):
     """
     MGT2E-specific roll modifiers view that includes buttons to select skills and attributes.
     """
-    def __init__(self, roll_formula_obj: MGT2ERollModifiers, difficulty: int = None):
+    def __init__(self, roll_formula_obj: MGT2ERollFormula, difficulty: int = None):
         self.character = None
         super().__init__(roll_formula_obj, self.character, difficulty)
         # Add buttons for skill and attribute selection
         self.add_item(MGT2ESelectSkillButton(self, roll_formula_obj.skill))
         self.add_item(MGT2ESelectAttributeButton(self, roll_formula_obj.attribute))
+        self.add_item(MGT2EBoonBaneButton(self))
         self.add_item(FinalizeRollButton(roll_formula_obj, difficulty))
     
     # Override to ensure we get the character before building the view
@@ -26,7 +27,7 @@ class MGT2ERollModifiersView(RollModifiersView):
 
 class MGT2ESelectSkillButton(ui.Button):
     """Button that opens a skill category selection menu when clicked"""
-    def __init__(self, parent_view: MGT2ERollModifiersView, selected_skill: str = None):
+    def __init__(self, parent_view: MGT2ERollFormulaView, selected_skill: str = None):
         super().__init__(
             label=selected_skill if selected_skill else "Select Skill",
             style=discord.ButtonStyle.primary,
@@ -101,7 +102,7 @@ class MGT2ESelectSkillButton(ui.Button):
 
 class MGT2ESelectAttributeButton(ui.Button):
     """Button that opens an attribute selection menu when clicked"""
-    def __init__(self, parent_view: MGT2ERollModifiersView, selected_attribute: str = None):
+    def __init__(self, parent_view: MGT2ERollFormulaView, selected_attribute: str = None):
         super().__init__(
             label=selected_attribute if selected_attribute else "Select Attribute",
             style=discord.ButtonStyle.secondary,
@@ -144,4 +145,70 @@ class MGT2ESelectAttributeButton(ui.Button):
             "Select an attribute for your roll:",
             view=PaginatedSelectView(attr_options, on_attr_selected, interaction.user.id, prompt="Select an attribute:"),
             ephemeral=True
+        )
+
+class MGT2EBoonBaneButton(ui.Button):
+    """Button that cycles through Boon/Bane states: None -> Boon -> Bane -> None"""
+    def __init__(self, parent_view: MGT2ERollFormulaView):
+        # Determine initial state and appearance
+        current_state = parent_view.roll_formula_obj.boon_bane
+        label, style = self._get_button_appearance(current_state)
+        
+        super().__init__(
+            label=label,
+            style=style,
+            row=4
+        )
+        self.parent_view = parent_view
+    
+    def _get_button_appearance(self, boon_bane: BoonBane) -> tuple[str, discord.ButtonStyle]:
+        """Get the appropriate label and style for the current boon/bane state"""
+        if boon_bane.boons > 0:
+            return "✨ Boon", discord.ButtonStyle.success
+        elif boon_bane.banes > 0:
+            return "⚡ Bane", discord.ButtonStyle.danger
+        else:
+            return "Boon/Bane", discord.ButtonStyle.secondary
+    
+    def _get_next_state(self, current_boon_bane: BoonBane) -> BoonBane:
+        """Get the next state in the cycle: None -> Boon -> Bane -> None"""
+        if not current_boon_bane.has_effect:
+            # Currently none, next is boon
+            return BoonBane(boons=1, banes=0)
+        elif current_boon_bane.boons > 0:
+            # Currently boon, next is bane
+            return BoonBane(boons=0, banes=1)
+        else:
+            # Currently bane, next is none
+            return BoonBane(boons=0, banes=0)
+    
+    def _get_status_message(self, boon_bane: BoonBane) -> str:
+        """Get the status message for the current state"""
+        if boon_bane.boons > 0:
+            return "✅ Added boon - roll 3d6 and keep highest 2"
+        elif boon_bane.banes > 0:
+            return "✅ Added bane - roll 3d6 and keep lowest 2"
+        else:
+            return "✅ Cleared boons and banes - normal 2d6 roll"
+    
+    async def callback(self, interaction: discord.Interaction):
+        # Get current state and calculate next state
+        current_boon_bane = self.parent_view.roll_formula_obj.boon_bane
+        next_boon_bane = self._get_next_state(current_boon_bane)
+        
+        # Update the roll formula
+        self.parent_view.roll_formula_obj.boon_bane = next_boon_bane
+        
+        # Update button appearance
+        new_label, new_style = self._get_button_appearance(next_boon_bane)
+        self.label = new_label
+        self.style = new_style
+        
+        # Get status message
+        status_message = self._get_status_message(next_boon_bane)
+        
+        # Update the view
+        await interaction.response.edit_message(
+            content=status_message,
+            view=self.parent_view
         )

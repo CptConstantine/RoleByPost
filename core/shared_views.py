@@ -2,8 +2,7 @@ import re
 import discord
 from discord import Interaction, TextStyle, ui
 from core import factories
-from core.base_models import BaseCharacter, RollModifiers
-from core.utils import get_character
+from core.base_models import BaseCharacter, RollFormula
 from data.repositories.repository_factory import repositories
 
 class PaginatedSelectView(ui.View):
@@ -148,7 +147,7 @@ class SceneNotesEditView(discord.ui.View):
 class EditNameModal(ui.Modal, title="Edit Character Name"):
     def __init__(self, char_id: str, system: str):
         super().__init__()
-        self.character = get_character(char_id)
+        self.character = repositories.character.get_by_id(str(char_id))
         self.system = system
         self.name_input = ui.TextInput(
             label="New Name",
@@ -174,7 +173,7 @@ class EditNameModal(ui.Modal, title="Edit Character Name"):
 class EditNotesModal(ui.Modal, title="Edit Notes"):
     def __init__(self, char_id: str, system: str):
         super().__init__()
-        self.character = get_character(char_id)
+        self.character = repositories.character.get_by_id(str(char_id))
         self.system = system
         self.notes_field = ui.TextInput(
             label="Notes",
@@ -193,7 +192,7 @@ class EditNotesModal(ui.Modal, title="Edit Notes"):
         await interaction.response.edit_message(content="✅ Notes updated.", embed=embed, view=view)
 
 class RequestRollView(ui.View):
-    def __init__(self, roll_formula: RollModifiers = None, difficulty: int = None):
+    def __init__(self, roll_formula: RollFormula = None, difficulty: int = None):
         super().__init__(timeout=60*60*24*7) # 1 week timeout; easy enough to re-request a roll after a bot restart
         self.roll_formula_obj = roll_formula
         self.difficulty = difficulty
@@ -201,7 +200,7 @@ class RequestRollView(ui.View):
         self.add_item(FinalizeRollButton(roll_formula, difficulty))
 
 class EditRequestedRollButton(ui.Button):
-    def __init__(self, roll_formula: RollModifiers = None, difficulty: int = None):
+    def __init__(self, roll_formula: RollFormula = None, difficulty: int = None):
         super().__init__(label="Modify Roll", style=discord.ButtonStyle.primary)
         self.roll_formula_obj = roll_formula
         self.difficulty = difficulty
@@ -213,13 +212,13 @@ class EditRequestedRollButton(ui.Button):
             return
         await character.edit_requested_roll(interaction, self.roll_formula_obj, difficulty=self.difficulty)
 
-class RollModifiersView(ui.View):
+class RollFormulaView(ui.View):
     """
     Base class for system-specific RollFormulaViews.
     Provides shared variables and structure for roll input views.
     Each modifier/property is shown as a button; clicking it opens a modal to edit its value.
     """
-    def __init__(self, roll_formula_obj: RollModifiers, character: BaseCharacter, difficulty: int = None):
+    def __init__(self, roll_formula_obj: RollFormula, character: BaseCharacter, difficulty: int = None):
         super().__init__(timeout=60*60*24) # 1 day timeout
         self.roll_formula_obj = roll_formula_obj
         self.character = character
@@ -257,7 +256,7 @@ class RollModifiersView(ui.View):
         await interaction.response.edit_message(view=self)
 
 class EditModifierButton(discord.ui.Button):
-    def __init__(self, key: str, value: str, parent_view: RollModifiersView):
+    def __init__(self, key: str, value: str, parent_view: RollFormulaView):
         super().__init__(label=f"{key}: {value}", row=1, style=discord.ButtonStyle.secondary)
         self.key = key
         self.value = value
@@ -267,7 +266,7 @@ class EditModifierButton(discord.ui.Button):
         await interaction.response.send_modal(EditModifierModal(self.key, self.value, self.parent_view, interaction))
 
 class EditModifierModal(discord.ui.Modal, title="Edit Modifier"):
-    def __init__(self, key: str, value: str, parent_view: RollModifiersView, original_interaction: discord.Interaction):
+    def __init__(self, key: str, value: str, parent_view: RollFormulaView, original_interaction: discord.Interaction):
         super().__init__()
         self.key = key
         self.parent_view = parent_view
@@ -284,7 +283,7 @@ class EditModifierModal(discord.ui.Modal, title="Edit Modifier"):
         await self.parent_view.update_modifier(interaction, self.key, self.value_input.value)
 
 class AddModifierButton(discord.ui.Button):
-    def __init__(self, parent_view: RollModifiersView):
+    def __init__(self, parent_view: RollFormulaView):
         super().__init__(label="Add Modifier", row=0, style=discord.ButtonStyle.primary)
         self.parent_view = parent_view
 
@@ -293,7 +292,7 @@ class AddModifierButton(discord.ui.Button):
         await interaction.response.send_modal(AddModifierModal(self.parent_view, interaction))
 
 class AddModifierModal(discord.ui.Modal, title="Add Modifier"):
-    def __init__(self, parent_view: RollModifiersView, original_interaction: discord.Interaction):
+    def __init__(self, parent_view: RollFormulaView, original_interaction: discord.Interaction):
         super().__init__()
         self.parent_view = parent_view
         self.original_interaction = original_interaction
@@ -320,7 +319,7 @@ class AddModifierModal(discord.ui.Modal, title="Add Modifier"):
         await interaction.response.edit_message(view=self.parent_view)
 
 class FinalizeRollButton(discord.ui.Button):
-    def __init__(self, roll_formula_obj: RollModifiers = None, difficulty: int = None):
+    def __init__(self, roll_formula_obj: RollFormula = None, difficulty: int = None):
         super().__init__(label="Roll", style=discord.ButtonStyle.success)
         self.roll_formula_obj = roll_formula_obj
         self.difficulty = difficulty

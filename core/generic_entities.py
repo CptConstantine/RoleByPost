@@ -1,9 +1,9 @@
 from typing import Any, ClassVar, Dict, List
 import discord
 from discord import ui
-from core.base_models import BaseCharacter, BaseEntity, RollModifiers, EntityDefaults, EntityType
-from core.shared_views import EditNameModal, EditNotesModal, FinalizeRollButton, RollModifiersView
-from core.utils import roll_formula
+from core.base_models import BaseCharacter, BaseEntity, EntityDefaults, EntityType
+from core.shared_views import EditNameModal, EditNotesModal, FinalizeRollButton, RollFormulaView
+from core.roll_formula import RollFormula
 
 SYSTEM = "generic"
     
@@ -74,25 +74,25 @@ class GenericCharacter(BaseCharacter):
             lines.append(f"**Notes:** *{notes_display}*")
         return "\n".join(lines)
 
-    async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: "GenericRollModifiers", difficulty: int = None):
+    async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: "GenericRollFormula", difficulty: int = None):
         """
         Opens a view for editing the roll parameters.
         Generic version doesn't have skill selection but does allow modifier adjustment.
         """
-        view = GenericRollModifiersView(roll_formula_obj, difficulty)
+        view = GenericRollFormulaView(roll_formula_obj, difficulty)
         await interaction.response.send_message(
             content="Adjust your roll formula as needed, then finalize to roll.",
             view=view,
             ephemeral=True
         )
 
-    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
+    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollFormula, difficulty: int = None):
         """
         Prints the roll result
         """
         from data.repositories.repository_factory import repositories
         base_roll = repositories.server.get_generic_base_roll(interaction.guild.id)
-        result, total = roll_formula(self, base_roll=(base_roll or "1d20"), modifiers=roll_formula_obj)
+        result, total = roll_formula_obj.roll_formula(self, base_roll=(base_roll or "1d20"))
 
         difficulty_str = ""
         if difficulty:
@@ -153,10 +153,10 @@ class GenericCompanion(BaseCharacter):
     
     async def edit_requested_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
         """Handle roll request for companions - uses generic system"""
-        from core.generic_entities import GenericRollModifiers, GenericRollModifiersView
+        from core.generic_entities import GenericRollFormula, GenericRollFormulaView
         
-        roll_formula_obj = GenericRollModifiers(roll_parameters)
-        view = GenericRollModifiersView(roll_formula_obj, difficulty)
+        roll_formula_obj = GenericRollFormula(roll_parameters)
+        view = GenericRollFormulaView(roll_formula_obj, difficulty)
         
         await interaction.response.send_message(
             content=f"Rolling for {self.name}. Adjust as needed:",
@@ -164,39 +164,25 @@ class GenericCompanion(BaseCharacter):
             ephemeral=True
         )
     
-    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
-        """Send roll result for companions"""
-        from core.utils import roll_formula
-        
-        # Get modifiers and calculate total
-        modifiers = roll_formula_obj.get_modifiers(self)
-        total_modifier = sum(int(mod) for mod in modifiers.values() if str(mod).lstrip('-').isdigit())
-        
-        # Roll dice
-        result = roll_formula("1d20", total_modifier)
-        
-        # Format result message
-        modifier_text = " + ".join([f"{k}: {v}" for k, v in modifiers.items()]) if modifiers else "No modifiers"
-        
-        embed = discord.Embed(
-            title=f"🎲 {self.name} Roll Result",
-            description=f"**Result:** {result}",
-            color=discord.Color.blue()
-        )
-        
-        embed.add_field(name="Modifiers", value=modifier_text, inline=False)
-        
-        if difficulty:
-            success = result >= difficulty
-            embed.add_field(
-                name="Success", 
-                value=f"{'✅ Success' if success else '❌ Failure'} (Target: {difficulty})",
-                inline=False
-            )
-        
-        await interaction.response.send_message(embed=embed)
+    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollFormula, difficulty: int = None):
+        """
+        Prints the roll result
+        """
+        from data.repositories.repository_factory import repositories
+        base_roll = repositories.server.get_generic_base_roll(interaction.guild.id)
+        result, total = roll_formula_obj.roll_formula(self, base_roll=(base_roll or "1d20"))
 
-class GenericRollModifiers(RollModifiers):
+        difficulty_str = ""
+        if difficulty:
+            difficulty_str = f" (Needed {difficulty})"
+            if total >= difficulty:
+                result += f"\n✅ Success.{difficulty_str}"
+            else:
+                result += f"\n❌ Failure.{difficulty_str}"
+        
+        await interaction.response.send_message(result, ephemeral=False)
+
+class GenericRollFormula(RollFormula):
     """
     A roll formula specifically for the generic RPG system.
     It can handle any roll parameters as needed.
@@ -224,10 +210,10 @@ class GenericSheetEditView(ui.View):
     async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(EditNotesModal(self.char_id, SYSTEM))
 
-class GenericRollModifiersView(RollModifiersView):
+class GenericRollFormulaView(RollFormulaView):
     """
     Generic roll modifiers view with just the basic modifier functionality.
     """
-    def __init__(self, roll_formula_obj: RollModifiers, difficulty: int = None):
+    def __init__(self, roll_formula_obj: RollFormula, difficulty: int = None):
         super().__init__(roll_formula_obj, difficulty)
         self.add_item(FinalizeRollButton(roll_formula_obj, difficulty))

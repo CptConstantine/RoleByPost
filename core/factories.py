@@ -1,8 +1,8 @@
 from typing import List
 from core import initiative_types, initiative_views, scene_views
 from core.base_models import BaseInitiative, EntityType
-from rpg_systems.fate import fate_character, fate_extra, fate_roll_modifiers, fate_roll_views, fate_scene_views, fate_sheet_edit_views
-from rpg_systems.mgt2e import mgt2e_character, mgt2e_roll_modifiers, mgt2e_roll_views, mgt2e_scene_views, mgt2e_sheet_edit_views
+from rpg_systems.fate import fate_character, fate_extra, fate_roll_formula, fate_roll_views, fate_scene_views, fate_sheet_edit_views
+from rpg_systems.mgt2e import mgt2e_character, mgt2e_roll_formula, mgt2e_roll_views, mgt2e_scene_views, mgt2e_sheet_edit_views
 from core import generic_entities
 
 def get_specific_character(system: str, entity_type: EntityType = None):
@@ -102,21 +102,21 @@ def get_specific_initiative_view(guild_id: str, channel_id: str, initiative: Bas
 
 def get_specific_roll_formula(system: str, roll_parameters_dict: dict = None):
     if system == "fate":
-        return fate_roll_modifiers.FateRollModifiers(roll_parameters_dict)
+        return fate_roll_formula.FateRollFormula(roll_parameters_dict)
     elif system == "mgt2e":
-        return mgt2e_roll_modifiers.MGT2ERollModifiers(roll_parameters_dict)
+        return mgt2e_roll_formula.MGT2ERollFormula(roll_parameters_dict)
     elif system == "generic":
-        return generic_entities.GenericRollModifiers(roll_parameters_dict)
+        return generic_entities.GenericRollFormula(roll_parameters_dict)
     else:
         raise ValueError(f"Unknown system: {system}")
 
 def get_specific_roll_formula_view(system: str, roll_formula_obj, difficulty: int = None):
     if system == "fate":
-        return fate_roll_views.FateRollModifiersView(roll_formula_obj, difficulty)
+        return fate_roll_views.FateRollFormulaView(roll_formula_obj, difficulty)
     elif system == "mgt2e":
-        return mgt2e_roll_views.MGT2ERollModifiersView(roll_formula_obj, difficulty)
+        return mgt2e_roll_views.MGT2ERollFormulaView(roll_formula_obj, difficulty)
     elif system == "generic":
-        return generic_entities.GenericRollModifiersView(roll_formula_obj, difficulty)
+        return generic_entities.GenericRollFormulaView(roll_formula_obj, difficulty)
     else:
         raise ValueError(f"Unknown system: {system}")
 

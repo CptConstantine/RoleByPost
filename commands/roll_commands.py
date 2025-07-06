@@ -1,8 +1,8 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from core.roll_formula import RollFormula
 from core.shared_views import RequestRollView
-from core.utils import roll_parameters_to_dict
 import core.factories as factories
 from data.repositories.repository_factory import repositories
 
@@ -27,7 +27,7 @@ class RollCommands(commands.Cog):
             return
         
         system = repositories.server.get_system(str(interaction.guild.id))
-        roll_parameters_dict = roll_parameters_to_dict(roll_parameters)
+        roll_parameters_dict = RollFormula.roll_parameters_to_dict(roll_parameters)
         roll_formula_obj = factories.get_specific_roll_formula(system, roll_parameters_dict)
         await character.send_roll_message(interaction, roll_formula_obj, difficulty)
 
@@ -94,7 +94,7 @@ class RollCommands(commands.Cog):
         mention_str = " ".join(mentions) if mentions else ""
 
         # Parse roll_parameters
-        roll_parameters_dict = roll_parameters_to_dict(roll_parameters)
+        roll_parameters_dict = RollFormula.roll_parameters_to_dict(roll_parameters)
         roll_formula_obj = factories.get_specific_roll_formula(system, roll_parameters_dict)
 
         view = RequestRollView(roll_formula=roll_formula_obj, difficulty=difficulty)

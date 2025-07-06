@@ -1,11 +1,11 @@
 from typing import Any, Dict, List, Union
 import discord
 from core.base_models import BaseCharacter, EntityDefaults, EntityType
-from core.utils import roll_formula
+from core.roll_formula import RollFormula
 from data.repositories.repository_factory import repositories
 from rpg_systems.fate.aspect import Aspect
-from rpg_systems.fate.fate_roll_modifiers import FateRollModifiers
-from rpg_systems.fate.fate_roll_views import FateRollModifiersView
+from rpg_systems.fate.fate_roll_formula import FateRollFormula
+from rpg_systems.fate.fate_roll_views import FateRollFormulaView
 from rpg_systems.fate.stress_track import StressTrack, StressBox
 from rpg_systems.fate.consequence_track import ConsequenceTrack, Consequence
 
@@ -252,11 +252,11 @@ class FateCharacter(BaseCharacter):
                 if current_value in (None, [], {}, 0, False):
                     setattr(self, key, value)
     
-    async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: "FateRollModifiers", difficulty: int = None):
+    async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: "FateRollFormula", difficulty: int = None):
         """
         Opens a view for editing the roll parameters, prepopulated with any requested skill.
         """
-        view = FateRollModifiersView(roll_formula_obj, difficulty)
+        view = FateRollFormulaView(roll_formula_obj, difficulty)
         
         # Create a message that shows what was initially requested
         content = "Adjust your roll formula as needed, then finalize to roll."
@@ -270,11 +270,11 @@ class FateCharacter(BaseCharacter):
             ephemeral=True
         )
         
-    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: "FateRollModifiers", difficulty: int = None):
+    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: "FateRollFormula", difficulty: int = None):
         """
         Prints the roll result
         """
-        result, total = roll_formula(self, "4df", roll_formula_obj)
+        result, total = roll_formula_obj.roll_formula(self, "4df")
 
         difficulty_shifts_str = ""
         if difficulty:

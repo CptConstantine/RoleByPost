@@ -1,16 +1,16 @@
 from collections import defaultdict
 from typing import Any, Dict
 import discord
-from core.base_models import BaseCharacter, EntityType, RollModifiers
-from core.utils import roll_formula
-from rpg_systems.mgt2e.mgt2e_roll_modifiers import MGT2ERollModifiers
-from rpg_systems.mgt2e.mgt2e_roll_views import MGT2ERollModifiersView
+from core.base_models import BaseCharacter, EntityType, EntityDefaults, RollFormula
+from core.roll_formula import RollFormula
+from rpg_systems.mgt2e.mgt2e_roll_formula import MGT2ERollFormula
+from rpg_systems.mgt2e.mgt2e_roll_views import MGT2ERollFormulaView
 from data.repositories.repository_factory import repositories
 
 SYSTEM = "mgt2e"
 
 class MGT2ECharacter(BaseCharacter):
-    ENTITY_DEFAULTS = {
+    ENTITY_DEFAULTS = EntityDefaults({
         EntityType.PC: {
             "attributes": {"STR": 0, "DEX": 0, "END": 0, "INT": 0, "EDU": 0, "SOC": 0},
             "skills": {}
@@ -19,7 +19,7 @@ class MGT2ECharacter(BaseCharacter):
             "attributes": {"STR": 0, "DEX": 0, "END": 0, "INT": 0, "EDU": 0, "SOC": 0},
             "skills": {}
         }
-    }
+    })
 
     DEFAULT_SKILLS = {
         "Admin": -3,
@@ -177,11 +177,11 @@ class MGT2ECharacter(BaseCharacter):
         from rpg_systems.mgt2e.mgt2e_sheet_edit_views import MGT2ESheetEditView
         return MGT2ESheetEditView(editor_id=editor_id, char_id=self.id)
     
-    async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: MGT2ERollModifiers, difficulty: int = None):
+    async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: MGT2ERollFormula, difficulty: int = None):
         """
         Opens a view for editing the roll parameters, prepopulated with any requested skill and attribute.
         """
-        view = MGT2ERollModifiersView(roll_formula_obj, difficulty)
+        view = MGT2ERollFormulaView(roll_formula_obj, difficulty)
         
         # Create a message that shows what was initially requested
         content = "Adjust your roll formula as needed, then finalize to roll."
@@ -205,11 +205,11 @@ class MGT2ECharacter(BaseCharacter):
             ephemeral=True
         )
 
-    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
+    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollFormula, difficulty: int = None):
         """
         Prints the roll result
         """
-        result, total = roll_formula(self, "2d6", roll_formula_obj)
+        result, total = roll_formula_obj.roll_formula(self, "2d6")
 
         difficulty_shifts_str = ""
         if difficulty:
