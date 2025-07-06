@@ -14,6 +14,7 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 - **Entity Relationship System**
   - Create complex relationships between characters, NPCs, and other entities
   - Hierarchical entity management for companions, minions, and hirelings
+  - Support for ownership and control of companions (and speak as them through the narration system)
 
 - **Scene Management**  
   - Create and manage multiple scenes and keep track of NPCs and notes
@@ -51,6 +52,7 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 
 - **Character Speech and Narration**
   - Players can speak as their characters with formatted messages and avatars
+  - Players can speak as their companions and other controlled entities
   - GMs can speak as NPCs with custom display names
   - GMs can provide narration with special formatting
   - Automatically restricted from out of character channels to maintain immersion
@@ -290,6 +292,10 @@ This bot provides special message prefixes that transform regular text messages 
   `pc::Your character's message here`  
   Displays a message as your currently active character, with their avatar if set.
 
+- **Speaking as a Specific Character/Companion**  
+  `pc::Character Name::Message content`  
+  Displays a message as the specified character or companion you control.
+
 - **GM: Speaking as NPCs**  
   `npc::NPC Name::Message content`  
   Displays a message as the specified NPC, with their avatar if available.
@@ -317,6 +323,18 @@ For more detailed help, use `/character narration`.
 - `/fate scene aspects`  
   Show all aspects in the current scene including game aspects, scene aspects, zone aspects, and character aspects. GMs can see hidden aspects while players see only visible ones.
 
+- `/fate extra create [extra_type] [name]`  
+  Create a new Fate extra (generic, item, or companion) with appropriate Fate mechanics.
+
+- `/fate extra delete [extra_name]`  
+  Delete a Fate extra with confirmation.
+
+- `/fate extra view [extra_name]`  
+  View and edit a Fate extra's sheet with full Fate mechanics.
+
+- `/fate extra list [extra_type] [show_relationships]`  
+  List Fate extras with optional filtering and relationship display.
+
 **Interactive Aspect Management:**
 When viewing a scene in a Fate game, GMs have access to these Fate-specific features:
 - **Edit Game Aspects:** Manage server-wide aspects that persist across scenes
@@ -333,14 +351,12 @@ All aspect editing supports:
 
 ### Top Priority
 
-- Add ability for players to manage multiple characters (for companions, minions, hirelings, etc.) and optionally speak as them for narration
 - Inventory system to track equipment
 
 ### Secondary Priority
 
 - System specific features
   - Traveller: starships, travel, and maintenance cost calculations
-  - Fate Extras
 - Support for other systems
 
 ---
