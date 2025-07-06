@@ -21,36 +21,10 @@ class RelationshipCommands(commands.Cog):
         
         if is_gm:
             # GMs can see all entities (both characters and other entities)
-            characters = repositories.character.get_all_by_guild(str(interaction.guild.id))
-            other_entities = repositories.entity.get_all_by_guild(str(interaction.guild.id))
-            
-            # Combine both lists, avoiding duplicates
-            all_entities = []
-            character_ids = {char.id for char in characters}
-            
-            # Add all characters
-            all_entities.extend(characters)
-            
-            # Add other entities that aren't already in the character list
-            for entity in other_entities:
-                if entity.id not in character_ids:
-                    all_entities.append(entity)
+            all_entities = repositories.entity.get_all_by_guild(str(interaction.guild.id))
         else:
             # Users can only see entities they own
-            user_characters = repositories.character.get_user_characters(str(interaction.guild.id), str(interaction.user.id))
-            user_entities = repositories.entity.get_all_by_owner(str(interaction.guild.id), str(interaction.user.id))
-            
-            # Combine both lists, avoiding duplicates
-            all_entities = []
-            character_ids = {char.id for char in user_characters}
-            
-            # Add user's characters
-            all_entities.extend(user_characters)
-            
-            # Add user's other entities that aren't already in the character list
-            for entity in user_entities:
-                if entity.id not in character_ids:
-                    all_entities.append(entity)
+            all_entities = repositories.entity.get_all_by_owner(str(interaction.guild.id), str(interaction.user.id))
         
         # Filter based on current input
         if current:
@@ -180,12 +154,12 @@ class RelationshipCommands(commands.Cog):
             if relationship_type:
                 relationship_name = relationship_type.replace("_", " ").title()
                 await interaction.response.send_message(
-                    f"✅ Removed {relationship_name.lower()} relationship between **{from_entity}** and **{to_entity}**", 
+                    f"✅ Removed {relationship_name.lower()} relationship between **{from_entity.name}** and **{to_entity.name}**", 
                     ephemeral=True
                 )
             else:
                 await interaction.response.send_message(
-                    f"✅ Removed all relationships between **{from_entity}** and **{to_entity}**", 
+                    f"✅ Removed all relationships between **{from_entity.name}** and **{to_entity.name}**", 
                     ephemeral=True
                 )
         else:
@@ -293,7 +267,7 @@ class RelationshipCommands(commands.Cog):
         )
         
         await interaction.response.send_message(
-            f"✅ **{new_owner}** now owns **{owned_entity}**", 
+            f"✅ **{new_owner.name}** now owns **{owned_entity.name}**", 
             ephemeral=True
         )
 

@@ -59,9 +59,7 @@ def get_system_entity_types(system: str) -> List[EntityType]:
     """Get the available entity types for the given system"""
     if system == "fate":
         return [
-            EntityType.GENERIC,
-            EntityType.ITEM,
-            EntityType.COMPANION
+            EntityType.FATE_EXTRA
         ]
     elif system == "mgt2e":
         return [

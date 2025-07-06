@@ -174,6 +174,7 @@ class EntityType(Enum):
     NPC = "npc"
     COMPANION = "companion"  # A character that is not a PC but is controlled by a player
     ITEM = "item"  # Generic item, can be used in inventory
+    FATE_EXTRA = "fate extra" # Fate specific
     
     def __str__(self):
         return self.value

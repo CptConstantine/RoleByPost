@@ -132,7 +132,7 @@ class InitiativeCommands(commands.Cog):
             await interaction.response.send_message("❌ No active initiative.", ephemeral=True)
             return
             
-        all_chars = repositories.character.find_all_by_column('guild_id', str(interaction.guild.id))
+        all_chars = repositories.character.get_all_by_guild(str(interaction.guild.id))
         char = next((c for c in all_chars if c.name.lower() == name.lower()), None)
         if not char:
             await interaction.response.send_message("❌ Character not found.", ephemeral=True)

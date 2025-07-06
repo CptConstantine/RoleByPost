@@ -152,7 +152,7 @@ class CharacterCommands(commands.Cog):
         
         character = CharacterClass(character_dict)
         character.apply_defaults(EntityType.PC, guild_id=interaction.guild.id)
-        repositories.character.upsert_character(interaction.guild.id, character, system=system)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=system)
         
         # Set as active if no active character exists
         if not repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id):
@@ -188,7 +188,7 @@ class CharacterCommands(commands.Cog):
         
         character = CharacterClass(character_dict)
         character.apply_defaults(EntityType.NPC, guild_id=interaction.guild.id)
-        repositories.character.upsert_character(interaction.guild.id, character, system=system)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=system)
         
         await interaction.followup.send(f"🤖 Created NPC: **{npc_name}**", ephemeral=True)
 
@@ -405,7 +405,7 @@ class CharacterCommands(commands.Cog):
             
         character.owner_id = new_owner.id
         system = repositories.server.get_system(interaction.guild.id)
-        repositories.character.upsert_character(interaction.guild.id, character, system=system)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=system)
         await interaction.response.send_message(
             f"✅ Ownership of `{char_name}` transferred to {new_owner.display_name}.", ephemeral=True
         )
@@ -471,7 +471,7 @@ class CharacterCommands(commands.Cog):
         # Save the avatar URL to the character
         character.avatar_url = avatar_url
         system = repositories.server.get_system(interaction.guild.id)
-        repositories.character.upsert_character(interaction.guild.id, character, system=system)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=system)
 
         # Show a preview
         embed = discord.Embed(
@@ -630,7 +630,7 @@ class CharacterCommands(commands.Cog):
         companion.apply_defaults(EntityType.COMPANION, guild_id=str(interaction.guild.id))
         
         # Save companion
-        repositories.character.upsert_character(str(interaction.guild.id), companion, system=system)
+        repositories.entity.upsert_entity(str(interaction.guild.id), companion, system=system)
         
         # Create CONTROLS relationship
         repositories.relationship.create_relationship(

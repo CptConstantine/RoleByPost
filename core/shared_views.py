@@ -116,7 +116,7 @@ class EditSceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
         
         lines = []
         for npc_id in npc_ids:
-            npc = repositories.character.get_by_id(str(npc_id))
+            npc = repositories.entity.get_by_id(str(npc_id))
             if npc:
                 lines.append(npc.format_npc_scene_entry(is_gm))
                 
@@ -166,7 +166,7 @@ class EditNameModal(ui.Modal, title="Edit Character Name"):
             await interaction.response.send_message("❌ Name cannot be empty.", ephemeral=True)
             return
         self.character.name = new_name
-        repositories.character.upsert_character(interaction.guild.id, self.character, self.system)
+        repositories.entity.upsert_entity(interaction.guild.id, self.character, self.system)
         embed = self.character.format_full_sheet()
         view = self.character.get_sheet_edit_view(interaction.user.id)
         await interaction.response.edit_message(content="✅ Name updated.", embed=embed, view=view)
@@ -187,7 +187,7 @@ class EditNotesModal(ui.Modal, title="Edit Notes"):
 
     async def on_submit(self, interaction: Interaction):
         self.character.notes = [line for line in self.notes_field.value.splitlines() if line.strip()]
-        repositories.character.upsert_character(interaction.guild.id, self.character, self.system)
+        repositories.entity.upsert_entity(interaction.guild.id, self.character, self.system)
         embed = self.character.format_full_sheet()
         view = self.character.get_sheet_edit_view(interaction.user.id)
         await interaction.response.edit_message(content="✅ Notes updated.", embed=embed, view=view)

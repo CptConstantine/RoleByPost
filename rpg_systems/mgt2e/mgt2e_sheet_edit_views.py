@@ -101,7 +101,7 @@ class EditAttributesModal(ui.Modal, title="Edit Attributes"):
         except Exception:
             await interaction.response.send_message("❌ Please enter 6 integers separated by spaces (e.g. `8 7 6 5 4 3`).", ephemeral=True)
             return
-        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         embed = character.format_full_sheet()
         view = MGT2ESheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(content="✅ Attributes updated.", embed=embed, view=view)
@@ -128,7 +128,7 @@ class EditSkillsModal(ui.Modal, title="Edit Skills"):
                 except ValueError:
                     continue
         character.skills = skills_dict  # Use property setter
-        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         embed = character.format_full_sheet()
         view = MGT2ESheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(content="✅ Skills updated!", embed=embed, view=view)
@@ -202,7 +202,7 @@ class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
             await interaction.response.send_message(f"❌ Please enter a number or 'untrained'. Error: {str(e)}", ephemeral=True)
             return
             
-        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         embed = character.format_full_sheet()
         view = MGT2ESheetEditView(interaction.user.id, self.char_id)
         

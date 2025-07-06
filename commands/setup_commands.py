@@ -10,29 +10,6 @@ from core.utils import roll_parameters_to_dict
 import core.factories as factories
 from data.repositories.repository_factory import repositories
 
-
-async def skill_autocomplete(interaction: discord.Interaction, current: str):
-    try:
-        all_chars = repositories.character.get_all_by_guild(str(interaction.guild.id))
-        character = next((c for c in all_chars if not c.is_npc and str(c.owner_id) == str(interaction.user.id)), None)
-        if not character:
-            return []
-        skills = character.skills
-        options = [k for k in skills.keys() if current.lower() in k.lower()]
-        return [app_commands.Choice(name=k, value=k) for k in options[:25]]
-    except Exception as e:
-        print("Autocomplete error:", e)
-        return []
-
-async def attribute_autocomplete(interaction: discord.Interaction, current: str):
-    all_chars = repositories.character.get_all_by_guild(str(interaction.guild.id))
-    character = next((c for c in all_chars if not c.is_npc and str(c.owner_id) == str(interaction.user.id)), None)
-    if not character:
-        return []
-    attributes = character.attributes
-    options = [k for k in attributes.keys() if current.lower() in k.lower()]
-    return [app_commands.Choice(name=k, value=k) for k in options[:25]]
-
 class SetupCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -413,11 +390,6 @@ class SetupCommands(commands.Cog):
         
         default_initiative = repositories.server_initiative_defaults.get_default_type(guild_id)
         
-        # Get character counts
-        all_characters = repositories.character.get_all_by_guild(guild_id)
-        pcs = [c for c in all_characters if not c.is_npc]
-        npcs = [c for c in all_characters if c.is_npc]
-        
         # Get feature settings
         auto_reminder_settings = repositories.auto_reminder_settings.get_settings(guild_id)
         auto_recap_settings = repositories.auto_recap.get_settings(guild_id)
@@ -485,18 +457,6 @@ class SetupCommands(commands.Cog):
             name="🎮 Active Game State",
             value="\n".join(game_state_lines),
             inline=False
-        )
-        
-        # Character Statistics
-        char_lines = []
-        char_lines.append(f"**Player Characters:** {len(pcs)}")
-        char_lines.append(f"**NPCs:** {len(npcs)}")
-        char_lines.append(f"**Total Characters:** {len(all_characters)}")
-        
-        embed.add_field(
-            name="👥 Characters",
-            value="\n".join(char_lines),
-            inline=True
         )
         
         # Feature Configuration

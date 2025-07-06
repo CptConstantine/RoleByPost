@@ -5,7 +5,7 @@ from discord import app_commands
 from typing import List
 from data.repositories.repository_factory import repositories
 from core import channel_restriction
-from core.base_models import EntityType, RelationshipType
+from core.base_models import BaseEntity, EntityType, RelationshipType
 import core.factories as factories
 
 SYSTEM = "fate"
@@ -31,30 +31,16 @@ class FateCommands(commands.Cog):
         parent=fate_group
     )
 
-    # Autocomplete functions for extras
-    async def extra_type_autocomplete(self, interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
-        """Autocomplete for extra types"""
-        # Only show types that make sense for extras
-        extra_types = factories.get_system_entity_types(SYSTEM)
-        
-        # Filter based on user input
-        filtered_types = [entity_type for entity_type in extra_types if current.lower() in entity_type.value.lower()]
-        
-        return [
-            app_commands.Choice(name=entity_type.value.title(), value=entity_type.value)
-            for entity_type in filtered_types[:25]
-        ]
-
     async def extra_name_autocomplete(self, interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
         """Autocomplete for extra names - shows extras user owns or all if GM"""
         is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
         
         # Get all characters/entities and filter for Fate extras
         if is_gm:
-            all_entities = repositories.character.get_all_by_guild(str(interaction.guild.id))
+            all_entities = repositories.entity.get_all_by_guild(str(interaction.guild.id))
         else:
-            all_entities = repositories.character.get_user_characters(str(interaction.guild.id), str(interaction.user.id))
-        
+            all_entities = repositories.entity.get_all_by_owner(str(interaction.guild.id), str(interaction.user.id))
+
         # Filter for extras (non-PC, non-NPC entities)
         extras = [
             entity for entity in all_entities 
@@ -69,15 +55,12 @@ class FateCommands(commands.Cog):
 
     @fate_extra_group.command(name="create", description="Create a new Fate extra")
     @app_commands.describe(
-        extra_type="Type of extra to create (generic, item, companion)",
         name="Name for the new extra"
     )
-    @app_commands.autocomplete(extra_type=extra_type_autocomplete)
     @channel_restriction.no_ic_channels()
     async def fate_extra_create(
         self, 
-        interaction: discord.Interaction, 
-        extra_type: str, 
+        interaction: discord.Interaction,
         name: str
     ):
         """Create a new Fate extra"""
@@ -89,18 +72,6 @@ class FateCommands(commands.Cog):
 
         await interaction.response.defer(ephemeral=True)
         
-        # Validate entity type
-        try:
-            e_type = EntityType(extra_type)
-        except ValueError:
-            await interaction.followup.send(f"❌ Invalid extra type '{extra_type}'. Use generic, item, or companion.", ephemeral=True)
-            return
-        
-        # Only allow certain types for extras
-        if e_type not in factories.get_system_entity_types(SYSTEM):
-            await interaction.followup.send(f"❌ '{extra_type}' is not a valid extra type. Use generic, item, or companion.", ephemeral=True)
-            return
-        
         # Check if extra with this name already exists
         existing = repositories.entity.get_by_name(str(interaction.guild.id), name)
         if existing:
@@ -111,7 +82,7 @@ class FateCommands(commands.Cog):
         extra_id = str(uuid.uuid4())
         
         # Get the appropriate character class for this entity type and system
-        CharacterClass = factories.get_specific_entity(system, e_type)
+        CharacterClass = factories.get_specific_entity(system, EntityType.FATE_EXTRA)
         
         # Build entity dict
         from core.base_models import BaseEntity
@@ -119,16 +90,16 @@ class FateCommands(commands.Cog):
             id=extra_id,
             name=name,
             owner_id=str(interaction.user.id),
-            entity_type=e_type
+            entity_type=EntityType.FATE_EXTRA
         )
         
         extra = CharacterClass(extra_dict)
-        extra.apply_defaults(entity_type=e_type, guild_id=str(interaction.guild.id))
+        extra.apply_defaults(entity_type=EntityType.FATE_EXTRA, guild_id=str(interaction.guild.id))
         
         # Save the extra
-        repositories.character.upsert_character(str(interaction.guild.id), extra, system=system)
-        
-        await interaction.followup.send(f"✅ Created Fate {extra_type}: **{name}**", ephemeral=True)
+        repositories.entity.upsert_entity(str(interaction.guild.id), extra, system=system)
+
+        await interaction.followup.send(f"✅ Created Fate Extra: **{name}**", ephemeral=True)
 
     @fate_extra_group.command(name="delete", description="Delete a Fate extra")
     @app_commands.describe(extra_name="Name of the extra to delete")
@@ -235,15 +206,12 @@ class FateCommands(commands.Cog):
 
     @fate_extra_group.command(name="list", description="List Fate extras")
     @app_commands.describe(
-        extra_type="Filter by extra type",
         show_relationships="Show ownership and control relationships"
     )
-    @app_commands.autocomplete(extra_type=extra_type_autocomplete)
     @channel_restriction.no_ic_channels()
     async def fate_extra_list(
         self, 
-        interaction: discord.Interaction, 
-        extra_type: str = None,
+        interaction: discord.Interaction,
         show_relationships: bool = False
     ):
         """List Fate extras with optional filtering"""
@@ -259,35 +227,22 @@ class FateCommands(commands.Cog):
         is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
         
         if is_gm:
-            all_entities = repositories.character.get_all_by_guild(str(interaction.guild.id))
+            all_entities = repositories.entity.get_all_by_guild(str(interaction.guild.id))
         else:
-            all_entities = repositories.character.get_user_characters(str(interaction.guild.id), str(interaction.user.id))
-        
+            all_entities = repositories.entity.get_all_by_owner(str(interaction.guild.id), str(interaction.user.id))
+
         # Filter for extras
         extras = [
             entity for entity in all_entities 
             if entity.entity_type in factories.get_system_entity_types(SYSTEM)
         ]
         
-        # Apply type filter if specified
-        if extra_type:
-            try:
-                filter_type = EntityType(extra_type)
-                extras = [e for e in extras if e.entity_type == filter_type]
-            except ValueError:
-                await interaction.followup.send(f"❌ Invalid extra type '{extra_type}'.", ephemeral=True)
-                return
-        
         if not extras:
-            type_text = f" of type {extra_type}" if extra_type else ""
-            await interaction.followup.send(f"No Fate extras{type_text} found.", ephemeral=True)
+            await interaction.followup.send(f"No Fate extras found.", ephemeral=True)
             return
         
         # Create embed
         title = "Fate Extras"
-        if extra_type:
-            title += f" ({extra_type})"
-        
         embed = discord.Embed(title=title, color=discord.Color.purple())
         
         if show_relationships:
@@ -295,7 +250,7 @@ class FateCommands(commands.Cog):
             extra_info = []
             for extra in extras:
                 # Get owned entities
-                owned_entities = repositories.relationship.get_children(
+                possessed_entities = repositories.relationship.get_children(
                     str(interaction.guild.id), 
                     extra.id, 
                     RelationshipType.POSSESSES.value
@@ -316,8 +271,8 @@ class FateCommands(commands.Cog):
                 )
                 
                 info = f"**{extra.name}** ({extra.entity_type.value})"
-                if owned_entities:
-                    owned_names = [e.name for e in owned_entities]
+                if possessed_entities:
+                    owned_names = [e.name for e in possessed_entities]
                     info += f"\n  *Owns: {', '.join(owned_names)}*"
                 if controlled_entities:
                     controlled_names = [e.name for e in controlled_entities]
@@ -342,25 +297,15 @@ class FateCommands(commands.Cog):
             for type_name, type_extras in by_type.items():
                 extra_list = []
                 for extra in type_extras:
-                    # Show controlled by info for companions
-                    if extra.entity_type == EntityType.COMPANION:
-                        controllers = repositories.relationship.get_parents(
-                            str(interaction.guild.id), 
-                            extra.id, 
-                            RelationshipType.CONTROLS.value
-                        )
-                        control_info = f" (controlled by {controllers[0].name})" if controllers else ""
-                        extra_list.append(f"• {extra.name}{control_info}")
-                    else:
-                        # Show owned entities count if any
-                        owned_entities = repositories.relationship.get_children(
-                            str(interaction.guild.id), 
-                            extra.id, 
-                            RelationshipType.POSSESSES.value
-                        )
-                        owned_info = f" ({len(owned_entities)} owned)" if owned_entities else ""
-                        extra_list.append(f"• {extra.name}{owned_info}")
-                
+                    # Show possessed entities count if any
+                    possessed_entities = repositories.relationship.get_children(
+                        str(interaction.guild.id), 
+                        extra.id, 
+                        RelationshipType.POSSESSES.value
+                    )
+                    possessed_info = f" ({len(possessed_entities)} possessed)" if possessed_entities else ""
+                    extra_list.append(f"• {extra.name}{possessed_info}")
+
                 embed.add_field(
                     name=f"{type_name.title()} ({len(type_extras)})",
                     value="\n".join(extra_list)[:1024],  # Discord field limit
@@ -454,7 +399,7 @@ class FateCommands(commands.Cog):
         
         for npc_id in npc_ids:
             # Get all characters and find the specific NPC
-            npc = repositories.character.get_by_id(str(npc_id))
+            npc = repositories.entity.get_by_id(str(npc_id))
             if not npc:
                 continue
                 
@@ -543,14 +488,14 @@ class FateCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 class ConfirmDeleteExtraView(discord.ui.View):
-    def __init__(self, extra):
+    def __init__(self, extra: BaseEntity):
         super().__init__(timeout=60)
         self.extra = extra
 
     @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
     async def confirm_delete(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Delete the extra (this will also delete all relationships)
-        repositories.character.delete_character(str(interaction.guild.id), self.extra.id)
+        repositories.entity.delete_entity(str(interaction.guild.id), self.extra.id)
         await interaction.response.edit_message(
             content=f"✅ Deleted {self.extra.entity_type.value} `{self.extra.name}`.",
             view=None

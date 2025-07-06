@@ -354,7 +354,7 @@ class GenericSceneView(BasePinnableSceneView):
         # Format scene content
         lines = []
         for npc_id in npc_ids:
-            npc = repositories.character.get_by_id(str(npc_id))
+            npc = repositories.entity.get_by_id(str(npc_id))
             if npc:
                 # Show NPC details for everyone
                 lines.append(npc.format_npc_scene_entry(is_gm=False))

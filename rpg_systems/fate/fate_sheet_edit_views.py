@@ -147,13 +147,13 @@ class EditAspectsView(ui.View):
             elif cid == "remove":
                 del self.aspects[self.page]
                 self.char.aspects = self.aspects
-                repositories.character.upsert_character(interaction.guild.id, self.char, system=SYSTEM)
+                repositories.entity.upsert_entity(interaction.guild.id, self.char, system=SYSTEM)
                 self.page = max(0, self.page - 1)
             elif cid == "toggle_hidden":
                 current_aspect = self.aspects[self.page]
                 current_aspect.is_hidden = not current_aspect.is_hidden
                 self.char.aspects = self.aspects
-                repositories.character.upsert_character(interaction.guild.id, self.char, system=SYSTEM)
+                repositories.entity.upsert_entity(interaction.guild.id, self.char, system=SYSTEM)
             elif cid == "add":
                 await interaction.response.send_modal(AddAspectModal(self.char_id))
                 return
@@ -166,7 +166,7 @@ class EditAspectsView(ui.View):
                 return
 
             # Save changes and update view
-            repositories.character.upsert_character(interaction.guild.id, self.char, system=SYSTEM)
+            repositories.entity.upsert_entity(interaction.guild.id, self.char, system=SYSTEM)
             self.load_data()
             self.render()
             await interaction.response.edit_message(embed=self.char.format_full_sheet(), view=self)
@@ -262,7 +262,7 @@ class EditStressTracksView(ui.View):
                 
                 # Update character
                 self.char.stress_tracks = self.stress_tracks
-                repositories.character.upsert_character(interaction.guild.id, self.char, system=SYSTEM)
+                repositories.entity.upsert_entity(interaction.guild.id, self.char, system=SYSTEM)
                 
                 self.render()
                 await interaction.response.edit_message(view=self)
@@ -285,7 +285,7 @@ class EditStressTracksView(ui.View):
                 track = self.stress_tracks[self.current_track_index]
                 track.clear_all_boxes()
                 self.char.stress_tracks = self.stress_tracks
-                repositories.character.upsert_character(interaction.guild.id, self.char, system=SYSTEM)
+                repositories.entity.upsert_entity(interaction.guild.id, self.char, system=SYSTEM)
                 self.render()
                 await interaction.response.edit_message(view=self)
             elif cid == "add_track":
@@ -353,7 +353,7 @@ class RemoveStressBoxModal(ui.Modal, title="Remove Stress Box"):
 
         # Save changes
         character.stress_tracks = stress_tracks
-        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
         await interaction.response.edit_message(
             content=f"✅ Removed stress box with value {removed_box.value} from {track.track_name}.", 
@@ -397,7 +397,7 @@ class AddStressBoxModal(ui.Modal, title="Add Stress Box"):
         
         # Save changes
         character.stress_tracks = stress_tracks
-        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
         await interaction.response.edit_message(
             content=f"✅ Added stress box with value {value} to {track.track_name}.", 
@@ -467,7 +467,7 @@ class AddStressTrackModal(ui.Modal, title="Add New Stress Track"):
         
         # Save changes
         character.stress_tracks = stress_tracks
-        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
         await interaction.response.edit_message(
             content=f"✅ Added new stress track: '{track_name}' with {num_boxes} boxes.", 
@@ -593,7 +593,7 @@ class EditConsequencesView(ui.View):
                 current_consequence = all_consequences[current_pos][2]
                 current_consequence.aspect = None
                 self.char.consequence_tracks = self.consequence_tracks
-                repositories.character.upsert_character(interaction.guild.id, self.char, system=SYSTEM)
+                repositories.entity.upsert_entity(interaction.guild.id, self.char, system=SYSTEM)
             elif cid == "add_track":
                 await interaction.response.send_modal(AddConsequenceTrackModal(self.char_id))
                 return
@@ -671,7 +671,7 @@ class EditConsequenceModal(ui.Modal, title="Edit Consequence"):
         
         # Save changes
         character.consequence_tracks = consequence_tracks
-        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
         await interaction.response.edit_message(
             content="✅ Consequence updated.", 
@@ -752,7 +752,7 @@ class AddConsequenceTrackModal(ui.Modal, title="Add New Consequence Track"):
         
         # Save changes
         character.consequence_tracks = consequence_tracks
-        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
         consequence_names = [f"{cons.name}({cons.severity})" for cons in consequences]
         await interaction.response.edit_message(
@@ -843,7 +843,7 @@ class EditStuntsView(ui.View):
                 current_stunt = self.stunt_names[self.page]
                 del self.stunts[current_stunt]
                 self.char.stunts = self.stunts
-                repositories.character.upsert_character(interaction.guild.id, self.char, system=SYSTEM)
+                repositories.entity.upsert_entity(interaction.guild.id, self.char, system=SYSTEM)
                 self.stunt_names.remove(current_stunt)
                 self.max_page = max(0, len(self.stunt_names) - 1)
                 self.page = min(self.page, self.max_page)
@@ -859,7 +859,7 @@ class EditStuntsView(ui.View):
                 return
 
             # Save changes and update view
-            repositories.character.upsert_character(interaction.guild.id, self.char, system=SYSTEM)
+            repositories.entity.upsert_entity(interaction.guild.id, self.char, system=SYSTEM)
             self.load_data()
             self.render()
             await interaction.response.edit_message(view=self)
@@ -927,7 +927,7 @@ class SkillManagementView(ui.View):
             if skill in skills:
                 del skills[skill]
                 self.character.skills = skills
-                repositories.character.upsert_character(interaction2.guild.id, self.character, system=SYSTEM)
+                repositories.entity.upsert_entity(interaction2.guild.id, self.character, system=SYSTEM)
                 embed = self.character.format_full_sheet()
                 view = FateSheetEditView(interaction2.user.id, self.char_id)
                 await interaction2.response.edit_message(
@@ -1019,7 +1019,7 @@ class EditAspectModal(ui.Modal, title="Edit Aspect"):
         
         # Save changes
         character.aspects = aspects
-        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
         # Local import to avoid circular dependency
         from rpg_systems.fate.fate_sheet_edit_views import EditAspectsView
@@ -1091,7 +1091,7 @@ class AddAspectModal(ui.Modal, title="Add Aspect"):
         
         aspects.append(new_aspect)
         character.aspects = aspects
-        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
         # Local import to avoid circular dependency
         from rpg_systems.fate.fate_sheet_edit_views import EditAspectsView
@@ -1123,7 +1123,7 @@ class EditFatePointsModal(ui.Modal, title="Edit Fate Points/Refresh"):
         except ValueError:
             await interaction.response.send_message("❌ Invalid number.", ephemeral=True)
             return
-        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
         # Local import to avoid circular dependency
         from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
@@ -1162,7 +1162,7 @@ class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
         skills = character.skills
         skills[self.skill] = value_int
         character.skills = skills
-        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
         # Local import to avoid circular dependency
         from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
@@ -1205,7 +1205,7 @@ class AddSkillModal(ui.Modal, title="Add New Skill"):
             
         skills[skill_name] = value_int
         character.skills = skills
-        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
         # Local import to avoid circular dependency
         from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
@@ -1244,7 +1244,7 @@ class BulkEditSkillsModal(ui.Modal, title="Bulk Edit Skills"):
 
         # Replace all skills with the new set
         character.skills = skills_dict
-        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
         # Local import to avoid circular dependency
         from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
@@ -1300,7 +1300,7 @@ class EditStuntModal(ui.Modal, title="Edit Stunt"):
             
         stunts[new_name] = description
         character.stunts = stunts
-        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
         # Local import to avoid circular dependency
         from rpg_systems.fate.fate_sheet_edit_views import EditStuntsView
@@ -1346,7 +1346,7 @@ class AddStuntModal(ui.Modal, title="Add New Stunt"):
             
         stunts[name] = description
         character.stunts = stunts
-        repositories.character.upsert_character(interaction.guild.id, character, system=SYSTEM)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
         # Local import to avoid circular dependency
         from rpg_systems.fate.fate_sheet_edit_views import EditStuntsView

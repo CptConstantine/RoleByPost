@@ -13,34 +13,12 @@ class FateExtra(FateCharacter):
     
     # Support all entity types for Fate Extras
     SUPPORTED_ENTITY_TYPES: List[EntityType] = [
-        EntityType.GENERIC,
-        EntityType.PC, 
-        EntityType.NPC,
-        EntityType.COMPANION,
-        EntityType.ITEM
+        EntityType.FATE_EXTRA
     ]
     
     # Define defaults for all entity types
     ENTITY_DEFAULTS = EntityDefaults({
-        EntityType.GENERIC: {
-            "refresh": 0,
-            "fate_points": 0,
-            "skills": {},
-            "aspects": [],
-            "stress_tracks": [],
-            "consequence_tracks": [],
-            "stunts": {}
-        },
-        EntityType.COMPANION: {
-            "refresh": 0,
-            "fate_points": 0,
-            "skills": {},
-            "aspects": [],
-            "stress_tracks": [],
-            "consequence_tracks": [],
-            "stunts": {}
-        },
-        EntityType.ITEM: {
+        EntityType.FATE_EXTRA: {
             "refresh": 0,
             "fate_points": 0,
             "skills": {},
@@ -50,6 +28,8 @@ class FateExtra(FateCharacter):
             "stunts": {}
         }
     })
+
+    DEFAULT_SKILLS = {}
     
     def __init__(self, data: Dict[str, Any]):
         super().__init__(data)
@@ -58,6 +38,13 @@ class FateExtra(FateCharacter):
     def from_dict(cls, data: Dict[str, Any]) -> "FateExtra":
         """Create a FateExtra from a dictionary"""
         return cls(data)
+    
+    def apply_defaults(self, entity_type: EntityType, guild_id=None):
+        """Apply defaults for the Fate Extra entity type"""
+        super().apply_defaults(entity_type, guild_id)
+        
+        # Ensure skills are empty by default for extras
+        self.skills = self.DEFAULT_SKILLS.copy()
     
     def get_sheet_edit_view(self, editor_id: int) -> discord.ui.View:
         # For most entity types, use the full Fate sheet view

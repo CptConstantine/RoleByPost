@@ -335,13 +335,14 @@ class FateCharacter(BaseCharacter):
 
         # --- Skills ---
         # Only display skills > 0
-        skills = {k: v for k, v in self.skills.items() if v > 0}
-        if skills:
-            sorted_skills = sorted(skills.items(), key=lambda x: -x[1])
-            skill_lines = [f"**{k}**: +{v}" for k, v in sorted_skills]
-            embed.add_field(name="__Skills__", value="\n".join(skill_lines), inline=False)
-        else:
-            embed.add_field(name="__Skills__", value="None", inline=False)
+        if self.skills:
+            skills = {k: v for k, v in self.skills.items() if v > 0}
+            if skills:
+                sorted_skills = sorted(skills.items(), key=lambda x: -x[1])
+                skill_lines = [f"**{k}**: +{v}" for k, v in sorted_skills]
+                embed.add_field(name="__Skills__", value="\n".join(skill_lines), inline=False)
+            else:
+                embed.add_field(name="__Skills__", value="None", inline=False)
 
         # --- Stress Tracks ---
         stress_tracks = self.stress_tracks

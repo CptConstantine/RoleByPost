@@ -187,9 +187,9 @@ class ActiveCharacterRepository(BaseRepository[ActiveCharacter]):
         active_record = self.get_active_character_record(guild_id, user_id)
         if active_record:
             # Use find_all_by_column to get Character, then convert
-            characters = repositories.character.find_all_by_column('id', active_record.char_id)
-            if characters:
-                return repositories.character._convert_to_base_character(characters[0])
+            character = repositories.entity.get_by_id(active_record.char_id)
+            if character:
+                return self._convert_to_base_character(character)
         return None
     
     def get_all_active_characters(self, guild_id: int) -> List[BaseCharacter]:
@@ -201,7 +201,7 @@ class ActiveCharacterRepository(BaseRepository[ActiveCharacter]):
         
         active_characters = []
         for record in active_records:
-            character = repositories.character.get_by_id(record.char_id)
+            character = repositories.entity.get_by_id(record.char_id)
             if character:
                 active_characters.append(character)
         
