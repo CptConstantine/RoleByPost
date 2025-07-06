@@ -89,10 +89,10 @@ class CharacterRepository(BaseRepository[Character]):
     def get_all_by_guild(self, guild_id: str, system: str = None) -> List[BaseCharacter]:
         """Get all characters for a guild, optionally filtered by system"""
         if system:
-            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND system = %s ORDER BY name"
+            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND system = %s AND entity_type in ('pc', 'npc') ORDER BY name"
             characters = self.execute_query(query, (str(guild_id), system))
         else:
-            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s ORDER BY name"
+            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND entity_type in ('pc', 'npc') ORDER BY name"
             characters = self.execute_query(query, (str(guild_id),))
         return self._convert_list_to_base_characters(characters)
 
@@ -174,6 +174,27 @@ class ActiveCharacterRepository(BaseRepository[ActiveCharacter]):
             user_id=data['user_id'],
             char_id=data['char_id']
         )
+
+    def _convert_to_base_character(self, character: Character) -> BaseCharacter:
+        """Convert a Character entity to a system-specific BaseCharacter"""
+        if not character:
+            return None
+            
+        # Get the system-specific character class
+        CharacterClass = factories.get_specific_character(character.system, EntityType(character.entity_type))
+        
+        # Create the character dict using the helper method
+        character_dict = BaseEntity.build_entity_dict(
+            id=character.id,
+            name=character.name,
+            owner_id=character.owner_id,
+            entity_type=EntityType.get_type_from_str(character.entity_type),
+            notes=character.notes,
+            avatar_url=character.avatar_url,
+            system_specific_fields=character.system_specific_data
+        )
+        
+        return CharacterClass.from_dict(character_dict)
     
     def get_active_character_record(self, guild_id: int, user_id: int) -> Optional[ActiveCharacter]:
         """Get active character record for a user"""
