@@ -2,8 +2,8 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from data.repositories.repository_factory import repositories
-from core.models import RelationshipType
-from core.models import BaseEntity
+from core.base_models import RelationshipType
+from core.base_models import BaseEntity
 from typing import Optional, List
 import core.factories as factories
 
@@ -299,23 +299,11 @@ class RelationshipCommands(commands.Cog):
 
     def _find_entity_by_name(self, guild_id: str, entity_name: str) -> Optional[BaseEntity]:
         """Helper method to find an entity by name in both character and entity repositories"""
-        # Try character repository first
-        entity = repositories.character.get_character_by_name(guild_id, entity_name)
-        if entity:
-            return entity
-        
-        # Try entity repository
         entity = repositories.entity.get_by_name(str(guild_id), entity_name)
         return entity
 
     def _find_entity_by_id(self, entity_id: str) -> Optional[BaseEntity]:
         """Helper method to find an entity by ID in both character and entity repositories"""
-        # Try character repository first
-        entity = repositories.character.get_by_id(entity_id)
-        if entity:
-            return entity
-        
-        # Try entity repository
         entity = repositories.entity.get_by_id(entity_id)
         return entity
 

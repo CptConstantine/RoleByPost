@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Any
 from .base_repository import BaseRepository
 from data.models import Relationship
-from core.models import BaseEntity
+from core.base_models import BaseEntity
 import json
 import uuid
 from datetime import datetime

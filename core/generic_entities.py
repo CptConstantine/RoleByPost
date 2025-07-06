@@ -1,0 +1,255 @@
+from typing import Any, ClassVar, Dict, List
+import discord
+from discord import ui
+from core.base_models import BaseCharacter, BaseEntity, RollModifiers, EntityDefaults, EntityType
+from core.shared_views import EditNameModal, EditNotesModal, FinalizeRollButton, RollModifiersView
+from core.utils import roll_formula
+
+SYSTEM = "generic"
+    
+class GenericEntity(BaseEntity):
+    """Generic system entity - simple entity with basic properties"""
+    
+    ENTITY_DEFAULTS = EntityDefaults({
+        EntityType.GENERIC: { }
+    })
+    
+    def __init__(self, data: Dict[str, Any]):
+        super().__init__(data)
+        self.entity_type = EntityType.GENERIC
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "GenericEntity":
+        return cls(data)
+    
+    def get_sheet_edit_view(self, editor_id: int) -> ui.View:
+        from core.generic_entities import GenericSheetEditView
+        return GenericSheetEditView(editor_id=editor_id, char_id=self.id)
+    
+    def apply_defaults(self, entity_type: EntityType = None, guild_id: str = None):
+        """Apply defaults for generic entities"""
+        super().apply_defaults(entity_type=entity_type, guild_id=guild_id)
+
+class GenericCharacter(BaseCharacter):
+    ENTITY_DEFAULTS = EntityDefaults({
+        EntityType.PC: { },
+        EntityType.NPC: { }
+    })
+
+    def __init__(self, data: Dict[str, Any]):
+        super().__init__(data)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "GenericCharacter":
+        return cls(data)
+    
+    def apply_defaults(self, entity_type = None, guild_id = None):
+        super().apply_defaults(entity_type, guild_id)
+
+        if self.ENTITY_DEFAULTS:
+            defaults = self.ENTITY_DEFAULTS.get_defaults(entity_type)
+            for key, value in defaults.items():
+                self._apply_default_field(key, value, guild_id) 
+    
+    def get_sheet_edit_view(self, editor_id: int) -> ui.View:
+        from core.generic_entities import GenericSheetEditView
+        return GenericSheetEditView(editor_id=editor_id, char_id=self.id)
+
+    def format_full_sheet(self) -> discord.Embed:
+        """Format the character sheet for generic system"""
+        embed = discord.Embed(
+            title=f"{self.name or 'Character'}",
+            color=discord.Color.greyple()
+        )
+        notes = self.notes
+        notes_display = "\n".join(notes) if notes else "_No notes_"
+        embed.add_field(name="Notes", value=notes_display, inline=False)
+        return embed
+
+    def format_npc_scene_entry(self, is_gm: bool) -> str:
+        """Format NPC entry for scene display"""
+        lines = [f"**{self.name or 'NPC'}**"]
+        if is_gm and self.notes:
+            notes_display = "\n".join(self.notes)
+            lines.append(f"**Notes:** *{notes_display}*")
+        return "\n".join(lines)
+
+    async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: "GenericRollModifiers", difficulty: int = None):
+        """
+        Opens a view for editing the roll parameters.
+        Generic version doesn't have skill selection but does allow modifier adjustment.
+        """
+        view = GenericRollModifiersView(roll_formula_obj, difficulty)
+        await interaction.response.send_message(
+            content="Adjust your roll formula as needed, then finalize to roll.",
+            view=view,
+            ephemeral=True
+        )
+
+    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
+        """
+        Prints the roll result
+        """
+        result, total = roll_formula(self, "1d20", roll_formula_obj)
+
+        difficulty_str = ""
+        if difficulty:
+            difficulty_str = f" (Needed {difficulty})"
+            if total >= difficulty:
+                result += f"\n✅ Success.{difficulty_str}"
+            else:
+                result += f"\n❌ Failure.{difficulty_str}"
+        
+        await interaction.response.send_message(result, ephemeral=False)
+
+class GenericCompanion(BaseCharacter):
+    """
+    System-agnostic companion class that any system can use if there is no system-specific companion implementation.
+    """
+    ENTITY_DEFAULTS = EntityDefaults({
+        EntityType.COMPANION: { }
+    })
+    
+    SUPPORTED_ENTITY_TYPES: ClassVar[List[EntityType]] = [EntityType.COMPANION]
+    
+    def __init__(self, data: Dict[str, Any]):
+        super().__init__(data)
+        if self.entity_type != EntityType.COMPANION:
+            self.entity_type = EntityType.COMPANION
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "GenericCompanion":
+        return cls(data)
+    
+    def get_sheet_edit_view(self, editor_id: int) -> ui.View:
+        return GenericCompanionSheetEditView(editor_id=editor_id, char_id=self.id)
+    
+    def format_full_sheet(self) -> discord.Embed:
+        """Format the companion sheet"""
+        embed = discord.Embed(
+            title=f"{self.name or 'Companion'} (Companion)",
+            color=discord.Color.blue()
+        )
+        
+        # Add notes
+        notes = self.notes
+        if notes:
+            notes_display = "\n".join(notes)
+            embed.add_field(name="Notes", value=notes_display, inline=False)
+        
+        return embed
+    
+    def format_npc_scene_entry(self, is_gm: bool) -> str:
+        """Format companion entry for scene display"""
+        lines = [f"**{self.name or 'Companion'}** (Companion)"]
+        
+        if is_gm and self.notes:
+            notes_display = "\n".join(self.notes)
+            lines.append(f"**Notes:** *{notes_display}*")
+        
+        return "\n".join(lines)
+    
+    async def edit_requested_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
+        """Handle roll request for companions - uses generic system"""
+        from core.generic_entities import GenericRollModifiers, GenericRollModifiersView
+        
+        roll_formula_obj = GenericRollModifiers(roll_parameters)
+        view = GenericRollModifiersView(roll_formula_obj, difficulty)
+        
+        await interaction.response.send_message(
+            content=f"Rolling for {self.name}. Adjust as needed:",
+            view=view,
+            ephemeral=True
+        )
+    
+    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
+        """Send roll result for companions"""
+        from core.utils import roll_formula
+        
+        # Get modifiers and calculate total
+        modifiers = roll_formula_obj.get_modifiers(self)
+        total_modifier = sum(int(mod) for mod in modifiers.values() if str(mod).lstrip('-').isdigit())
+        
+        # Roll dice
+        result = roll_formula("1d20", total_modifier)
+        
+        # Format result message
+        modifier_text = " + ".join([f"{k}: {v}" for k, v in modifiers.items()]) if modifiers else "No modifiers"
+        
+        embed = discord.Embed(
+            title=f"🎲 {self.name} Roll Result",
+            description=f"**Result:** {result}",
+            color=discord.Color.blue()
+        )
+        
+        embed.add_field(name="Modifiers", value=modifier_text, inline=False)
+        
+        if difficulty:
+            success = result >= difficulty
+            embed.add_field(
+                name="Success", 
+                value=f"{'✅ Success' if success else '❌ Failure'} (Target: {difficulty})",
+                inline=False
+            )
+        
+        await interaction.response.send_message(embed=embed)
+
+class GenericCompanionSheetEditView(ui.View):
+    """Generic sheet edit view for companions - simpler than full character sheets"""
+    
+    def __init__(self, editor_id: int, char_id: str):
+        super().__init__(timeout=120)
+        self.editor_id = editor_id
+        self.char_id = char_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.editor_id:
+            await interaction.response.send_message("You can't edit this character.", ephemeral=True)
+            return False
+        return True
+
+    @ui.button(label="Edit Name", style=discord.ButtonStyle.secondary, row=0)
+    async def edit_name(self, interaction: discord.Interaction, button: ui.Button):
+        from core.shared_views import EditNameModal
+        await interaction.response.send_modal(EditNameModal(self.char_id, SYSTEM))
+
+    @ui.button(label="Edit Notes", style=discord.ButtonStyle.secondary, row=0)
+    async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
+        from core.shared_views import EditNotesModal
+        await interaction.response.send_modal(EditNotesModal(self.char_id, SYSTEM))
+
+class GenericRollModifiers(RollModifiers):
+    """
+    A roll formula specifically for the generic RPG system.
+    It can handle any roll parameters as needed.
+    """
+    def __init__(self, roll_parameters_dict: dict = None):
+        super().__init__(roll_parameters_dict)
+
+class GenericSheetEditView(ui.View):
+    def __init__(self, editor_id: int, char_id: str):
+        super().__init__(timeout=120)
+        self.editor_id = editor_id
+        self.char_id = char_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.editor_id:
+            await interaction.response.send_message("You can't edit this character.", ephemeral=True)
+            return False
+        return True
+
+    @ui.button(label="Edit Name", style=discord.ButtonStyle.secondary, row=0)
+    async def edit_name(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(EditNameModal(self.char_id, SYSTEM))
+
+    @ui.button(label="Edit Notes", style=discord.ButtonStyle.secondary, row=0)
+    async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.send_modal(EditNotesModal(self.char_id, SYSTEM))
+
+class GenericRollModifiersView(RollModifiersView):
+    """
+    Generic roll modifiers view with just the basic modifier functionality.
+    """
+    def __init__(self, roll_formula_obj: RollModifiers, difficulty: int = None):
+        super().__init__(roll_formula_obj, difficulty)
+        self.add_item(FinalizeRollButton(roll_formula_obj, difficulty))

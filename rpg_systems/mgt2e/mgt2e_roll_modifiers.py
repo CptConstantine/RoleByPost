@@ -1,5 +1,5 @@
 from typing import Dict
-from core.models import RollModifiers
+from core.base_models import RollModifiers
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:

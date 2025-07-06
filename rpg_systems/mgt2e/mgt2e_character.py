@@ -1,7 +1,7 @@
 from collections import defaultdict
 from typing import Any, Dict
 import discord
-from core.models import BaseCharacter, EntityType, RollModifiers
+from core.base_models import BaseCharacter, EntityType, RollModifiers
 from core.utils import roll_formula
 from rpg_systems.mgt2e.mgt2e_roll_modifiers import MGT2ERollModifiers
 from rpg_systems.mgt2e.mgt2e_roll_views import MGT2ERollModifiersView
@@ -172,6 +172,10 @@ class MGT2ECharacter(BaseCharacter):
                 current_value = getattr(self, key, None)
                 if current_value in (None, [], {}, 0, False):
                     setattr(self, key, value)
+    
+    def get_sheet_edit_view(self, editor_id: int) -> discord.ui.View:
+        from rpg_systems.mgt2e.mgt2e_sheet_edit_views import MGT2ESheetEditView
+        return MGT2ESheetEditView(editor_id=editor_id, char_id=self.id)
     
     async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: MGT2ERollModifiers, difficulty: int = None):
         """
@@ -368,7 +372,7 @@ class MGT2ECharacter(BaseCharacter):
         return "\n".join(lines)
 
 def get_character(char_id) -> MGT2ECharacter:
-    character = repositories.character.get_by_id(str(char_id))
+    character = repositories.entity.get_by_id(str(char_id))
     return character if character else None
 
 def get_skill_categories(skills_dict):

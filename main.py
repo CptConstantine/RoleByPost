@@ -99,13 +99,13 @@ async def on_message(message: discord.Message):
     if message.guild:
         if message.author.id != bot.user.id:
             repositories.last_message_time.update_last_message_time(message.guild.id, message.author.id, message.created_at.timestamp())
-        
-        # Handle mentions for automatic reminders
-        if message.mentions:
-            reminder_cog = bot.get_cog("ReminderCommands")
-            if reminder_cog:
-                for user in message.mentions:
-                    await reminder_cog.handle_mention(message, user)
+    
+    # Handle mentions for automatic reminders (only for non-narration messages)
+    if message.guild and message.mentions:
+        reminder_cog = bot.get_cog("ReminderCommands")
+        if reminder_cog:
+            for user in message.mentions:
+                await reminder_cog.handle_mention(message, user)
 
     # Process narration
     if message.author.id != bot.user.id and (message.content.startswith("gm::") or message.content.startswith("pc::") or message.content.startswith("npc::")):

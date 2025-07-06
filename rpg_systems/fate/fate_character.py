@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Union
 import discord
-from core.models import BaseCharacter, EntityDefaults, EntityType
+from core.base_models import BaseCharacter, EntityDefaults, EntityType
 from core.utils import roll_formula
 from data.repositories.repository_factory import repositories
 from rpg_systems.fate.aspect import Aspect
@@ -313,6 +313,10 @@ class FateCharacter(BaseCharacter):
                     skills_dict[k.strip()] = 0
         # Add Fate-specific validation here if needed (e.g., pyramid structure)
         return skills_dict
+    
+    def get_sheet_edit_view(self, editor_id: int) -> discord.ui.View:
+        from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
+        return FateSheetEditView(editor_id=editor_id, char_id=self.id)
 
     def format_full_sheet(self) -> discord.Embed:
         """Format the character sheet for Fate system"""
@@ -449,5 +453,5 @@ class FateCharacter(BaseCharacter):
         return "\n".join(lines)
 
 def get_character(char_id) -> FateCharacter:
-    character = repositories.character.get_by_id(str(char_id))
+    character = repositories.entity.get_by_id(str(char_id))
     return character if character else None

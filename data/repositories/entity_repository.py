@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Any
 from .base_repository import BaseRepository
 from data.models import Entity
-from core.models import BaseEntity, EntityType, EntityJSONEncoder
+from core.base_models import BaseEntity, EntityType, EntityJSONEncoder
 import json
 import uuid
 import time
@@ -57,7 +57,7 @@ class EntityRepository(BaseRepository[Entity]):
             return None
             
         # Get the system-specific entity class
-        EntityClass = factories.get_specific_entity(entity.system, entity.entity_type)
+        EntityClass = factories.get_specific_entity(entity.system, EntityType(entity.entity_type))
         
         # Create the entity dict using the helper method
         entity_dict = BaseEntity.build_entity_dict(
@@ -107,7 +107,7 @@ class EntityRepository(BaseRepository[Entity]):
     def upsert_entity(self, guild_id: str, entity: BaseEntity, system: str) -> None:
         """Save or update a BaseEntity by converting it to Entity first"""
         # Get system-specific fields
-        EntityClass = factories.get_specific_entity(system, entity.entity_type.value)
+        EntityClass = factories.get_specific_entity(system, entity.entity_type)
         system_fields = EntityClass.ENTITY_DEFAULTS.get_defaults(entity.entity_type)
 
         system_specific_data = {}

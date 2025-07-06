@@ -7,16 +7,7 @@ import discord
 import discord.ui as ui
 from data.models import Relationship
 
-class NotesMixin:
-    def add_note(self, note: str):
-        if "notes" not in self.data or not isinstance(self.data["notes"], list):
-            self.data["notes"] = []
-        self.data["notes"].append(note)
-
-    def get_notes(self) -> List[str]:
-        return self.data.get("notes", [])
-
-class BaseRpgObj(ABC, NotesMixin):
+class BaseRpgObj(ABC):
     """
     Abstract base class for a "thing".
     """
@@ -255,6 +246,10 @@ class BaseEntity(BaseRpgObj):
     @avatar_url.setter
     def avatar_url(self, url):
         self.data["avatar_url"] = url
+    
+    def get_sheet_edit_view(self, editor_id: int) -> ui.View:
+        """Get the appropriate sheet edit view for this entity type"""
+        raise NotImplementedError("Subclasses must implement get_sheet_edit_view")
 
     def format_full_sheet(self) -> discord.Embed:
         """Return a Discord Embed representing the full entity sheet. Override in subclasses."""
@@ -364,27 +359,6 @@ class BaseEntity(BaseRpgObj):
             target_entity.id, 
             relationship_type.value if relationship_type else None
         )
-                
-        return entity
-    
-class GenericEntity(BaseEntity):
-    """Generic system entity - simple entity with basic properties"""
-    
-    ENTITY_DEFAULTS = EntityDefaults({
-        EntityType.GENERIC: { }
-    })
-    
-    def __init__(self, data: Dict[str, Any]):
-        super().__init__(data)
-        self.entity_type = EntityType.GENERIC
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "GenericEntity":
-        return cls(data)
-    
-    def apply_defaults(self, entity_type: EntityType = None, guild_id: str = None):
-        """Apply defaults for generic entities"""
-        super().apply_defaults(entity_type=entity_type, guild_id=guild_id)
 
 class BaseCharacter(BaseEntity):
     """
@@ -427,116 +401,3 @@ class BaseCharacter(BaseEntity):
         Should return a discord.ui.View or send a message with the result.
         """
         pass
-
-class GenericCompanion(BaseCharacter):
-    """
-    System-agnostic companion class that any system can use if there is no system-specific companion implementation.
-    """
-    ENTITY_DEFAULTS = EntityDefaults({
-        EntityType.COMPANION: { }
-    })
-    
-    SUPPORTED_ENTITY_TYPES: ClassVar[List[EntityType]] = [EntityType.COMPANION]
-    
-    def __init__(self, data: Dict[str, Any]):
-        super().__init__(data)
-        if self.entity_type != EntityType.COMPANION:
-            self.entity_type = EntityType.COMPANION
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "GenericCompanion":
-        return cls(data)
-    
-    def format_full_sheet(self) -> discord.Embed:
-        """Format the companion sheet"""
-        embed = discord.Embed(
-            title=f"{self.name or 'Companion'} (Companion)",
-            color=discord.Color.blue()
-        )
-        
-        # Add notes
-        notes = self.notes
-        if notes:
-            notes_display = "\n".join(notes)
-            embed.add_field(name="Notes", value=notes_display, inline=False)
-        
-        return embed
-    
-    def format_npc_scene_entry(self, is_gm: bool) -> str:
-        """Format companion entry for scene display"""
-        lines = [f"**{self.name or 'Companion'}** (Companion)"]
-        
-        if is_gm and self.notes:
-            notes_display = "\n".join(self.notes)
-            lines.append(f"**Notes:** *{notes_display}*")
-        
-        return "\n".join(lines)
-    
-    async def edit_requested_roll(self, interaction: discord.Interaction, roll_parameters: dict, difficulty: int = None):
-        """Handle roll request for companions - uses generic system"""
-        from rpg_systems.generic.generic_character import GenericRollModifiers, GenericRollModifiersView
-        
-        roll_formula_obj = GenericRollModifiers(roll_parameters)
-        view = GenericRollModifiersView(roll_formula_obj, difficulty)
-        
-        await interaction.response.send_message(
-            content=f"Rolling for {self.name}. Adjust as needed:",
-            view=view,
-            ephemeral=True
-        )
-    
-    async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollModifiers, difficulty: int = None):
-        """Send roll result for companions"""
-        from core.utils import roll_formula
-        
-        # Get modifiers and calculate total
-        modifiers = roll_formula_obj.get_modifiers(self)
-        total_modifier = sum(int(mod) for mod in modifiers.values() if str(mod).lstrip('-').isdigit())
-        
-        # Roll dice
-        result = roll_formula("1d20", total_modifier)
-        
-        # Format result message
-        modifier_text = " + ".join([f"{k}: {v}" for k, v in modifiers.items()]) if modifiers else "No modifiers"
-        
-        embed = discord.Embed(
-            title=f"🎲 {self.name} Roll Result",
-            description=f"**Result:** {result}",
-            color=discord.Color.blue()
-        )
-        
-        embed.add_field(name="Modifiers", value=modifier_text, inline=False)
-        
-        if difficulty:
-            success = result >= difficulty
-            embed.add_field(
-                name="Success", 
-                value=f"{'✅ Success' if success else '❌ Failure'} (Target: {difficulty})",
-                inline=False
-            )
-        
-        await interaction.response.send_message(embed=embed)
-
-class GenericCompanionSheetEditView(ui.View):
-    """Generic sheet edit view for companions - simpler than full character sheets"""
-    
-    def __init__(self, editor_id: int, char_id: str):
-        super().__init__(timeout=120)
-        self.editor_id = editor_id
-        self.char_id = char_id
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.editor_id:
-            await interaction.response.send_message("You can't edit this character.", ephemeral=True)
-            return False
-        return True
-
-    @ui.button(label="Edit Name", style=discord.ButtonStyle.secondary, row=0)
-    async def edit_name(self, interaction: discord.Interaction, button: ui.Button):
-        from core.shared_views import EditNameModal
-        await interaction.response.send_modal(EditNameModal(self.char_id, "generic"))
-
-    @ui.button(label="Edit Notes", style=discord.ButtonStyle.secondary, row=0)
-    async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
-        from core.shared_views import EditNotesModal
-        await interaction.response.send_modal(EditNotesModal(self.char_id, "generic"))

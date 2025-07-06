@@ -1,7 +1,7 @@
 from typing import Optional
 
 from core import factories
-from core.models import BaseInitiative
+from core.base_models import BaseInitiative
 from .base_repository import BaseRepository
 from data.models import InitiativeTracker, ServerInitiativeDefaults
 import json

@@ -1,5 +1,5 @@
 from typing import Any, Dict, List
-from core.models import BaseInitiative, InitiativeParticipant
+from core.base_models import BaseInitiative, InitiativeParticipant
 
 class GenericInitiative(BaseInitiative):
     """

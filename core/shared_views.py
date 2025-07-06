@@ -2,7 +2,7 @@ import re
 import discord
 from discord import Interaction, TextStyle, ui
 from core import factories
-from core.models import BaseCharacter, RollModifiers
+from core.base_models import BaseCharacter, RollModifiers
 from core.utils import get_character
 from data.repositories.repository_factory import repositories
 
@@ -168,7 +168,7 @@ class EditNameModal(ui.Modal, title="Edit Character Name"):
         self.character.name = new_name
         repositories.character.upsert_character(interaction.guild.id, self.character, self.system)
         embed = self.character.format_full_sheet()
-        view = factories.get_specific_sheet_view(self.system, interaction.user.id, self.character.id, self.character.entity_type)
+        view = self.character.get_sheet_edit_view(interaction.user.id)
         await interaction.response.edit_message(content="✅ Name updated.", embed=embed, view=view)
 
 class EditNotesModal(ui.Modal, title="Edit Notes"):
@@ -189,7 +189,7 @@ class EditNotesModal(ui.Modal, title="Edit Notes"):
         self.character.notes = [line for line in self.notes_field.value.splitlines() if line.strip()]
         repositories.character.upsert_character(interaction.guild.id, self.character, self.system)
         embed = self.character.format_full_sheet()
-        view = factories.get_specific_sheet_view(self.system, interaction.user.id, self.character.id, self.character.entity_type)
+        view = self.character.get_sheet_edit_view(interaction.user.id)
         await interaction.response.edit_message(content="✅ Notes updated.", embed=embed, view=view)
 
 class RequestRollView(ui.View):

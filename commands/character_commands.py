@@ -2,7 +2,7 @@ import uuid
 import discord
 from discord import app_commands
 from discord.ext import commands
-from core.models import BaseCharacter, BaseEntity, EntityType, RelationshipType
+from core.base_models import BaseCharacter, BaseEntity, EntityType, RelationshipType
 from data.repositories.repository_factory import repositories
 import core.factories as factories
 import json
@@ -380,11 +380,8 @@ class CharacterCommands(commands.Cog):
         system = repositories.server.get_system(interaction.guild.id)
         
         # Get appropriate sheet view based on entity type
-        sheet_view = factories.get_specific_sheet_view(
-            system, 
-            interaction.user.id, 
-            character.id,
-            entity_type=character.entity_type
+        sheet_view = character.get_sheet_edit_view(
+            interaction.user.id
         )
         
         embed = character.format_full_sheet()
@@ -503,9 +500,15 @@ class CharacterCommands(commands.Cog):
         embed.add_field(
             name="Speaking as Your Character",
             value=(
-                "Type a message starting with `pc::` followed by what your character says.\n"
-                "Example: `pc::I draw my sword and advance cautiously.`\n\n"
-                "Your active character will be used. Make sure to set an active character first with `/character switch`."
+                "**Basic Format:** `pc::Your character's message here`\n"
+                "Uses your currently active character. Set with `/character switch`.\n\n"
+                "**Speaking as a Specific Character/Companion:**\n"
+                "`pc::Character Name::Message content`\n"
+                "Example: `pc::Fluffy::*growls menacingly at the stranger*`\n\n"
+                "You can speak as:\n"
+                "• Your own player characters\n"
+                "• Companions you own\n"
+                "• Companions controlled by your characters"
             ),
             inline=False
         )

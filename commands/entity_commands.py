@@ -4,7 +4,7 @@ from discord import app_commands
 from discord.ext import commands
 from typing import List, Optional
 from core import channel_restriction
-from core.models import BaseEntity, EntityType, RelationshipType
+from core.base_models import BaseEntity, EntityType, RelationshipType
 from data.repositories.repository_factory import repositories
 import core.factories as factories
 
@@ -18,7 +18,7 @@ async def entity_type_autocomplete(interaction: discord.Interaction, current: st
     filtered_types = [entity_type for entity_type in valid_types if current.lower() in entity_type.value.lower()]
     
     return [
-        app_commands.Choice(name=entity_type.title(), value=entity_type)
+        app_commands.Choice(name=entity_type.value.title(), value=entity_type.value)
         for entity_type in filtered_types[:25]
     ]
 
@@ -104,6 +104,8 @@ class EntityCommands(commands.Cog):
             await interaction.followup.send(f"❌ Invalid entity type '{entity_type}' for {system.upper()} system.", ephemeral=True)
             return
         
+        e_type = EntityType(entity_type)
+        
         # Check if entity with this name already exists
         existing = repositories.entity.get_by_name(str(interaction.guild.id), name)
         if existing:
@@ -112,16 +114,16 @@ class EntityCommands(commands.Cog):
         
         # Create the entity
         entity_id = str(uuid.uuid4())
-        EntityClass = factories.get_specific_entity(system, entity_type)
+        EntityClass = factories.get_specific_entity(system, e_type)
         entity_dict = BaseEntity.build_entity_dict(
             id=entity_id,
             name=name,
             owner_id=str(interaction.user.id),
-            entity_type=entity_type
+            entity_type=e_type
         )
         
         entity = EntityClass(entity_dict)
-        entity.apply_defaults(entity_type=entity_type, guild_id=str(interaction.guild.id))
+        entity.apply_defaults(entity_type=e_type, guild_id=str(interaction.guild.id))
         
         # Save the entity first
         repositories.entity.upsert_entity(str(interaction.guild.id), entity, system=system)

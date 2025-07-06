@@ -1,7 +1,7 @@
 from typing import List, Optional
 from .base_repository import BaseRepository
 from data.models import Character, ActiveCharacter
-from core.models import BaseCharacter, BaseEntity, EntityJSONEncoder, EntityType
+from core.base_models import BaseCharacter, BaseEntity, EntityJSONEncoder, EntityType
 import json
 import core.factories as factories
 

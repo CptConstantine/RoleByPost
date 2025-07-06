@@ -1,0 +1,77 @@
+from typing import Any, Dict, List
+import discord
+from core.base_models import EntityDefaults, EntityType
+from rpg_systems.fate.fate_character import FateCharacter
+
+
+class FateExtra(FateCharacter):
+    """
+    A Fate Extra - can represent any entity type in the Fate system.
+    This includes items, locations, organizations, vehicles, or any other
+    entity that might have aspects, skills, or stress tracks.
+    """
+    
+    # Support all entity types for Fate Extras
+    SUPPORTED_ENTITY_TYPES: List[EntityType] = [
+        EntityType.GENERIC,
+        EntityType.PC, 
+        EntityType.NPC,
+        EntityType.COMPANION,
+        EntityType.ITEM
+    ]
+    
+    # Define defaults for all entity types
+    ENTITY_DEFAULTS = EntityDefaults({
+        EntityType.GENERIC: {
+            "refresh": 0,
+            "fate_points": 0,
+            "skills": {},
+            "aspects": [],
+            "stress_tracks": [],
+            "consequence_tracks": [],
+            "stunts": {}
+        },
+        EntityType.COMPANION: {
+            "refresh": 0,
+            "fate_points": 0,
+            "skills": {},
+            "aspects": [],
+            "stress_tracks": [],
+            "consequence_tracks": [],
+            "stunts": {}
+        },
+        EntityType.ITEM: {
+            "refresh": 0,
+            "fate_points": 0,
+            "skills": {},
+            "aspects": [],
+            "stress_tracks": [],
+            "consequence_tracks": [],
+            "stunts": {}
+        }
+    })
+    
+    def __init__(self, data: Dict[str, Any]):
+        super().__init__(data)
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "FateExtra":
+        """Create a FateExtra from a dictionary"""
+        return cls(data)
+    
+    def get_sheet_edit_view(self, editor_id: int) -> discord.ui.View:
+        # For most entity types, use the full Fate sheet view
+        from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
+        return FateSheetEditView(editor_id=editor_id, char_id=self.id)
+    
+    def format_full_sheet(self) -> discord.Embed:
+        """Format the extra's sheet - use parent implementation but adjust title"""
+        embed = super().format_full_sheet()
+        
+        return embed
+    
+    def format_npc_scene_entry(self, is_gm: bool) -> str:
+        """Format extra entry for scene display"""
+        embed = super().format_npc_scene_entry(is_gm)
+
+        return embed

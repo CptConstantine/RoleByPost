@@ -3,7 +3,7 @@ import logging
 import discord
 from discord import ui, SelectOption
 from core.initiative_types import GenericInitiative, PopcornInitiative
-from core.models import BaseInitiative
+from core.base_models import BaseInitiative
 from data.repositories.repository_factory import repositories
 
 async def get_gm_ids(guild: discord.Guild):
