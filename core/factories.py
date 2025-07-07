@@ -48,7 +48,7 @@ def get_specific_entity(system: str, entity_type: EntityType):
             return mgt2e_character.MGT2ECharacter
         elif entity_type == EntityType.COMPANION:
             return generic_entities.GenericCompanion
-        elif entity_type == EntityType.GENERIC:
+        elif entity_type == EntityType.GENERIC or entity_type == EntityType.ITEM:
             return generic_entities.GenericEntity
         else:
             raise ValueError(f"Unknown entity type '{entity_type}' for MGT2E system")
