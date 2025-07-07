@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Union
 import discord
-from core.base_models import BaseCharacter, EntityDefaults, EntityType
+from core.base_models import BaseCharacter, EntityDefaults, EntityType, RelationshipType
 from core.roll_formula import RollFormula
 from data.repositories.repository_factory import repositories
 from rpg_systems.fate.aspect import Aspect
@@ -12,6 +12,11 @@ from rpg_systems.fate.consequence_track import ConsequenceTrack, Consequence
 SYSTEM = "fate"
 
 class FateCharacter(BaseCharacter):
+    SUPPORTED_ENTITY_TYPES: List[EntityType] = [
+        EntityType.PC,
+        EntityType.NPC
+    ]
+
     ENTITY_DEFAULTS = EntityDefaults({
         EntityType.PC: {
             "refresh": 3,  
@@ -318,8 +323,11 @@ class FateCharacter(BaseCharacter):
         from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
         return FateSheetEditView(editor_id=editor_id, char_id=self.id)
 
-    def format_full_sheet(self) -> discord.Embed:
+    def format_full_sheet(self, guild_id: int) -> discord.Embed:
         """Format the character sheet for Fate system"""
+        return self.get_sheet_embed(guild_id, display_all=True)
+
+    def get_sheet_embed(self, guild_id, display_all):
         embed = discord.Embed(title=f"{self.name}", color=discord.Color.purple())
 
         # --- Aspects ---
@@ -330,7 +338,7 @@ class FateCharacter(BaseCharacter):
                 aspect_lines.append(aspect.get_short_aspect_string(is_owner=True))
 
             embed.add_field(name="__Aspects__", value="\n".join(aspect_lines), inline=False)
-        else:
+        elif display_all:
             embed.add_field(name="__Aspects__", value="None", inline=False)
 
         # --- Skills ---
@@ -341,7 +349,7 @@ class FateCharacter(BaseCharacter):
                 sorted_skills = sorted(skills.items(), key=lambda x: -x[1])
                 skill_lines = [f"**{k}**: +{v}" for k, v in sorted_skills]
                 embed.add_field(name="__Skills__", value="\n".join(skill_lines), inline=False)
-            else:
+            elif display_all:
                 embed.add_field(name="__Skills__", value="None", inline=False)
 
         # --- Stress Tracks ---
@@ -361,7 +369,7 @@ class FateCharacter(BaseCharacter):
                 stress_lines.append(stress_line)
 
             embed.add_field(name="__Stress__", value="\n".join(stress_lines), inline=False)
-        else:
+        elif display_all:
             embed.add_field(name="__Stress__", value="None", inline=False)
 
         # --- Consequences ---
@@ -378,27 +386,50 @@ class FateCharacter(BaseCharacter):
                         consequence_lines.append(f"{consequence.name} ({consequence.severity}):")
             
             embed.add_field(name="__Consequences__", value="\n".join(consequence_lines), inline=False)
-        else:
+        elif display_all:
             embed.add_field(name="__Consequences__", value="None", inline=False)
 
         # --- Fate Points / Refresh ---
         fp = self.fate_points
-        refresh = self.refresh
-        embed.add_field(name="__Fate Points__", value=f"{fp}/{refresh}", inline=True)
+        if self.refresh > 0:
+            refresh = self.refresh
+            embed.add_field(name="__Fate Points__", value=f"{fp}/{refresh}", inline=True)
+        elif display_all:
+            embed.add_field(name="__Fate Points__", value="0/0", inline=True)
 
         # --- Stunts ---
         stunts = self.stunts
         if stunts:
             stunt_lines = [f"• {stunt_name}" for stunt_name in stunts.keys()]
             embed.add_field(name="__Stunts__", value="\n".join(stunt_lines), inline=False)
-        else:
+        elif display_all:
             embed.add_field(name="__Stunts__", value="None", inline=False)
+
+        # --- Inventory ---
+        items = self.get_children(guild_id=guild_id, relationship_type=RelationshipType.POSSESSES)
+        if items:
+            # Group items by entity type and count them
+            item_counts = {}
+            for item in items:
+                entity_type = item.entity_type
+                if entity_type in item_counts:
+                    item_counts[entity_type] += 1
+                else:
+                    item_counts[entity_type] = 1
+            
+            # Format the display
+            item_lines = [f"• {entity_type.value}(s): {count}" for entity_type, count in item_counts.items()]
+            embed.add_field(name="__Inventory__", value="\n".join(item_lines), inline=False)
+        elif display_all:
+            embed.add_field(name="__Inventory__", value="None", inline=False)
 
         # --- Notes ---
         notes = self.notes
-        # If notes is a list, join them for display
-        notes_display = "\n".join(notes) if notes else "_No notes_"
-        embed.add_field(name="__Notes__", value=notes_display, inline=False)
+        if notes:
+            notes_display = "\n".join(notes)
+            embed.add_field(name="__Notes__", value=notes_display, inline=False)
+        elif display_all:
+            embed.add_field(name="__Notes__", value="None", inline=False)
 
         return embed
 

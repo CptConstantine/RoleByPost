@@ -1,7 +1,7 @@
 from collections import defaultdict
 from typing import Any, Dict
 import discord
-from core.base_models import BaseCharacter, EntityType, EntityDefaults, RollFormula
+from core.base_models import BaseCharacter, EntityType, EntityDefaults, RelationshipType, RollFormula
 from core.roll_formula import RollFormula
 from rpg_systems.mgt2e.mgt2e_roll_formula import MGT2ERollFormula
 from rpg_systems.mgt2e.mgt2e_roll_views import MGT2ERollFormulaView
@@ -314,7 +314,7 @@ class MGT2ECharacter(BaseCharacter):
         else:
             return 3
 
-    def format_full_sheet(self) -> discord.Embed:
+    def format_full_sheet(self, guild_id: int) -> discord.Embed:
         """Format the character sheet for MGT2E system"""
         # Use the .name property instead of get_name()
         embed = discord.Embed(
@@ -354,6 +354,24 @@ class MGT2ECharacter(BaseCharacter):
                 embed.add_field(name=f"Skills", value=chunk.strip(), inline=False)
         else:
             embed.add_field(name="Skills", value="None", inline=False)
+
+        # --- Inventory ---
+        items = self.get_children(guild_id=guild_id, relationship_type=RelationshipType.POSSESSES)
+        if items:
+            # Group items by entity type and count them
+            item_counts = {}
+            for item in items:
+                entity_type = item.entity_type
+                if entity_type in item_counts:
+                    item_counts[entity_type] += 1
+                else:
+                    item_counts[entity_type] = 1
+            
+            # Format the display
+            item_lines = [f"• {entity_type.value}(s): {count}" for entity_type, count in item_counts.items()]
+            embed.add_field(name="__Inventory__", value="\n".join(item_lines), inline=False)
+        else:
+            embed.add_field(name="__Inventory__", value="None", inline=False)
 
         # --- Notes ---
         notes = self.notes  # Use property, which is a list

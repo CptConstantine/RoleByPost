@@ -384,7 +384,7 @@ class CharacterCommands(commands.Cog):
             interaction.user.id
         )
         
-        embed = character.format_full_sheet()
+        embed = character.format_full_sheet(interaction.guild.id)
         await interaction.response.send_message(embed=embed, view=sheet_view, ephemeral=True)
 
     @character_group.command(name="transfer", description="GM: Transfer a PC to another player")

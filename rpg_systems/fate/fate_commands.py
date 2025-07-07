@@ -201,7 +201,7 @@ class FateCommands(commands.Cog):
         # Get the sheet view for editing using the character's class method
         sheet_view = extra.get_sheet_edit_view(interaction.user.id)
         
-        embed = extra.format_full_sheet()
+        embed = extra.format_full_sheet(interaction.guild.id)
         await interaction.response.send_message(embed=embed, view=sheet_view, ephemeral=True)
 
     @fate_extra_group.command(name="list", description="List Fate extras")

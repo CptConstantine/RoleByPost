@@ -166,7 +166,7 @@ class EditNameModal(ui.Modal, title="Edit Character Name"):
             return
         self.character.name = new_name
         repositories.entity.upsert_entity(interaction.guild.id, self.character, self.system)
-        embed = self.character.format_full_sheet()
+        embed = self.character.format_full_sheet(interaction.guild.id)
         view = self.character.get_sheet_edit_view(interaction.user.id)
         await interaction.response.edit_message(content="✅ Name updated.", embed=embed, view=view)
 
@@ -187,7 +187,7 @@ class EditNotesModal(ui.Modal, title="Edit Notes"):
     async def on_submit(self, interaction: Interaction):
         self.character.notes = [line for line in self.notes_field.value.splitlines() if line.strip()]
         repositories.entity.upsert_entity(interaction.guild.id, self.character, self.system)
-        embed = self.character.format_full_sheet()
+        embed = self.character.format_full_sheet(interaction.guild.id)
         view = self.character.get_sheet_edit_view(interaction.user.id)
         await interaction.response.edit_message(content="✅ Notes updated.", embed=embed, view=view)
 

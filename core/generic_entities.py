@@ -55,7 +55,7 @@ class GenericCharacter(BaseCharacter):
         from core.generic_entities import GenericSheetEditView
         return GenericSheetEditView(editor_id=editor_id, char_id=self.id)
 
-    def format_full_sheet(self) -> discord.Embed:
+    def format_full_sheet(self, guild_id: int) -> discord.Embed:
         """Format the character sheet for generic system"""
         embed = discord.Embed(
             title=f"{self.name or 'Character'}",
@@ -108,11 +108,11 @@ class GenericCompanion(BaseCharacter):
     """
     System-agnostic companion class that any system can use if there is no system-specific companion implementation.
     """
+    SUPPORTED_ENTITY_TYPES: ClassVar[List[EntityType]] = [EntityType.COMPANION]
+
     ENTITY_DEFAULTS = EntityDefaults({
         EntityType.COMPANION: { }
     })
-    
-    SUPPORTED_ENTITY_TYPES: ClassVar[List[EntityType]] = [EntityType.COMPANION]
     
     def __init__(self, data: Dict[str, Any]):
         super().__init__(data)

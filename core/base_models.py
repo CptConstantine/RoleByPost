@@ -145,8 +145,6 @@ class EntityType(Enum):
     NPC = "npc"
     COMPANION = "companion"  # A character that is not a PC but is controlled by a player
     ITEM = "item"  # Generic item, can be used in inventory
-
-    FATE_EXTRA = "fate extra" # Fate specific
     
     def __str__(self):
         return self.value
@@ -224,7 +222,7 @@ class BaseEntity(BaseRpgObj):
         """Get the appropriate sheet edit view for this entity type"""
         raise NotImplementedError("Subclasses must implement get_sheet_edit_view")
 
-    def format_full_sheet(self) -> discord.Embed:
+    def format_full_sheet(self, guild_id: int) -> discord.Embed:
         """Return a Discord Embed representing the full entity sheet. Override in subclasses."""
         embed = discord.Embed(
             title=f"{self.name or 'Entity'}",
@@ -240,11 +238,6 @@ class BaseEntity(BaseRpgObj):
         """Apply system-specific default fields to an entity."""
         if entity_type is None:
             entity_type = self.entity_type
-
-        """ if self.ENTITY_DEFAULTS:
-            defaults = self.ENTITY_DEFAULTS.get_defaults(entity_type)
-            for key, value in defaults.items():
-                self._apply_default_field(key, value, guild_id) """
     
     def _apply_default_field(self, key: str, value: Any, guild_id: str = None):
         """Apply a single default field. Override in subclasses for custom logic."""
@@ -289,7 +282,7 @@ class BaseEntity(BaseRpgObj):
         from data.repositories.repository_factory import repositories
         return repositories.relationship.get_parents(guild_id, self.id, relationship_type.value if relationship_type else None)
     
-    def get_owner(self) -> Optional['BaseEntity']:
+    def get_possesser(self) -> Optional['BaseEntity']:
         """Get the entity that owns this entity (if any)"""
         owners = self.get_parents(RelationshipType.POSSESSES.value)
         return owners[0] if owners else None
@@ -332,6 +325,23 @@ class BaseEntity(BaseRpgObj):
             target_entity.id, 
             relationship_type.value if relationship_type else None
         )
+    
+    def get_inventory(self, guild_id: str) -> List['BaseEntity']:
+        """Get all items in this entity's inventory"""
+        possessed_entities = self.get_children(guild_id, RelationshipType.POSSESSES)
+        return [entity for entity in possessed_entities if entity.entity_type == EntityType.ITEM]
+    
+    def add_to_inventory(self, guild_id: str, item: 'BaseEntity') -> 'Relationship':
+        """Add an item to this entity's inventory"""
+        if item.entity_type != EntityType.ITEM:
+            raise ValueError("Only ITEM entities can be added to inventory")
+        return self.add_relationship(guild_id, item, RelationshipType.POSSESSES)
+    
+    def remove_from_inventory(self, guild_id: str, item: 'BaseEntity') -> bool:
+        """Remove an item from this entity's inventory"""
+        if item.entity_type != EntityType.ITEM:
+            raise ValueError("Only ITEM entities can be removed from inventory")
+        return self.remove_relationship(guild_id, item, RelationshipType.POSSESSES)
 
 class BaseCharacter(BaseEntity):
     """

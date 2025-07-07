@@ -59,6 +59,10 @@ class FateSheetEditView(ui.View):
     async def edit_stunts(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.edit_message(content="Editing stunts:", view=EditStuntsView(interaction.guild.id, self.editor_id, self.char_id))
 
+    @ui.button(label="Inventory", style=discord.ButtonStyle.secondary, row=3)
+    async def edit_inventory(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.edit_message(content="Editing inventory:", view=EditInventoryView(interaction.guild.id, self.editor_id, self.char_id))
+
 class EditAspectsView(ui.View):
     def __init__(self, guild_id: int, user_id: int, char_id: str):
         super().__init__(timeout=120)
@@ -160,7 +164,7 @@ class EditAspectsView(ui.View):
             elif cid == "done":
                 await interaction.response.edit_message(
                     content="✅ Done editing aspects.", 
-                    embed=self.char.format_full_sheet(), 
+                    embed=self.char.format_full_sheet(interaction.guild.id), 
                     view=FateSheetEditView(interaction.user.id, self.char_id)
                 )
                 return
@@ -169,7 +173,7 @@ class EditAspectsView(ui.View):
             repositories.entity.upsert_entity(interaction.guild.id, self.char, system=SYSTEM)
             self.load_data()
             self.render()
-            await interaction.response.edit_message(embed=self.char.format_full_sheet(), view=self)
+            await interaction.response.edit_message(embed=self.char.format_full_sheet(interaction.guild.id), view=self)
         
         return callback
     
@@ -294,7 +298,7 @@ class EditStressTracksView(ui.View):
             elif cid == "done":
                 await interaction.response.edit_message(
                     content="✅ Done editing stress tracks.", 
-                    embed=self.char.format_full_sheet(), 
+                    embed=self.char.format_full_sheet(interaction.guild.id), 
                     view=FateSheetEditView(interaction.user.id, self.char_id)
                 )
         
@@ -564,7 +568,7 @@ class EditConsequencesView(ui.View):
             if not all_consequences and cid not in ["add_track", "done"]:
                 await interaction.response.edit_message(
                     content="✅ Done editing consequences.", 
-                    embed=self.char.format_full_sheet(), 
+                    embed=self.char.format_full_sheet(interaction.guild.id), 
                     view=FateSheetEditView(interaction.user.id, self.char_id)
                 )
                 return
@@ -600,7 +604,7 @@ class EditConsequencesView(ui.View):
             elif cid == "done":
                 await interaction.response.edit_message(
                     content="✅ Done editing consequences.", 
-                    embed=self.char.format_full_sheet(), 
+                    embed=self.char.format_full_sheet(interaction.guild.id), 
                     view=FateSheetEditView(interaction.user.id, self.char_id)
                 )
                 return
@@ -853,7 +857,7 @@ class EditStuntsView(ui.View):
             elif cid == "done":
                 await interaction.response.edit_message(
                     content="✅ Done editing stunts.", 
-                    embed=self.char.format_full_sheet(), 
+                    embed=self.char.format_full_sheet(interaction.guild.id), 
                     view=FateSheetEditView(interaction.user.id, self.char_id)
                 )
                 return
@@ -928,7 +932,7 @@ class SkillManagementView(ui.View):
                 del skills[skill]
                 self.character.skills = skills
                 repositories.entity.upsert_entity(interaction2.guild.id, self.character, system=SYSTEM)
-                embed = self.character.format_full_sheet()
+                embed = self.character.format_full_sheet(interaction2.guild.id)
                 view = FateSheetEditView(interaction2.user.id, self.char_id)
                 await interaction2.response.edit_message(
                     content=f"✅ Removed skill: **{skill}**",
@@ -958,7 +962,7 @@ class SkillManagementView(ui.View):
     @ui.button(label="Cancel", style=discord.ButtonStyle.secondary, row=1)
     async def cancel(self, interaction: discord.Interaction, button: ui.Button):
         character = get_character(self.char_id)
-        embed = character.format_full_sheet()
+        embed = character.format_full_sheet(interaction.guild.id)
         view = FateSheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(
             content="Operation cancelled.",
@@ -1025,7 +1029,7 @@ class EditAspectModal(ui.Modal, title="Edit Aspect"):
         from rpg_systems.fate.fate_sheet_edit_views import EditAspectsView
         await interaction.response.edit_message(
             content="✅ Aspect updated.", 
-            embed=character.format_full_sheet(), 
+            embed=character.format_full_sheet(interaction.guild.id), 
             view=EditAspectsView(interaction.guild.id, interaction.user.id, self.char_id)
         )
 
@@ -1097,7 +1101,7 @@ class AddAspectModal(ui.Modal, title="Add Aspect"):
         from rpg_systems.fate.fate_sheet_edit_views import EditAspectsView
         await interaction.response.edit_message(
             content="✅ Aspect added.", 
-            embed=character.format_full_sheet(), 
+            embed=character.format_full_sheet(interaction.guild.id), 
             view=EditAspectsView(interaction.guild.id, interaction.user.id, self.char_id)
         )
 
@@ -1129,7 +1133,7 @@ class EditFatePointsModal(ui.Modal, title="Edit Fate Points/Refresh"):
         from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
         await interaction.response.edit_message(
             content="✅ Fate Points and Refresh updated.", 
-            embed=character.format_full_sheet(), 
+            embed=character.format_full_sheet(interaction.guild.id), 
             view=FateSheetEditView(interaction.user.id, self.char_id)
         )
 
@@ -1166,7 +1170,7 @@ class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
         
         # Local import to avoid circular dependency
         from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
-        embed = character.format_full_sheet()
+        embed = character.format_full_sheet(interaction.guild.id)
         view = FateSheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(content=f"✅ {self.skill} updated.", embed=embed, view=view)
 
@@ -1209,7 +1213,7 @@ class AddSkillModal(ui.Modal, title="Add New Skill"):
         
         # Local import to avoid circular dependency
         from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
-        embed = character.format_full_sheet()
+        embed = character.format_full_sheet(interaction.guild.id)
         view = FateSheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(
             content=f"✅ Added new skill: **{skill_name}** (+{value_int if value_int >= 0 else value_int})",
@@ -1248,7 +1252,7 @@ class BulkEditSkillsModal(ui.Modal, title="Bulk Edit Skills"):
         
         # Local import to avoid circular dependency
         from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
-        embed = character.format_full_sheet()
+        embed = character.format_full_sheet(interaction.guild.id)
         view = FateSheetEditView(interaction.user.id, self.char_id)
         await interaction.response.edit_message(
             content="✅ Skills updated!",
@@ -1353,4 +1357,178 @@ class AddStuntModal(ui.Modal, title="Add New Stunt"):
         await interaction.response.edit_message(
             content=f"✅ Added new stunt: '{name}'",
             view=EditStuntsView(interaction.guild.id, interaction.user.id, self.char_id)
+        )
+
+class EditInventoryView(ui.View):
+    def __init__(self, guild_id: int, user_id: int, char_id: str):
+        super().__init__(timeout=120)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.char_id = char_id
+        self.page = 0
+
+        self.char = None
+        self.inventory = []
+        self.max_page = 0
+        self.load_data()
+        self.render()
+
+    def load_data(self):
+        from core.base_models import EntityType
+        self.char = get_character(self.char_id)
+        if not self.char:
+            self.inventory = []
+        else:
+            self.inventory = self.char.get_inventory(str(self.guild_id))
+        self.max_page = max(0, len(self.inventory) - 1)
+
+    def render(self):
+        self.clear_items()
+        
+        if self.inventory:
+            current_item = self.inventory[self.page]
+            label = f"{self.page + 1}/{len(self.inventory)}: {current_item.name[:30]}"
+            self.add_item(ui.Button(label=label, disabled=True, row=0))
+            
+            # View item details button
+            self.add_item(ui.Button(label="📋 View Item", style=discord.ButtonStyle.primary, row=0, custom_id="view_item"))
+            
+            # Navigation buttons
+            if self.page > 0:
+                self.add_item(ui.Button(label="◀️ Prev", style=discord.ButtonStyle.secondary, row=1, custom_id="prev"))
+            if self.page < self.max_page:
+                self.add_item(ui.Button(label="Next ▶️", style=discord.ButtonStyle.secondary, row=1, custom_id="next"))
+            
+            # Action buttons
+            self.add_item(ui.Button(label="✏️ Edit Item", style=discord.ButtonStyle.primary, row=2, custom_id="edit_item"))
+            self.add_item(ui.Button(label="🗑 Remove", style=discord.ButtonStyle.danger, row=2, custom_id="remove"))
+        else:
+            self.add_item(ui.Button(label="No items in inventory", disabled=True, row=0))
+        
+        # Always available buttons
+        self.add_item(ui.Button(label="➕ Add Item", style=discord.ButtonStyle.success, row=3, custom_id="add_item"))
+        self.add_item(ui.Button(label="✅ Done", style=discord.ButtonStyle.secondary, row=3, custom_id="done"))
+        
+        # Assign callbacks
+        for item in self.children:
+            if isinstance(item, ui.Button) and item.custom_id:
+                item.callback = self.make_callback(item.custom_id)
+
+    def make_callback(self, cid):
+        async def callback(interaction: discord.Interaction):
+            if interaction.user.id != self.user_id:
+                await interaction.response.send_message("You can't edit this character.", ephemeral=True)
+                return
+
+            # Refresh data
+            self.load_data()
+
+            if cid == "prev":
+                self.page = max(0, self.page - 1)
+            elif cid == "next":
+                self.page = min(self.max_page, self.page + 1)
+            elif cid == "view_item":
+                if self.inventory:
+                    current_item = self.inventory[self.page]
+                    embed = current_item.format_full_sheet(interaction.guild.id)
+                    await interaction.response.send_message(
+                        content=f"**{current_item.name}** Details:",
+                        embed=embed,
+                        ephemeral=True
+                    )
+                    return
+            elif cid == "edit_item":
+                if self.inventory:
+                    current_item = self.inventory[self.page]
+                    # Send item's sheet edit view in a new message
+                    sheet_view = current_item.get_sheet_edit_view(interaction.user.id)
+                    embed = current_item.format_full_sheet(interaction.guild.id)
+                    await interaction.response.send_message(
+                        content=f"Editing **{current_item.name}**:",
+                        embed=embed,
+                        view=sheet_view,
+                        ephemeral=True
+                    )
+                    return
+            elif cid == "remove":
+                if self.inventory:
+                    current_item = self.inventory[self.page]
+                    # Remove item from inventory
+                    self.char.remove_from_inventory(str(self.guild_id), current_item)
+                    repositories.entity.upsert_entity(interaction.guild.id, self.char, system=SYSTEM)
+                    self.page = max(0, self.page - 1)
+            elif cid == "add_item":
+                await interaction.response.send_modal(AddItemModal(self.char_id, str(self.guild_id)))
+                return
+            elif cid == "done":
+                await interaction.response.edit_message(
+                    content="✅ Done editing inventory.",
+                    embed=self.char.format_full_sheet(interaction.guild.id),
+                    view=FateSheetEditView(interaction.user.id, self.char_id)
+                )
+                return
+
+            # Update view for non-modal actions
+            self.render()
+            await interaction.response.edit_message(view=self)
+        
+        return callback
+
+class AddItemModal(ui.Modal, title="Add New Item"):
+    def __init__(self, char_id: str, guild_id: str):
+        super().__init__()
+        self.char_id = char_id
+        self.guild_id = guild_id
+        
+        self.name_field = ui.TextInput(
+            label="Item Name",
+            max_length=100,
+            required=True
+        )
+        self.add_item(self.name_field)
+        
+        self.description_field = ui.TextInput(
+            label="Description (optional)",
+            style=discord.TextStyle.paragraph,
+            max_length=500,
+            required=False
+        )
+        self.add_item(self.description_field)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        from core.factories import build_and_save_entity
+        from core.base_models import EntityType
+        
+        character = get_character(self.char_id)
+        
+        name = self.name_field.value.strip()
+        description = self.description_field.value.strip()
+        
+        if not name:
+            await interaction.response.send_message("❌ Item name cannot be empty.", ephemeral=True)
+            return
+        
+        # Check if item already exists
+        existing_item = repositories.entity.get_by_name(self.guild_id, name)
+        if existing_item:
+            await interaction.response.send_message(f"❌ An entity named '{name}' already exists.", ephemeral=True)
+            return
+        
+        # Create new item using the factory
+        new_item = build_and_save_entity(
+            system="fate",
+            entity_type=EntityType.ITEM,
+            name=name,
+            owner_id=str(interaction.user.id),
+            guild_id=self.guild_id,
+            notes=[description] if description else None
+        )
+        
+        # Add to character's inventory
+        character.add_to_inventory(self.guild_id, new_item)
+        repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
+        
+        await interaction.response.edit_message(
+            content=f"✅ Created and added **{name}** to inventory.",
+            view=EditInventoryView(interaction.guild.id, interaction.user.id, self.char_id)
         )

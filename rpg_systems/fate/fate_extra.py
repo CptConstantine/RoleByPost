@@ -10,15 +10,33 @@ class FateExtra(FateCharacter):
     This includes items, locations, organizations, vehicles, or any other
     entity that might have aspects, skills, or stress tracks.
     """
-    
-    # Support all entity types for Fate Extras
     SUPPORTED_ENTITY_TYPES: List[EntityType] = [
-        EntityType.FATE_EXTRA
+        EntityType.GENERIC,
+        EntityType.ITEM,
+        EntityType.COMPANION
     ]
     
     # Define defaults for all entity types
     ENTITY_DEFAULTS = EntityDefaults({
-        EntityType.FATE_EXTRA: {
+        EntityType.GENERIC: {
+            "refresh": 0,
+            "fate_points": 0,
+            "skills": {},
+            "aspects": [],
+            "stress_tracks": [],
+            "consequence_tracks": [],
+            "stunts": {}
+        },
+        EntityType.ITEM: {
+            "refresh": 0,
+            "fate_points": 0,
+            "skills": {},
+            "aspects": [],
+            "stress_tracks": [],
+            "consequence_tracks": [],
+            "stunts": {}
+        },
+        EntityType.COMPANION: {
             "refresh": 0,
             "fate_points": 0,
             "skills": {},
@@ -50,12 +68,10 @@ class FateExtra(FateCharacter):
         # For most entity types, use the full Fate sheet view
         from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
         return FateSheetEditView(editor_id=editor_id, char_id=self.id)
-    
-    def format_full_sheet(self) -> discord.Embed:
+
+    def format_full_sheet(self, guild_id: int) -> discord.Embed:
         """Format the extra's sheet - use parent implementation but adjust title"""
-        embed = super().format_full_sheet()
-        
-        return embed
+        return self.get_sheet_embed(guild_id, display_all=False)
     
     def format_npc_scene_entry(self, is_gm: bool) -> str:
         """Format extra entry for scene display"""
