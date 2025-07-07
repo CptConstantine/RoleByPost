@@ -122,11 +122,14 @@ class EntityCommands(commands.Cog):
             entity_type=e_type
         )
         
-        entity = EntityClass(entity_dict)
-        entity.apply_defaults(entity_type=e_type, guild_id=str(interaction.guild.id))
-        
-        # Save the entity first
-        repositories.entity.upsert_entity(str(interaction.guild.id), entity, system=system)
+        # Create the entity using the new factory method
+        entity = factories.build_and_save_entity(
+            system=system,
+            entity_type=e_type,
+            name=name,
+            owner_id=str(interaction.user.id),
+            guild_id=str(interaction.guild.id)
+        )
         
         await interaction.followup.send(f"✅ Created {entity_type}: **{name}**", ephemeral=True)
 

@@ -134,29 +134,24 @@ class CharacterCommands(commands.Cog):
     )
     async def create_pc(self, interaction: discord.Interaction, char_name: str, owner: str = None):
         await interaction.response.defer(ephemeral=True)
-        system = repositories.server.get_system(interaction.guild.id)
-        CharacterClass = factories.get_specific_character(system)
+        
         existing = repositories.character.get_character_by_name(interaction.guild.id, char_name)
         if existing:
             await interaction.followup.send(f"❌ A character named `{char_name}` already exists.", ephemeral=True)
             return
         
-        # Create a new Character instance using the helper method
-        char_id = str(uuid.uuid4())
-        character_dict = BaseEntity.build_entity_dict(
-            id=char_id,
+        system = repositories.server.get_system(interaction.guild.id)
+        character = factories.build_and_save_entity(
+            system=system,
+            entity_type=EntityType.PC,
             name=char_name,
-            owner_id=interaction.user.id,
-            entity_type=EntityType.PC
+            owner_id=str(interaction.user.id),
+            guild_id=str(interaction.guild.id)
         )
-        
-        character = CharacterClass(character_dict)
-        character.apply_defaults(EntityType.PC, guild_id=interaction.guild.id)
-        repositories.entity.upsert_entity(interaction.guild.id, character, system=system)
         
         # Set as active if no active character exists
         if not repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id):
-            repositories.active_character.set_active_character(str(interaction.guild.id), str(interaction.user.id), char_id)
+            repositories.active_character.set_active_character(str(interaction.guild.id), str(interaction.user.id), character.id)
         
         await interaction.followup.send(f'📝 Created {system.upper()} character: **{char_name}**.', ephemeral=True)
 
@@ -169,26 +164,20 @@ class CharacterCommands(commands.Cog):
         if not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.followup.send("❌ Only GMs can create NPCs.", ephemeral=True)
             return
-            
-        system = repositories.server.get_system(interaction.guild.id)
-        CharacterClass = factories.get_specific_character(system)
+        
         existing = repositories.character.get_character_by_name(interaction.guild.id, npc_name)
         if existing:
             await interaction.followup.send(f"❌ An NPC named `{npc_name}` already exists.", ephemeral=True)
             return
-        
-        # Create a new Character instance using the helper method
-        npc_id = str(uuid.uuid4())
-        character_dict = BaseEntity.build_entity_dict(
-            id=npc_id,
+    
+        system = repositories.server.get_system(interaction.guild.id)
+        character = factories.build_and_save_entity(
+            system=system,
+            entity_type=EntityType.NPC,
             name=npc_name,
-            owner_id=interaction.user.id,
-            entity_type=EntityType.NPC
+            owner_id=str(interaction.user.id),
+            guild_id=str(interaction.guild.id)
         )
-        
-        character = CharacterClass(character_dict)
-        character.apply_defaults(EntityType.NPC, guild_id=interaction.guild.id)
-        repositories.entity.upsert_entity(interaction.guild.id, character, system=system)
         
         await interaction.followup.send(f"🤖 Created NPC: **{npc_name}**", ephemeral=True)
 
