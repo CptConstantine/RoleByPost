@@ -122,7 +122,7 @@ class CharacterCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    character_group = app_commands.Group(name="character", description="Character management commands")
+    character_group = app_commands.Group(name="char", description="Character management commands")
 
     companion_group = app_commands.Group(name="companion", description="Companion management commands", parent=character_group)
     

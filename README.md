@@ -7,7 +7,7 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
 ## Features
 
 - **Character Sheet Management**  
-  - Create, edit, and view player characters and NPCs for supported systems. Users can set their "active" character, which is used by default for `/roll` and `/character sheet`.
+  - Create, edit, and view player characters and NPCs for supported systems. Users can set their "active" character, which is used by default for `/roll` and `/char sheet`.
   - System-specific fields and validation (e.g., Fate aspects, Traveller skills).
   - Import/export characters as JSON files for easy transfer between servers.
 
@@ -107,37 +107,37 @@ The following are the commands that are currently available.
 
 ### Characters
 
-- `/character create pc [name] [owner]`  
+- `/char create pc [name] [owner]`  
   Create a new player character. Optionally specify an owner entity for companions, minions, etc.
 
-- `/character create npc [name] [owner]`  
+- `/char create npc [name] [owner]`  
   (GM only) Create a new NPC. Optionally specify an owner entity.
 
-- `/character sheet [char_name]`  
+- `/char sheet [char_name]`  
   View a character or NPC's sheet with buttons for editing. Defaults to your active character if no name is given.
 
-- `/character list [show_npcs] [owned_by] [show_relationships]`  
+- `/char list [show_npcs] [owned_by] [show_relationships]`  
   List characters and NPCs. Filter by owner or show relationship details.
 
-- `/character delete [char_name]`  
+- `/char delete [char_name]`  
   Delete a character or NPC.
 
-- `/character export [char_name]`  
+- `/char export [char_name]`  
   Export your character or an NPC (if GM) as a JSON file.
 
-- `/character import [.json file]`  
+- `/char import [.json file]`  
   Import a character or NPC from a JSON file.
 
-- `/character transfer [char_name] [new_owner]`  
+- `/char transfer [char_name] [new_owner]`  
   (GM only) Transfer a PC to another player.
 
-- `/character switch [char_name]`  
+- `/char switch [char_name]`  
   Set your active character (PC) for this server.
 
-- `/character setavatar [avatar_url] [char_name]`  
+- `/char setavatar [avatar_url] [char_name]`  
   Set your character's avatar image with a URL.
 
-- `/character narration`  
+- `/char narration`  
   Get help with character narration formatting and channel restrictions.
 
 ### Entities
@@ -312,11 +312,11 @@ This bot provides special message prefixes that transform regular text messages 
   Creates a purple-bordered embed with the GM's avatar for scene descriptions and narration.
 
 - **Character Avatars**  
-  Set your character's avatar with `/character setavatar [url]` to enhance the immersion.
+  Set your character's avatar with `/char setavatar [url]` to enhance the immersion.
 
 **Channel Restrictions:** Narration commands (`pc::`, `npc::`, `gm::`) are automatically blocked in **Out-of-Character (OOC)** channels to maintain immersion. Use them in **In-Character (IC)** or **Unrestricted** channels.
 
-For more detailed help, use `/character narration`.
+For more detailed help, use `/char narration`.
 
 ### Fate System Commands
 
@@ -351,7 +351,7 @@ All aspect editing supports:
 
 ### Top Priority
 
-- Inventory system to track equipment
+- Add to inventory system to allow GM to create "loot containers" that players can take from and put in their inventories
 
 ### Secondary Priority
 
