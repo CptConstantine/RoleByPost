@@ -134,10 +134,13 @@ class EntityCommands(commands.Cog):
         await interaction.followup.send(f"✅ Created {entity_type}: **{name}**", ephemeral=True)
 
     @entity_group.command(name="delete", description="Delete an entity")
-    @app_commands.describe(entity_name="Name of the entity to delete")
+    @app_commands.describe(
+        entity_name="Name of the entity to delete",
+        transfer_inventory="If true, releases possessed items instead of blocking deletion"
+    )
     @app_commands.autocomplete(entity_name=entity_name_autocomplete)
     @channel_restriction.no_ic_channels()
-    async def entity_delete(self, interaction: discord.Interaction, entity_name: str):
+    async def entity_delete(self, interaction: discord.Interaction, entity_name: str, transfer_inventory: bool = False):
         """Delete an entity with confirmation"""
         entity = repositories.entity.get_by_name(str(interaction.guild.id), entity_name)
         if not entity:
@@ -150,26 +153,34 @@ class EntityCommands(commands.Cog):
             await interaction.response.send_message("❌ You can only delete entities you own.", ephemeral=True)
             return
         
-        # Check if entity owns other entities (through relationships)
-        owned_entities = repositories.relationship.get_children(
+        # Check if entity possesses other entities (through relationships)
+        possessed_entities = repositories.relationship.get_children(
             str(interaction.guild.id), 
             entity.id, 
             RelationshipType.POSSESSES.value
         )
         
-        if owned_entities:
-            entity_names = [owned_entity.name for owned_entity in owned_entities]
+        if possessed_entities and not transfer_inventory:
+            entity_names = [entity.name for entity in possessed_entities]
             await interaction.response.send_message(
-                f"❌ Cannot delete `{entity_name}` because it owns other entities: {', '.join(entity_names)}.\n"
-                f"Please transfer or delete these entities first, or use `/relationship remove` to remove the ownership relationships.",
+                f"❌ Cannot delete `{entity_name}` because it possesses other entities: {', '.join(entity_names)}.\n"
+                f"Use `transfer_inventory: True` to release these items, transfer them manually, or use `/relationship remove` to remove the possession relationships.",
                 ephemeral=True
             )
             return
         
-        view = ConfirmDeleteEntityView(entity)
+        view = ConfirmDeleteEntityView(entity, transfer_inventory)
+        
+        confirmation_msg = f"⚠️ Are you sure you want to delete `{entity_name}` ({entity.entity_type.value})?\n"
+        
+        if possessed_entities and transfer_inventory:
+            entity_names = [entity.name for entity in possessed_entities]
+            confirmation_msg += f"\n**This will also release the following possessed items:**\n{', '.join(entity_names)}\n"
+        
+        confirmation_msg += "\nThis action cannot be undone."
+        
         await interaction.response.send_message(
-            f"⚠️ Are you sure you want to delete `{entity_name}` ({entity.entity_type.value})?\n"
-            f"This action cannot be undone.",
+            confirmation_msg,
             view=view,
             ephemeral=True
         )
@@ -239,33 +250,12 @@ class EntityCommands(commands.Cog):
         
         if show_relationships:
             # Show detailed relationship information
-            entity_info = []
+            relationships = []
             for entity in entities:
-                # Get owned entities
-                owned_entities = repositories.relationship.get_children(
-                    str(interaction.guild.id), 
-                    entity.id, 
-                    RelationshipType.POSSESSES.value
-                )
-                
-                # Get controlled entities
-                controlled_entities = repositories.relationship.get_children(
-                    str(interaction.guild.id), 
-                    entity.id, 
-                    RelationshipType.CONTROLS.value
-                )
-                
-                info = f"**{entity.name}** ({entity.entity_type.value})"
-                if owned_entities:
-                    owned_names = [e.name for e in owned_entities]
-                    info += f"\n  *Owns: {', '.join(owned_names)}*"
-                if controlled_entities:
-                    controlled_names = [e.name for e in controlled_entities]
-                    info += f"\n  *Controls: {', '.join(controlled_names)}*"
-                
-                entity_info.append(info)
-            
-            embed.description = "\n\n".join(entity_info)
+                relationships_str = RelationshipType.get_relationships_str(str(interaction.guild.id), entity)
+                relationships_str = f"{entity.name} - {relationships_str if relationships_str else 'No relationships'}"
+                relationships.append(relationships_str)
+            embed.description = "\n\n".join(relationships)
         else:
             # Group by entity type for simple view
             by_type = {}
@@ -296,80 +286,45 @@ class EntityCommands(commands.Cog):
         
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @entity_group.command(name="view", description="View entity details")
-    @app_commands.describe(entity_name="Name of the entity to view")
+    @entity_group.command(name="view", description="View entity details with edit interface")
+    @app_commands.describe(
+        entity_name="Name of the entity to view",
+        show_relationships="Show detailed relationship information"
+    )
     @app_commands.autocomplete(entity_name=entity_name_autocomplete)
     @channel_restriction.no_ic_channels()
-    async def entity_view(self, interaction: discord.Interaction, entity_name: str):
-        """View detailed information about an entity"""
+    async def entity_view(self, interaction: discord.Interaction, entity_name: str, show_relationships: bool = False):
+        """View detailed information about an entity with edit interface"""
         entity = repositories.entity.get_by_name(str(interaction.guild.id), entity_name)
         if not entity:
             await interaction.response.send_message(f"❌ Entity `{entity_name}` not found.", ephemeral=True)
             return
         
-        # Create embed with entity details
-        embed = discord.Embed(
-            title=f"{entity.name}",
-            description=f"Type: {entity.entity_type.value}",
-            color=discord.Color.green()
+        # Check permissions - only owners and GMs can view entities
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        if not is_gm and str(entity.owner_id) != str(interaction.user.id):
+            await interaction.response.send_message("❌ You can only view entities you own.", ephemeral=True)
+            return
+        
+        # Get the entity's sheet edit view
+        sheet_view = entity.get_sheet_edit_view(interaction.user.id)
+        
+        # Format the full sheet embed
+        embed = entity.format_full_sheet(str(interaction.guild.id))
+        
+        # Add relationship information if requested
+        if show_relationships:
+            # Add relationship information to the embed
+            relationship_info = RelationshipType.get_relationships_str(str(interaction.guild.id), entity)
+            
+            if relationship_info:
+                embed.add_field(name="🔗 Relationships", value="\n".join(relationship_info), inline=False)
+
+        await interaction.response.send_message(
+            embed=embed,
+            view=sheet_view,
+            ephemeral=True
         )
-        
-        # Add basic info
-        owner = interaction.guild.get_member(int(entity.owner_id))
-        owner_name = owner.display_name if owner else f"User {entity.owner_id}"
-        embed.add_field(name="Owner", value=owner_name, inline=True)
-        
-        # Add relationship information
-        # Entities this entity owns
-        owned_entities = repositories.relationship.get_children(
-            str(interaction.guild.id), 
-            entity.id, 
-            RelationshipType.POSSESSES.value
-        )
-        if owned_entities:
-            owned_names = [e.name for e in owned_entities[:5]]  # Show first 5
-            owned_text = ", ".join(owned_names)
-            if len(owned_entities) > 5:
-                owned_text += f" (+{len(owned_entities) - 5} more)"
-            embed.add_field(name=f"Owns ({len(owned_entities)})", value=owned_text, inline=False)
-        
-        # Entities that own this entity
-        owners = repositories.relationship.get_parents(
-            str(interaction.guild.id), 
-            entity.id, 
-            RelationshipType.POSSESSES.value
-        )
-        if owners:
-            owner_names = [e.name for e in owners]
-            embed.add_field(name="Owned By", value=", ".join(owner_names), inline=False)
-        
-        # Control relationships
-        controlled_entities = repositories.relationship.get_children(
-            str(interaction.guild.id), 
-            entity.id, 
-            RelationshipType.CONTROLS.value
-        )
-        if controlled_entities:
-            controlled_names = [e.name for e in controlled_entities]
-            embed.add_field(name="Controls", value=", ".join(controlled_names), inline=False)
-        
-        controllers = repositories.relationship.get_parents(
-            str(interaction.guild.id), 
-            entity.id, 
-            RelationshipType.CONTROLS.value
-        )
-        if controllers:
-            controller_names = [e.name for e in controllers]
-            embed.add_field(name="Controlled By", value=", ".join(controller_names), inline=False)
-        
-        # Add notes if any
-        if entity.notes:
-            notes_text = "\n".join(entity.notes[:3])  # Show first 3 notes
-            if len(entity.notes) > 3:
-                notes_text += f"\n(+{len(entity.notes) - 3} more notes)"
-            embed.add_field(name="Notes", value=notes_text[:1024], inline=False)
-        
-        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @entity_group.command(name="rename", description="Rename an entity")
     @app_commands.describe(
@@ -406,16 +361,38 @@ class EntityCommands(commands.Cog):
         )
 
 class ConfirmDeleteEntityView(discord.ui.View):
-    def __init__(self, entity: BaseEntity):
+    def __init__(self, entity: BaseEntity, transfer_inventory: bool = False):
         super().__init__(timeout=60)
         self.entity = entity
+        self.transfer_inventory = transfer_inventory
 
     @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
     async def confirm_delete(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Delete the entity (this will also delete all relationships)
+        if self.transfer_inventory:
+            # Remove all POSSESSES relationships for this entity
+            possessed_entities = repositories.relationship.get_children(
+                str(interaction.guild.id),
+                self.entity.id,
+                RelationshipType.POSSESSES.value
+            )
+            
+            for possessed_entity in possessed_entities:
+                repositories.relationship.delete_relationships_by_entities(
+                    str(interaction.guild.id),
+                    self.entity.id,
+                    possessed_entity.id,
+                    RelationshipType.POSSESSES.value
+                )
+        
+        # Delete the entity (this will also delete all remaining relationships)
         repositories.entity.delete_entity(str(interaction.guild.id), self.entity.id)
+        
+        delete_msg = f"✅ Deleted entity `{self.entity.name}`."
+        if self.transfer_inventory:
+            delete_msg += " Released all possessed items."
+        
         await interaction.response.edit_message(
-            content=f"✅ Deleted entity `{self.entity.name}`.",
+            content=delete_msg,
             view=None
         )
 

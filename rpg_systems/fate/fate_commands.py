@@ -102,10 +102,13 @@ class FateCommands(commands.Cog):
         await interaction.followup.send(f"✅ Created Fate Extra: **{name}**", ephemeral=True)
 
     @fate_extra_group.command(name="delete", description="Delete a Fate extra")
-    @app_commands.describe(extra_name="Name of the extra to delete")
+    @app_commands.describe(
+        extra_name="Name of the extra to delete",
+        transfer_inventory="If true, releases possessed items instead of blocking deletion"
+    )
     @app_commands.autocomplete(extra_name=extra_name_autocomplete)
     @channel_restriction.no_ic_channels()
-    async def fate_extra_delete(self, interaction: discord.Interaction, extra_name: str):
+    async def fate_extra_delete(self, interaction: discord.Interaction, extra_name: str, transfer_inventory: bool = False):
         """Delete a Fate extra with confirmation"""
         # Check if server is using Fate
         system = repositories.server.get_system(str(interaction.guild.id))
@@ -129,26 +132,34 @@ class FateCommands(commands.Cog):
             await interaction.response.send_message("❌ You can only delete extras you own.", ephemeral=True)
             return
         
-        # Check if extra owns other entities (through relationships)
-        owned_entities = repositories.relationship.get_children(
+        # Check if extra possesses other entities (through relationships)
+        possessed_entities = repositories.relationship.get_children(
             str(interaction.guild.id), 
             extra.id, 
             RelationshipType.POSSESSES.value
         )
         
-        if owned_entities:
-            entity_names = [owned_entity.name for owned_entity in owned_entities]
+        if possessed_entities and not transfer_inventory:
+            entity_names = [entity.name for entity in possessed_entities]
             await interaction.response.send_message(
-                f"❌ Cannot delete `{extra_name}` because it owns other entities: {', '.join(entity_names)}.\n"
-                f"Please transfer or delete these entities first, or use `/relationship remove` to remove the ownership relationships.",
+                f"❌ Cannot delete `{extra_name}` because it possesses other entities: {', '.join(entity_names)}.\n"
+                f"Use `transfer_inventory: True` to release these items, transfer them manually, or use `/relationship remove` to remove the possession relationships.",
                 ephemeral=True
             )
             return
         
-        view = ConfirmDeleteExtraView(extra)
+        view = ConfirmDeleteExtraView(extra, transfer_inventory)
+        
+        confirmation_msg = f"⚠️ Are you sure you want to delete the {extra.entity_type.value} `{extra_name}`?\n"
+        
+        if possessed_entities and transfer_inventory:
+            entity_names = [entity.name for entity in possessed_entities]
+            confirmation_msg += f"\n**This will also release the following possessed items:**\n{', '.join(entity_names)}\n"
+        
+        confirmation_msg += "\nThis action cannot be undone."
+        
         await interaction.response.send_message(
-            f"⚠️ Are you sure you want to delete the {extra.entity_type.value} `{extra_name}`?\n"
-            f"This action cannot be undone.",
+            confirmation_msg,
             view=view,
             ephemeral=True
         )
@@ -249,40 +260,10 @@ class FateCommands(commands.Cog):
             # Show detailed relationship information
             extra_info = []
             for extra in extras:
-                # Get owned entities
-                possessed_entities = repositories.relationship.get_children(
-                    str(interaction.guild.id), 
-                    extra.id, 
-                    RelationshipType.POSSESSES.value
-                )
-                
-                # Get controlled entities
-                controlled_entities = repositories.relationship.get_children(
-                    str(interaction.guild.id), 
-                    extra.id, 
-                    RelationshipType.CONTROLS.value
-                )
-                
-                # Get controlling entities (for companions)
-                controlling_entities = repositories.relationship.get_parents(
-                    str(interaction.guild.id), 
-                    extra.id, 
-                    RelationshipType.CONTROLS.value
-                )
-                
-                info = f"**{extra.name}** ({extra.entity_type.value})"
-                if possessed_entities:
-                    owned_names = [e.name for e in possessed_entities]
-                    info += f"\n  *Owns: {', '.join(owned_names)}*"
-                if controlled_entities:
-                    controlled_names = [e.name for e in controlled_entities]
-                    info += f"\n  *Controls: {', '.join(controlled_names)}*"
-                if controlling_entities:
-                    controller_names = [e.name for e in controlling_entities]
-                    info += f"\n  *Controlled by: {', '.join(controller_names)}*"
-                
-                extra_info.append(info)
-            
+                relationships_str = RelationshipType.get_relationships_str(str(interaction.guild.id), extra)
+                relationships_str = f"{extra.name} - {relationships_str if relationships_str else 'No relationships'}"
+                extra_info.append(relationships_str)
+
             embed.description = "\n\n".join(extra_info)
         else:
             # Group by entity type for simple view
@@ -488,16 +469,38 @@ class FateCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 class ConfirmDeleteExtraView(discord.ui.View):
-    def __init__(self, extra: BaseEntity):
+    def __init__(self, extra: BaseEntity, transfer_inventory: bool = False):
         super().__init__(timeout=60)
         self.extra = extra
+        self.transfer_inventory = transfer_inventory
 
     @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
     async def confirm_delete(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Delete the extra (this will also delete all relationships)
+        if self.transfer_inventory:
+            # Remove all POSSESSES relationships for this extra
+            possessed_entities = repositories.relationship.get_children(
+                str(interaction.guild.id),
+                self.extra.id,
+                RelationshipType.POSSESSES.value
+            )
+            
+            for possessed_entity in possessed_entities:
+                repositories.relationship.delete_relationships_by_entities(
+                    str(interaction.guild.id),
+                    self.extra.id,
+                    possessed_entity.id,
+                    RelationshipType.POSSESSES.value
+                )
+        
+        # Delete the extra (this will also delete all remaining relationships)
         repositories.entity.delete_entity(str(interaction.guild.id), self.extra.id)
+        
+        delete_msg = f"✅ Deleted {self.extra.entity_type.value} `{self.extra.name}`."
+        if self.transfer_inventory:
+            delete_msg += " Released all possessed items."
+        
         await interaction.response.edit_message(
-            content=f"✅ Deleted {self.extra.entity_type.value} `{self.extra.name}`.",
+            content=delete_msg,
             view=None
         )
 

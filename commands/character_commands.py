@@ -218,7 +218,7 @@ class CharacterCommands(commands.Cog):
         embed = discord.Embed(title=title, color=discord.Color.blue())
         
         if show_relationships:
-            # Show detailed relationship information
+            # Show detailed information for CONTROLS relationships
             character_info = []
             for char in characters:
                 controlled_by = repositories.relationship.get_parents(
@@ -272,9 +272,12 @@ class CharacterCommands(commands.Cog):
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     @character_group.command(name="delete", description="Delete a character or NPC")
-    @app_commands.describe(char_name="Name of the character/NPC to delete")
+    @app_commands.describe(
+        char_name="Name of the character/NPC to delete",
+        transfer_inventory="If true, releases possessed items instead of blocking deletion"
+    )
     @app_commands.autocomplete(char_name=character_or_npc_autocomplete)
-    async def delete_character(self, interaction: discord.Interaction, char_name: str):
+    async def delete_character(self, interaction: discord.Interaction, char_name: str, transfer_inventory: bool = False):
         character = repositories.character.get_character_by_name(interaction.guild.id, char_name)
         if not character:
             await interaction.response.send_message("❌ Character not found.", ephemeral=True)
@@ -290,27 +293,35 @@ class CharacterCommands(commands.Cog):
                 await interaction.response.send_message("❌ You can only delete your own characters.", ephemeral=True)
                 return
 
-        # Check if this character owns other entities
-        possesses_entities = repositories.relationship.get_children(
+        # Check if this character possesses other entities
+        possessed_entities = repositories.relationship.get_children(
             str(interaction.guild.id), 
             character.id, 
             RelationshipType.POSSESSES.value
         )
         
-        if possesses_entities:
-            entity_names = [entity.name for entity in possesses_entities]
+        if possessed_entities and not transfer_inventory:
+            entity_names = [entity.name for entity in possessed_entities]
             await interaction.response.send_message(
                 f"❌ Cannot delete **{char_name}** because it possesses other entities: {', '.join(entity_names)}.\n"
-                f"Please transfer or delete these entities first, or use `/relationship remove` to remove the possession relationships.",
+                f"Use `transfer_inventory: True` to release these items, transfer them manually, or use `/relationship remove` to remove the possession relationships.",
                 ephemeral=True
             )
             return
 
         # Show confirmation
-        view = ConfirmDeleteCharacterView(character)
+        view = ConfirmDeleteCharacterView(character, transfer_inventory)
+        
+        confirmation_msg = f"⚠️ Are you sure you want to delete **{char_name}** ({'NPC' if character.is_npc else 'PC'})?\n"
+        
+        if possessed_entities and transfer_inventory:
+            entity_names = [entity.name for entity in possessed_entities]
+            confirmation_msg += f"\n**This will also release the following possessed items:**\n{', '.join(entity_names)}\n"
+        
+        confirmation_msg += "\nThis action cannot be undone."
+        
         await interaction.response.send_message(
-            f"⚠️ Are you sure you want to delete **{char_name}** ({'NPC' if character.is_npc else 'PC'})?\n"
-            f"This action cannot be undone.",
+            confirmation_msg,
             view=view,
             ephemeral=True
         )
@@ -775,16 +786,38 @@ class CharacterCommands(commands.Cog):
 
 
 class ConfirmDeleteCharacterView(discord.ui.View):
-    def __init__(self, character: BaseCharacter):
+    def __init__(self, character: BaseCharacter, transfer_inventory: bool = False):
         super().__init__(timeout=60)
         self.character = character
+        self.transfer_inventory = transfer_inventory
 
     @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
     async def confirm_delete(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Delete the character (this will also delete all relationships)
+        if self.transfer_inventory:
+            # Remove all POSSESSES relationships for this character
+            possessed_entities = repositories.relationship.get_children(
+                str(interaction.guild.id),
+                self.character.id,
+                RelationshipType.POSSESSES.value
+            )
+            
+            for entity in possessed_entities:
+                repositories.relationship.delete_relationships_by_entities(
+                    str(interaction.guild.id),
+                    self.character.id,
+                    entity.id,
+                    RelationshipType.POSSESSES.value
+                )
+        
+        # Delete the character (this will also delete all remaining relationships)
         repositories.character.delete_character(interaction.guild.id, self.character.id)
+        
+        delete_msg = f"✅ Deleted character **{self.character.name}**."
+        if self.transfer_inventory:
+            delete_msg += " Released all possessed items."
+        
         await interaction.response.edit_message(
-            content=f"✅ Deleted character **{self.character.name}**.",
+            content=delete_msg,
             view=None
         )
 

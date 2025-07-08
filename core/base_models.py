@@ -168,6 +168,96 @@ class RelationshipType(Enum):
     @staticmethod
     def get_all_dict() -> Dict[str, 'RelationshipType']:
         return {name: member for name, member in RelationshipType.__members__.items()}
+    
+    @staticmethod
+    def get_relationships_str(guild_id: str, entity: 'BaseEntity') -> List[str]:
+        """Get a list of relationship strings for the entity."""
+        relationships_dict = RelationshipType.get_relationships_dict(guild_id, entity)
+        return [f"{key}: {value}" for key, value in relationships_dict.items()]
+
+    @staticmethod
+    def get_relationships_dict(guild_id: str, entity: 'BaseEntity') -> Dict[str, str]:
+        """Get a dictionary of relationship types and their string representations."""
+        from data.repositories.repository_factory import repositories
+        relationships_dict = {}
+        
+        # Entities this entity owns
+        possessed_entities = repositories.relationship.get_children(
+            guild_id, 
+            entity.id, 
+            RelationshipType.POSSESSES.value
+        )
+        if possessed_entities:
+            possessed_names = [e.name for e in possessed_entities[:5]]  # Show first 5
+            possessed_text = ", ".join(possessed_names)
+            if len(possessed_entities) > 5:
+                possessed_text += f" (+{len(possessed_entities) - 5} more)"
+            relationships_dict[f"📦 Possesses ({len(possessed_entities)})"] = possessed_text
+        
+        # Entities that own this entity
+        possessors = repositories.relationship.get_parents(
+            guild_id,
+            entity.id, 
+            RelationshipType.POSSESSES.value
+        )
+        if possessors:
+            possessor_names = [e.name for e in possessors]
+            relationships_dict["📦 Possessed By"] = ", ".join(possessor_names)
+
+        # Control relationships
+        controlled_entities = repositories.relationship.get_children(
+            guild_id, 
+            entity.id, 
+            RelationshipType.CONTROLS.value
+        )
+        if controlled_entities:
+            controlled_names = [e.name for e in controlled_entities]
+            relationships_dict["🎮 Controls"] = ", ".join(controlled_names)
+        
+        controllers = repositories.relationship.get_parents(
+            guild_id, 
+            entity.id, 
+            RelationshipType.CONTROLS.value
+        )
+        if controllers:
+            controller_names = [e.name for e in controllers]
+            relationships_dict["🎮 Controlled By"] = ", ".join(controller_names)
+        
+        # Get all other relationships
+        all_relationships = repositories.relationship.get_relationships_for_entity(
+            guild_id, 
+            entity.id
+        )
+        
+        # Filter out POSSESSES and CONTROLS relationships (already shown above)
+        other_relationships = [
+            rel for rel in all_relationships 
+            if rel.relationship_type not in [RelationshipType.POSSESSES.value, RelationshipType.CONTROLS.value]
+        ]
+        
+        if other_relationships:
+            rel_lines = []
+            for rel in other_relationships[:3]:  # Show first 3 other relationships
+                if rel.from_entity_id == entity.id:
+                    # This entity has a relationship TO another entity
+                    target_entity = repositories.entity.get_by_id(rel.to_entity_id)
+                    if target_entity:
+                        rel_name = rel.relationship_type.replace("_", " ").title()
+                        rel_lines.append(f"• {rel_name} **{target_entity.name}**")
+                else:
+                    # Another entity has a relationship TO this entity
+                    source_entity = repositories.entity.get_by_id(rel.from_entity_id)
+                    if source_entity:
+                        rel_name = rel.relationship_type.replace("_", " ").title()
+                        rel_lines.append(f"• **{source_entity.name}** {rel_name.lower()} this entity")
+            
+            if rel_lines:
+                rel_text = "\n".join(rel_lines)
+                if len(other_relationships) > 3:
+                    rel_text += f"\n(+{len(other_relationships) - 3} more relationships)"
+                relationships_dict["🔗 Other Relationships"] = rel_text
+        
+        return relationships_dict
 
 @dataclass
 class EntityDefaults:
