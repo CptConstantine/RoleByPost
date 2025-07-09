@@ -297,10 +297,10 @@ class EntityCommands(commands.Cog):
             return
         
         # Get the entity's sheet edit view
-        sheet_view = entity.get_sheet_edit_view(interaction.user.id)
+        sheet_view = entity.get_sheet_edit_view(interaction.user.id, is_gm=is_gm)
         
         # Format the full sheet embed
-        embed = entity.format_full_sheet(str(interaction.guild.id))
+        embed = entity.format_full_sheet(str(interaction.guild.id), is_gm=is_gm)
         
         # Add relationship information if requested
         if show_relationships:

@@ -1441,7 +1441,8 @@ class EditInventoryView(ui.View):
                 if self.inventory:
                     current_item = self.inventory[self.page]
                     # Send item's sheet edit view in a new message
-                    sheet_view = current_item.get_sheet_edit_view(interaction.user.id)
+                    is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+                    sheet_view = current_item.get_sheet_edit_view(interaction.user.id, is_gm=is_gm)
                     embed = current_item.format_full_sheet(interaction.guild.id)
                     await interaction.response.send_message(
                         content=f"Editing **{current_item.name}**:",

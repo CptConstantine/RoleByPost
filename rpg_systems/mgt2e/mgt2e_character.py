@@ -173,7 +173,7 @@ class MGT2ECharacter(BaseCharacter):
                 if current_value in (None, [], {}, 0, False):
                     setattr(self, key, value)
     
-    def get_sheet_edit_view(self, editor_id: int) -> discord.ui.View:
+    def get_sheet_edit_view(self, editor_id: int, is_gm: bool) -> discord.ui.View:
         from rpg_systems.mgt2e.mgt2e_sheet_edit_views import MGT2ESheetEditView
         return MGT2ESheetEditView(editor_id=editor_id, char_id=self.id)
     
@@ -314,7 +314,7 @@ class MGT2ECharacter(BaseCharacter):
         else:
             return 3
 
-    def format_full_sheet(self, guild_id: int) -> discord.Embed:
+    def format_full_sheet(self, guild_id: int, is_gm: bool = False) -> discord.Embed:
         """Format the character sheet for MGT2E system"""
         # Use the .name property instead of get_name()
         embed = discord.Embed(

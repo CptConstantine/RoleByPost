@@ -167,7 +167,8 @@ class EditNameModal(ui.Modal, title="Edit Character Name"):
         self.entity.name = new_name
         repositories.entity.upsert_entity(interaction.guild.id, self.entity, self.system)
         embed = self.entity.format_full_sheet(interaction.guild.id)
-        view = self.entity.get_sheet_edit_view(interaction.user.id)
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        view = self.entity.get_sheet_edit_view(interaction.user.id, is_gm=is_gm)
         await interaction.response.edit_message(content="✅ Name updated.", embed=embed, view=view)
 
 class EditNotesModal(ui.Modal, title="Edit Notes"):
@@ -188,7 +189,8 @@ class EditNotesModal(ui.Modal, title="Edit Notes"):
         self.entity.notes = [line for line in self.notes_field.value.splitlines() if line.strip()]
         repositories.entity.upsert_entity(interaction.guild.id, self.entity, self.system)
         embed = self.entity.format_full_sheet(interaction.guild.id)
-        view = self.entity.get_sheet_edit_view(interaction.user.id)
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        view = self.entity.get_sheet_edit_view(interaction.user.id, is_gm=is_gm)
         await interaction.response.edit_message(content="✅ Notes updated.", embed=embed, view=view)
 
 class RequestRollView(ui.View):

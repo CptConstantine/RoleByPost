@@ -64,15 +64,15 @@ class FateExtra(FateCharacter):
         # Ensure skills are empty by default for extras
         self.skills = self.DEFAULT_SKILLS.copy()
     
-    def get_sheet_edit_view(self, editor_id: int) -> discord.ui.View:
+    def get_sheet_edit_view(self, editor_id: int, is_gm: bool) -> discord.ui.View:
         # For most entity types, use the full Fate sheet view
         from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
         return FateSheetEditView(editor_id=editor_id, char_id=self.id)
 
-    def format_full_sheet(self, guild_id: int) -> discord.Embed:
+    def format_full_sheet(self, guild_id: int, is_gm: bool = False) -> discord.Embed:
         """Format the extra's sheet - use parent implementation but adjust title"""
-        return self.get_sheet_embed(guild_id, display_all=False)
-    
+        return self.get_sheet_embed(guild_id, display_all=False, is_gm=is_gm)
+
     def format_npc_scene_entry(self, is_gm: bool) -> str:
         """Format extra entry for scene display"""
         embed = super().format_npc_scene_entry(is_gm)

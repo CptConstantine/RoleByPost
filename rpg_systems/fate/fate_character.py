@@ -319,15 +319,15 @@ class FateCharacter(BaseCharacter):
         # Add Fate-specific validation here if needed (e.g., pyramid structure)
         return skills_dict
     
-    def get_sheet_edit_view(self, editor_id: int) -> discord.ui.View:
+    def get_sheet_edit_view(self, editor_id: int, is_gm: bool) -> discord.ui.View:
         from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
         return FateSheetEditView(editor_id=editor_id, char_id=self.id)
 
-    def format_full_sheet(self, guild_id: int) -> discord.Embed:
+    def format_full_sheet(self, guild_id: int, is_gm: bool = False) -> discord.Embed:
         """Format the character sheet for Fate system"""
-        return self.get_sheet_embed(guild_id, display_all=True)
+        return self.get_sheet_embed(guild_id, display_all=True, is_gm=is_gm)
 
-    def get_sheet_embed(self, guild_id, display_all):
+    def get_sheet_embed(self, guild_id, display_all, is_gm=False):
         embed = discord.Embed(title=f"{self.name}", color=discord.Color.purple())
 
         # --- Aspects ---

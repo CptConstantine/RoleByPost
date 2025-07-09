@@ -459,12 +459,12 @@ class BaseEntity(BaseRpgObj):
     @avatar_url.setter
     def avatar_url(self, url):
         self.data["avatar_url"] = url
-    
-    def get_sheet_edit_view(self, editor_id: int) -> ui.View:
+
+    def get_sheet_edit_view(self, editor_id: int, is_gm: bool) -> ui.View:
         """Get the appropriate sheet edit view for this entity type"""
         raise NotImplementedError("Subclasses must implement get_sheet_edit_view")
 
-    def format_full_sheet(self, guild_id: int) -> discord.Embed:
+    def format_full_sheet(self, guild_id: int, is_gm: bool = False) -> discord.Embed:
         """Return a Discord Embed representing the full entity sheet. Override in subclasses."""
         embed = discord.Embed(
             title=f"{self.name or 'Entity'}",
@@ -519,11 +519,58 @@ class BaseEntity(BaseRpgObj):
                 entity[key] = value
         
         return entity
+    
+    def get_item_quantity(self, guild_id: str, item_name: str) -> int:
+        """Get the total quantity of an item in the container"""
+        total_quantity = 0
+        for contained_item in self.get_contained_items(guild_id):
+            if contained_item.name == item_name:
+                relationships = self.get_relationships_to_entity(guild_id, contained_item.id, RelationshipType.POSSESSES)
+                if relationships:
+                    total_quantity += relationships[0].metadata.get("quantity", 1)
+        return total_quantity
+    
+    def can_take_item(self, guild_id: str, item_name: str, quantity: int = 1) -> bool:
+        """Check if we can take the specified quantity of an item"""
+        available_quantity = self.get_item_quantity(guild_id, item_name)
+        return available_quantity >= quantity
+    
+    def take_item(self, guild_id: str, item_name: str, quantity: int = 1) -> 'BaseEntity':
+        """Take items from container, returns the item entity for adding to inventory"""
+        if not self.can_take_item(guild_id, item_name, quantity):
+            return None
+        
+        # Find the item
+        target_item = None
+        for contained_item in self.get_contained_items(guild_id):
+            if contained_item.name == item_name:
+                target_item = contained_item
+                break
+        
+        if not target_item:
+            return None
+        
+        # Remove the quantity
+        self.remove_item(guild_id, target_item, quantity)
+        
+        return target_item
+    
+    def get_relationships_to_entity(self, guild_id: str, entity_id: str, relationship_type: RelationshipType) -> List[Relationship]:
+        """Helper method to get relationships to a specific entity"""
+        from data.repositories.repository_factory import repositories
+        all_relationships = repositories.relationship.get_relationships_for_entity(guild_id, self.id)
+        return [rel for rel in all_relationships 
+                if rel.from_entity_id == self.id and rel.to_entity_id == entity_id 
+                and rel.relationship_type == relationship_type.value]
 
     def get_children(self, guild_id: str, relationship_type: RelationshipType = None) -> List['BaseEntity']:
         """Get entities this entity has relationships to"""
         from data.repositories.repository_factory import repositories
         return repositories.relationship.get_children(guild_id, self.id, relationship_type.value if relationship_type else None)
+    
+    def get_contained_items(self, guild_id: str) -> List['BaseEntity']:
+        """Get all items contained in this container"""
+        return [item for item in self.get_children(guild_id, RelationshipType.POSSESSES) if item.entity_type == EntityType.ITEM]
 
     def get_parents(self, guild_id: str, relationship_type: RelationshipType = None) -> List['BaseEntity']:
         """Get entities that have relationships to this entity"""
@@ -585,11 +632,73 @@ class BaseEntity(BaseRpgObj):
             raise ValueError("Only ITEM entities can be added to inventory")
         return self.add_relationship(guild_id, item, RelationshipType.POSSESSES)
     
+    def add_item(self, guild_id: str, item: 'BaseEntity', quantity: int = 1) -> bool:
+        """Add an item to the container with specified quantity, stacking if same item exists"""
+        if item.entity_type != EntityType.ITEM:
+            return False
+        
+        # Check if we already have this item (by name for stacking)
+        existing_relationships = []
+        for contained_item in self.get_contained_items(guild_id):
+            if contained_item.name == item.name:
+                relationships = self.get_relationships_to_entity(guild_id, contained_item.id, RelationshipType.POSSESSES)
+                if relationships:
+                    existing_relationships.extend(relationships)
+        
+        if existing_relationships:
+            # Stack with existing item
+            relationship = existing_relationships[0]
+            current_quantity = relationship.metadata.get("quantity", 1)
+            relationship.metadata["quantity"] = current_quantity + quantity
+            
+            from data.repositories.repository_factory import repositories
+            repositories.relationship.save(relationship)
+            return True
+        else:
+            # Check if container has space for new unique item
+            max_items = self.data.get("max_items", 0)
+            if max_items > 0:
+                unique_items = len(self.get_contained_items(guild_id))
+                if unique_items >= max_items:
+                    return False
+            
+            # Create new relationship with quantity metadata
+            metadata = {"quantity": quantity}
+            self.add_relationship(guild_id, item, RelationshipType.POSSESSES, metadata)
+            return True
+    
     def remove_from_inventory(self, guild_id: str, item: 'BaseEntity') -> bool:
         """Remove an item from this entity's inventory"""
         if item.entity_type != EntityType.ITEM:
             raise ValueError("Only ITEM entities can be removed from inventory")
         return self.remove_relationship(guild_id, item, RelationshipType.POSSESSES)
+    
+    def remove_item(self, guild_id: str, item: 'BaseEntity', quantity: int = None) -> bool:
+        """Remove an item from the container"""
+        if item.entity_type != EntityType.ITEM:
+            return False
+        
+        # If no quantity specified, remove all
+        if quantity is None:
+            return self.remove_relationship(guild_id, item, RelationshipType.POSSESSES)
+        
+        # Get current relationship to check quantity
+        relationships = self.get_relationships_to_entity(guild_id, item.id, RelationshipType.POSSESSES)
+        if not relationships:
+            return False
+        
+        relationship = relationships[0]
+        current_quantity = relationship.metadata.get("quantity", 1)
+        
+        if quantity >= current_quantity:
+            # Remove completely
+            return self.remove_relationship(guild_id, item, RelationshipType.POSSESSES)
+        else:
+            # Update quantity
+            from data.repositories.repository_factory import repositories
+            relationship.metadata["quantity"] = current_quantity - quantity
+            repositories.relationship.save(relationship)
+            return True
 
 class BaseCharacter(BaseEntity):
     """

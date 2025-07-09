@@ -377,12 +377,8 @@ class CharacterCommands(commands.Cog):
                 await interaction.response.send_message("❌ You can only view your own characters.", ephemeral=True)
                 return
 
-        system = repositories.server.get_system(interaction.guild.id)
-        
         # Get appropriate sheet view based on entity type
-        sheet_view = character.get_sheet_edit_view(
-            interaction.user.id
-        )
+        sheet_view = character.get_sheet_edit_view(interaction.user.id, is_gm=is_gm)
         
         embed = character.format_full_sheet(interaction.guild.id)
         await interaction.response.send_message(embed=embed, view=sheet_view, ephemeral=True)

@@ -1,6 +1,6 @@
 # PlayByPostBot
 
-A Discord bot for running play-by-post tabletop RPGs, supporting multiple systems (currently Generic, Fate and Mongoose Traveller 2e). PlayByPostBot helps manage character sheets, NPCs, scenes, and dice rolls, making it easy to run and play pbp games on Discord.
+A Discord bot for running play-by-post tabletop RPGs, supporting multiple systems (currently Generic, Fate and Mongoose Traveller 2e). PlayByPostBot helps manage character sheets, NPCs, scenes, dice rolls, and inventory management, making it easy to run and play pbp games on Discord.
 
 ---
 
@@ -15,6 +15,11 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
   - Create complex relationships between characters, NPCs, and other entities
   - Hierarchical entity management for companions, minions, and hirelings
   - Support for ownership and control of companions (and speak as them through the narration system)
+
+- **Inventory and Container Management**
+  - Create items and containers with stacking support for quantities
+  - GMs can create "loot containers" that players can take from and give items to
+  - Inventory tracking for characters with item relationships
 
 - **Scene Management**  
   - Create and manage multiple scenes and keep track of NPCs and notes
@@ -143,13 +148,13 @@ The following are the commands that are currently available.
 ### Entities
 
 - `/entity create [entity_type] [name] [parent_entity]`  
-  Create a new entity. Optionally specify a parent entity that will own this entity.
+  Create a new entity (item, container, etc.). Optionally specify a parent entity that will own this entity.
 
 - `/entity list [owner_entity] [entity_type] [show_relationships]`  
   List entities with optional filtering by owner or type. Show relationship details if requested.
 
 - `/entity view [entity_name]`  
-  View detailed information about an entity including its relationships.
+  View detailed information about an entity including its relationships and interactive editing interface.
 
 - `/entity delete [entity_name]`  
   Delete an entity. Entities that own other entities cannot be deleted until relationships are transferred.
@@ -349,14 +354,9 @@ All aspect editing supports:
 
 ## Features Planned
 
-### Top Priority
-
-- Add to inventory system to allow GM to create "loot containers" that players can take from and put in their inventories
-
-### Secondary Priority
-
 - System specific features
   - Traveller: starships, travel, and maintenance cost calculations
+  - Container management features (weight/bulk, item type filtering, etc.)
 - Support for other systems
 
 ---

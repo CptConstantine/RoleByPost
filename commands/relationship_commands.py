@@ -229,21 +229,21 @@ class RelationshipCommands(commands.Cog):
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @relationship_group.command(name="transfer", description="Transfer ownership of an entity to another entity")
+    @relationship_group.command(name="transfer", description="Transfer possession of an entity to another entity")
     @app_commands.describe(
-        owned_entity="The entity to transfer ownership of",
+        possessed_entity="The entity to transfer possession of",
         new_owner="The entity that will become the new owner"
     )
-    @app_commands.autocomplete(owned_entity=entity_autocomplete)
+    @app_commands.autocomplete(possessed_entity=entity_autocomplete)
     @app_commands.autocomplete(new_owner=entity_autocomplete)
-    async def transfer_ownership(self, interaction: discord.Interaction, owned_entity: str, new_owner: str):
-        """Transfer ownership of an entity to another entity (GM only)"""
+    async def transfer_possession(self, interaction: discord.Interaction, possessed_entity: str, new_owner: str):
+        """Transfer possession of an entity to another entity (GM only)"""
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can transfer ownership.", ephemeral=True)
+            await interaction.response.send_message("❌ Only GMs can transfer possession.", ephemeral=True)
             return
         
         # Get the entities - try both character and entity repositories
-        owned_char = self._find_entity_by_name(interaction.guild.id, owned_entity)
+        owned_char = self._find_entity_by_name(interaction.guild.id, possessed_entity)
         new_owner_char = self._find_entity_by_name(interaction.guild.id, new_owner)
         
         if not owned_char or not new_owner_char:
@@ -267,7 +267,7 @@ class RelationshipCommands(commands.Cog):
         )
         
         await interaction.response.send_message(
-            f"✅ **{new_owner.name}** now owns **{owned_entity.name}**", 
+            f"✅ **{new_owner}** now possesses **{possessed_entity}**", 
             ephemeral=True
         )
 
