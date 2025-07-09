@@ -8,12 +8,72 @@ import discord.ui as ui
 from core.roll_formula import RollFormula
 from data.models import Relationship
 
+@dataclass
+class AccessLevel:
+    """Container access control configuration"""
+    access_type: str  # 'public', 'gm_only', 'specific_users'
+    allowed_user_ids: List[str] = None
+    
+    def __post_init__(self):
+        if self.allowed_user_ids is None:
+            self.allowed_user_ids = []
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for storage"""
+        return {
+            "access_type": self.access_type,
+            "allowed_user_ids": self.allowed_user_ids
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AccessLevel":
+        """Create from dictionary"""
+        return cls(
+            access_type=data.get("access_type", "public"),
+            allowed_user_ids=data.get("allowed_user_ids", [])
+        )
+    
+    def can_access(self, user_id: str, is_gm: bool = False) -> bool:
+        """Check if a user can access the container"""
+        if self.access_type == "public":
+            return True
+        elif self.access_type == "gm_only":
+            return is_gm
+        elif self.access_type == "specific_users":
+            return is_gm or str(user_id) in self.allowed_user_ids
+        
+        return False
+    
+    def add_user(self, user_id: str) -> None:
+        """Add a user to the allowed list"""
+        user_id = str(user_id)
+        if user_id not in self.allowed_user_ids:
+            self.allowed_user_ids.append(user_id)
+    
+    def remove_user(self, user_id: str) -> bool:
+        """Remove a user from the allowed list. Returns True if user was removed."""
+        user_id = str(user_id)
+        if user_id in self.allowed_user_ids:
+            self.allowed_user_ids.remove(user_id)
+            return True
+        return False
+
 class BaseRpgObj(ABC):
     """
     Abstract base class for a "thing".
     """
     def __init__(self, data: Dict[str, Any]):
         self.data = data
+        # Ensure access_control exists for all entities
+        self._ensure_access_control()
+
+    def _ensure_access_control(self):
+        """Ensure access_control field exists with proper defaults"""
+        if "access_control" not in self.data:
+            self.data["access_control"] = {
+                "access_type": "specific_users",
+                "allowed_user_ids": []
+            }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "BaseRpgObj":
@@ -30,11 +90,102 @@ class BaseRpgObj(ABC):
 
     @property
     def owner_id(self) -> Optional[str]:
+        """Primary owner - maintains existing behavior for simple ownership checks"""
         return self.data.get("owner_id")
 
     @owner_id.setter
     def owner_id(self, value: str):
+        """Set the primary owner - maintains existing behavior"""
         self.data["owner_id"] = value
+
+    @property
+    def access_control(self) -> AccessLevel:
+        """Get additional access control configuration"""
+        # Ensure field exists
+        self._ensure_access_control()
+        access_data = self.data.get("access_control", {"access_type": "specific_users", "allowed_user_ids": []})
+        return AccessLevel.from_dict(access_data)
+
+    @access_control.setter
+    def access_control(self, value: AccessLevel):
+        """Set additional access control configuration"""
+        self.data["access_control"] = value.to_dict()
+
+    def can_access(self, user_id: str, is_gm: bool = False) -> bool:
+        """
+        Hybrid access checking: combines owner_id with access_control
+        
+        Args:
+            user_id: Discord user ID to check
+            is_gm: Whether the user has GM permissions
+            
+        Returns:
+            True if user can access this entity
+        """
+        user_id = str(user_id)
+        
+        # Primary owner always has access (maintains existing behavior)
+        if self.owner_id == user_id:
+            return True
+        
+        # GMs always have access
+        if is_gm:
+            return True
+        
+        # Check additional access control rules
+        return self.access_control.can_access(user_id, is_gm)
+
+    def add_allowed_user(self, user_id: str) -> None:
+        """Add a user to the additional access list (beyond primary owner)"""
+        access_control = self.access_control
+        access_control.add_user(user_id)
+        self.access_control = access_control
+
+    def remove_allowed_user(self, user_id: str) -> bool:
+        """Remove a user from the additional access list"""
+        access_control = self.access_control
+        result = access_control.remove_user(user_id)
+        self.access_control = access_control
+        return result
+
+    def set_access_type(self, access_type: str) -> None:
+        """Set the access type for additional access control"""
+        valid_types = ["public", "gm_only", "specific_users"]
+        if access_type not in valid_types:
+            raise ValueError(f"Invalid access type. Must be one of: {valid_types}")
+        
+        access_control = self.access_control
+        access_control.access_type = access_type
+        self.access_control = access_control
+
+    def get_all_allowed_users(self) -> List[str]:
+        """Get all users who can access this entity (owner + additional users)"""
+        allowed_users = []
+        
+        # Add primary owner
+        if self.owner_id:
+            allowed_users.append(self.owner_id)
+        
+        # Add additional users from access control
+        access_control = self.access_control
+        if access_control.access_type == "specific_users":
+            for user_id in access_control.allowed_user_ids:
+                if user_id not in allowed_users:
+                    allowed_users.append(user_id)
+        
+        return allowed_users
+
+    def is_owned_by(self, user_id: str) -> bool:
+        """Check if user is the primary owner (for strict ownership checks)"""
+        return self.owner_id == str(user_id)
+
+    @property
+    def system(self) -> str:
+        return self.data.get("system")
+
+    @system.setter
+    def system(self, value: str):
+        self.data["system"] = value
 
     @property
     def notes(self) -> list:
@@ -145,6 +296,7 @@ class EntityType(Enum):
     NPC = "npc"
     COMPANION = "companion"  # A character that is not a PC but is controlled by a player
     ITEM = "item"  # Generic item, can be used in inventory
+    CONTAINER = "container"  # A container that can hold items, like a backpack or chest or any loot container
     
     def __str__(self):
         return self.value
@@ -340,6 +492,7 @@ class BaseEntity(BaseRpgObj):
         id: str, 
         name: str, 
         owner_id: str, 
+        system: str,
         entity_type: EntityType,
         notes: List[str] = None, 
         avatar_url: str = None, 
@@ -347,12 +500,17 @@ class BaseEntity(BaseRpgObj):
     ) -> Dict[str, Any]:
         """Helper method to create a standardized entity dictionary."""
         entity = {
-            "id": str(id),
+            "id": id,
             "name": name,
-            "owner_id": str(owner_id),
+            "owner_id": owner_id,
+            "system": system,
             "entity_type": entity_type.value,
             "notes": notes or [],
             "avatar_url": avatar_url or '',
+            "access_control": {
+                "access_type": "specific_users",
+                "allowed_user_ids": [owner_id]
+            }
         }
         
         # Add system-specific fields

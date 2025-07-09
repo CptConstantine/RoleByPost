@@ -112,16 +112,6 @@ class EntityCommands(commands.Cog):
             await interaction.followup.send(f"❌ An entity named `{name}` already exists.", ephemeral=True)
             return
         
-        # Create the entity
-        entity_id = str(uuid.uuid4())
-        EntityClass = factories.get_specific_entity(system, e_type)
-        entity_dict = BaseEntity.build_entity_dict(
-            id=entity_id,
-            name=name,
-            owner_id=str(interaction.user.id),
-            entity_type=e_type
-        )
-        
         # Create the entity using the new factory method
         entity = factories.build_and_save_entity(
             system=system,

@@ -46,20 +46,19 @@ def build_entity(
         id=entity_id,
         name=name,
         owner_id=owner_id,
+        system=system,
         entity_type=entity_type,
         notes=notes,
         avatar_url=avatar_url,
         system_specific_fields=system_specific_fields
     )
     
-    # Create the entity instance
-    entity = EntityClass(entity_dict)
+    # Get the system-specific entity class
+    EntityClass = get_specific_entity(system, entity_type)
     
-    # Apply defaults if guild_id is provided
-    if guild_id:
-        entity.apply_defaults(entity_type, guild_id=guild_id)
-    else:
-        entity.apply_defaults(entity_type)
+    # Create and apply defaults
+    entity = EntityClass.from_dict(entity_dict)
+    entity.apply_defaults(entity_type, guild_id)
     
     return entity
 
@@ -139,11 +138,15 @@ def get_specific_entity(system: str, entity_type: EntityType):
             return generic_entities.GenericCharacter
         elif entity_type == EntityType.COMPANION:
             return generic_entities.GenericCompanion
+        elif entity_type == EntityType.CONTAINER:
+            return generic_entities.GenericContainer
         else:
             return generic_entities.GenericEntity
     elif system == "fate":
         if entity_type == EntityType.PC or entity_type == EntityType.NPC:
             return fate_character.FateCharacter
+        elif entity_type == EntityType.CONTAINER:
+            return generic_entities.GenericContainer
         else:
             return fate_extra.FateExtra
     elif system == "mgt2e":
@@ -153,6 +156,8 @@ def get_specific_entity(system: str, entity_type: EntityType):
             return generic_entities.GenericCompanion
         elif entity_type == EntityType.GENERIC or entity_type == EntityType.ITEM:
             return generic_entities.GenericEntity
+        elif entity_type == EntityType.CONTAINER:
+            return generic_entities.GenericContainer
         else:
             raise ValueError(f"Unknown entity type '{entity_type}' for MGT2E system")
     else:
@@ -164,19 +169,22 @@ def get_system_entity_types(system: str) -> List[EntityType]:
         return [
             EntityType.GENERIC,
             EntityType.ITEM,
-            EntityType.COMPANION
+            EntityType.COMPANION,
+            EntityType.CONTAINER
         ]
     elif system == "mgt2e":
         return [
             EntityType.GENERIC,
             EntityType.ITEM,
-            EntityType.COMPANION
+            EntityType.COMPANION,
+            EntityType.CONTAINER
         ]
     else:
         return [
         EntityType.GENERIC,
         EntityType.ITEM,
-        EntityType.COMPANION
+        EntityType.COMPANION,
+        EntityType.CONTAINER
     ]
 
 def get_specific_initiative(initiative_type: str):

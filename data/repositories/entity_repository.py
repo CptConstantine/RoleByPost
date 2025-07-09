@@ -64,11 +64,19 @@ class EntityRepository(BaseRepository[Entity]):
             id=entity.id,
             name=entity.name,
             owner_id=entity.owner_id,
+            system=entity.system,
             entity_type=EntityType(entity.entity_type),
             notes=entity.notes,
             avatar_url=entity.avatar_url,
             system_specific_fields=entity.system_specific_data
         )
+        
+        # Add access_control if it doesn't exist (migration)
+        if "access_control" not in entity_dict:
+            entity_dict["access_control"] = {
+                "access_type": "specific_users",
+                "allowed_user_ids": []
+            }
         
         return EntityClass.from_dict(entity_dict)
     
@@ -113,6 +121,10 @@ class EntityRepository(BaseRepository[Entity]):
         system_specific_data = {}
         for key in system_fields:
             system_specific_data[key] = entity.data.get(key)
+
+        # Include access_control in system_specific_data for storage
+        if "access_control" in entity.data:
+            system_specific_data["access_control"] = entity.data["access_control"]
 
         notes = entity.notes or []
         

@@ -614,29 +614,18 @@ class CharacterCommands(commands.Cog):
         
         # Get system and companion class
         system = repositories.server.get_system(str(interaction.guild.id))
-        CompanionClass = factories.get_specific_companion(system)
-        
-        # Create companion
-        companion_id = str(uuid.uuid4())
-        companion_dict = BaseEntity.build_entity_dict(
-            id=companion_id,
-            name=companion_name,
-            owner_id=str(interaction.user.id),  # User owns the companion
+        companion = factories.build_and_save_entity(
+            system=system,
             entity_type=EntityType.COMPANION,
+            name=companion_name,
+            owner_id=str(owner_char.owner_id)
         )
-        
-        companion = CompanionClass(companion_dict)
-        companion.entity_type = EntityType.COMPANION
-        companion.apply_defaults(EntityType.COMPANION, guild_id=str(interaction.guild.id))
-        
-        # Save companion
-        repositories.entity.upsert_entity(str(interaction.guild.id), companion, system=system)
-        
+
         # Create CONTROLS relationship
         repositories.relationship.create_relationship(
             str(interaction.guild.id),
             owner_char.id,
-            companion_id,
+            companion.id,
             RelationshipType.CONTROLS.value,
             {"created_by": str(interaction.user.id)}
         )

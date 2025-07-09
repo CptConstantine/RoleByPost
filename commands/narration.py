@@ -132,10 +132,12 @@ async def process_narration(message: discord.Message):
             if not alias:
                 alias = npc_name  # Use the NPC name as an alias if no alias was provided
             
-            # Create a temporary character for display
-            character_dict = BaseEntity.build_entity_dict(f"temp_{npc_name.lower().replace(' ', '_')}", npc_name, user_id, entity_type=EntityType.NPC, notes=[])
-            CharacterClass = factories.get_specific_character(repositories.server.get_system(guild_id))
-            character = CharacterClass.from_dict(character_dict)
+            character = factories.build_entity(
+                name=npc_name,
+                owner_id=str(message.author.id),
+                system="generic",  # Use generic system for temporary NPCs
+                entity_type=EntityType.NPC
+            )
     else:
         return  # Not a narration command
     
