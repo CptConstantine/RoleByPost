@@ -38,9 +38,6 @@ def build_entity(
     # Generate a unique ID
     entity_id = str(uuid.uuid4())
     
-    # Get the appropriate entity class
-    EntityClass = get_specific_entity(system, entity_type)
-    
     # Build the entity dictionary
     entity_dict = BaseEntity.build_entity_dict(
         id=entity_id,

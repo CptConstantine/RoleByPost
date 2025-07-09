@@ -328,18 +328,6 @@ For more detailed help, use `/char narration`.
 - `/fate scene aspects`  
   Show all aspects in the current scene including game aspects, scene aspects, zone aspects, and character aspects. GMs can see hidden aspects while players see only visible ones.
 
-- `/fate extra create [extra_type] [name]`  
-  Create a new Fate extra (generic, item, or companion) with appropriate Fate mechanics.
-
-- `/fate extra delete [extra_name]`  
-  Delete a Fate extra with confirmation.
-
-- `/fate extra view [extra_name]`  
-  View and edit a Fate extra's sheet with full Fate mechanics.
-
-- `/fate extra list [extra_type] [show_relationships]`  
-  List Fate extras with optional filtering and relationship display.
-
 **Interactive Aspect Management:**
 When viewing a scene in a Fate game, GMs have access to these Fate-specific features:
 - **Edit Game Aspects:** Manage server-wide aspects that persist across scenes
