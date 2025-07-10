@@ -22,53 +22,100 @@ async def entity_type_autocomplete(interaction: discord.Interaction, current: st
         for entity_type in filtered_types[:25]
     ]
 
-async def entity_name_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
-    """Autocomplete for entity names - shows entities user owns or all if GM"""
+async def entity_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+    """Autocomplete for any entity name - shows accessible entities"""
+    if not interaction.guild:
+        return []
+    
+    # Check if user is GM
     is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
     
-    if is_gm:
-        # GMs can see all entities
-        entities = repositories.entity.get_all_by_guild(str(interaction.guild.id))
-    else:
-        # Users can only see their own entities
-        entities = repositories.entity.get_all_by_owner(str(interaction.guild.id), str(interaction.user.id))
+    # Get all entities the user can access
+    all_entities = repositories.entity.get_all_accessible(
+        str(interaction.guild.id), 
+        str(interaction.user.id), 
+        is_gm
+    )
     
-    # Filter by current input
-    filtered_entities = [
-        entity for entity in entities 
-        if current.lower() in entity.name.lower()
-    ]
+    # Filter based on current input
+    if current:
+        all_entities = [entity for entity in all_entities if current.lower() in entity.name.lower()]
     
-    return [
-        app_commands.Choice(name=f"{entity.name} ({entity.entity_type.value})", value=entity.name)
-        for entity in filtered_entities[:25]
-    ]
+    # Format the choices with entity type for clarity
+    choices = []
+    for entity in all_entities[:25]:  # Limit to 25 results
+        entity_type = entity.entity_type.value.upper()
+        # Add indicator for access type
+        access_indicator = ""
+        if not is_gm:
+            if entity.owner_id == str(interaction.user.id):
+                access_indicator = " [OWNED]"
+            elif entity.access_control.access_type == "public":
+                access_indicator = " [PUBLIC]"
+            else:
+                # Check if controlled
+                controlled_entities = repositories.entity.get_entities_controlled_by_user(
+                    str(interaction.guild.id), str(interaction.user.id)
+                )
+                if any(e.id == entity.id for e in controlled_entities):
+                    access_indicator = " [CONTROLLED]"
+                else:
+                    access_indicator = " [ACCESS]"
+        
+        choices.append(
+            app_commands.Choice(
+                name=f"{entity.name} ({entity_type}){access_indicator}", 
+                value=entity.name
+            )
+        )
+    
+    return choices
 
 async def top_level_entity_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
     """Autocomplete for parent entities - entities that can own other entities"""
     is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
     
-    if is_gm:
-        # GMs can see all entities as potential parents
-        entities = repositories.entity.get_all_by_guild(str(interaction.guild.id))
-    else:
-        # Users can only use their own entities as parents
-        entities = repositories.entity.get_all_by_owner(str(interaction.guild.id), str(interaction.user.id))
+    # Get all entities the user can access
+    entities = repositories.entity.get_all_accessible(
+        str(interaction.guild.id), 
+        str(interaction.user.id), 
+        is_gm
+    )
     
     # Add "None" option for top-level entities
     choices = [app_commands.Choice(name="None (Top Level)", value="")]
     
     # Filter by current input
-    filtered_entities = [
-        entity for entity in entities 
-        if current.lower() in entity.name.lower()
-    ]
+    filtered_entities = [entity for entity in entities if current.lower() in entity.name.lower()]
     
-    choices.extend([
-        app_commands.Choice(name=f"{entity.name} ({entity.entity_type.value})", value=entity.name)
-        for entity in filtered_entities[:24]  # 24 to make room for "None" option
-    ])
+    # Add access indicators for clarity
+    entity_choices = []
+    for entity in filtered_entities[:24]:  # 24 to make room for "None" option
+        # Add indicator for access type
+        access_indicator = ""
+        if not is_gm:
+            if entity.owner_id == str(interaction.user.id):
+                access_indicator = " [OWNED]"
+            elif entity.access_control.access_type == "public":
+                access_indicator = " [PUBLIC]"
+            else:
+                # Check if controlled
+                controlled_entities = repositories.entity.get_entities_controlled_by_user(
+                    str(interaction.guild.id), str(interaction.user.id)
+                )
+                if any(e.id == entity.id for e in controlled_entities):
+                    access_indicator = " [CONTROLLED]"
+                else:
+                    access_indicator = " [ACCESS]"
+        
+        entity_choices.append(
+            app_commands.Choice(
+                name=f"{entity.name} ({entity.entity_type.value}){access_indicator}", 
+                value=entity.name
+            )
+        )
     
+    choices.extend(entity_choices)
     return choices
 
 class EntityCommands(commands.Cog):
@@ -128,7 +175,7 @@ class EntityCommands(commands.Cog):
         entity_name="Name of the entity to delete",
         transfer_inventory="If true, releases possessed items instead of blocking deletion"
     )
-    @app_commands.autocomplete(entity_name=entity_name_autocomplete)
+    @app_commands.autocomplete(entity_name=entity_autocomplete)
     @channel_restriction.no_ic_channels()
     async def entity_delete(self, interaction: discord.Interaction, entity_name: str, transfer_inventory: bool = False):
         """Delete an entity with confirmation"""
@@ -281,7 +328,7 @@ class EntityCommands(commands.Cog):
         entity_name="Name of the entity to view",
         show_links="Show detailed link information"
     )
-    @app_commands.autocomplete(entity_name=entity_name_autocomplete)
+    @app_commands.autocomplete(entity_name=entity_autocomplete)
     @channel_restriction.no_ic_channels()
     async def entity_view(self, interaction: discord.Interaction, entity_name: str, show_links: bool = False):
         """View detailed information about an entity with edit interface"""
@@ -321,7 +368,7 @@ class EntityCommands(commands.Cog):
         entity_name="Current name of the entity",
         new_name="New name for the entity"
     )
-    @app_commands.autocomplete(entity_name=entity_name_autocomplete)
+    @app_commands.autocomplete(entity_name=entity_autocomplete)
     @channel_restriction.no_ic_channels()
     async def entity_rename(self, interaction: discord.Interaction, entity_name: str, new_name: str):
         """Rename an entity"""

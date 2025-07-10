@@ -1,5 +1,3 @@
-
-
 import discord
 from discord import ui
 from core.base_models import BaseEntity, EntityLinkType, EntityType
@@ -22,7 +20,6 @@ class EditInventoryView(ui.View):
         self.render()
 
     def load_data(self):
-        from core.base_models import EntityType
         self.char = repositories.entity.get_by_id(self.char_id)
         if not self.char:
             self.inventory = []
@@ -184,7 +181,16 @@ class ItemManagementView(ui.View):
             ephemeral=True
         )
 
-    @ui.button(label="🗑️ Remove from Inventory", style=discord.ButtonStyle.danger, row=0)
+    @ui.button(label="📊 Edit Quantity", style=discord.ButtonStyle.secondary, row=0)
+    async def edit_quantity(self, interaction: discord.Interaction, button: ui.Button):
+        # Only show quantity editing for items
+        if self.item.entity_type != EntityType.ITEM:
+            await interaction.response.send_message("❌ Quantity editing is only available for items.", ephemeral=True)
+            return
+        
+        await interaction.response.send_modal(EditItemQuantityModal(self.char_id, self.item, str(self.guild_id)))
+
+    @ui.button(label="🗑️ Remove from Inventory", style=discord.ButtonStyle.danger, row=1)
     async def remove_item(self, interaction: discord.Interaction, button: ui.Button):
         char = repositories.entity.get_by_id(self.char_id)
         char.remove_from_inventory(str(self.guild_id), self.item)
@@ -201,6 +207,53 @@ class ItemManagementView(ui.View):
             content="Returned to inventory management.",
             view=None
         )
+
+class EditItemQuantityModal(ui.Modal, title="Edit Item Quantity"):
+    def __init__(self, char_id: str, item: BaseEntity, guild_id: str):
+        super().__init__()
+        self.char_id = char_id
+        self.item = item
+        self.guild_id = guild_id
+        
+        # Get current quantity for default value
+        char = repositories.entity.get_by_id(char_id)
+        links = char.get_links_to_entity(guild_id, item.id, EntityLinkType.POSSESSES)
+        self.current_quantity = links[0].metadata.get("quantity", 1) if links and hasattr(links[0], 'metadata') else 1
+        
+        self.quantity_field = ui.TextInput(
+            label="New Quantity",
+            placeholder="Enter the new quantity",
+            default=str(self.current_quantity),
+            required=True,
+            max_length=10
+        )
+        self.add_item(self.quantity_field)
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            new_quantity = int(self.quantity_field.value.strip())
+            if new_quantity < 0:
+                await interaction.response.send_message("❌ Quantity cannot be negative.", ephemeral=True)
+                return
+        except ValueError:
+            await interaction.response.send_message("❌ Please enter a valid number.", ephemeral=True)
+            return
+        
+        char = repositories.entity.get_by_id(self.char_id)
+        
+        if new_quantity == 0:
+            # Remove the item entirely
+            char.remove_item(self.guild_id, self.item)
+            message = f"✅ Removed all **{self.item.name}** from inventory."
+        else:
+            # Update the quantity by first removing all, then adding the new amount
+            char.remove_item(self.guild_id, self.item)  # Remove all existing
+            char.add_item(self.guild_id, self.item, new_quantity)  # Add new quantity
+            message = f"✅ Set **{self.item.name}** quantity from {self.current_quantity} to {new_quantity}."
+
+        repositories.entity.upsert_entity(interaction.guild.id, char, system=char.system)
+        
+        await interaction.response.send_message(message, ephemeral=True)
 
 class InventorySearchModal(ui.Modal, title="Search Inventory"):
     def __init__(self, parent_view: EditInventoryView):
@@ -333,12 +386,23 @@ class AddItemModal(ui.Modal, title="Add New Item"):
         )
         self.add_item(self.description_field)
 
+        self.quantity_field = ui.TextInput(
+            label="Quantity",
+            style=discord.TextStyle.short,
+            max_length=10,
+            default="1",
+            required=True
+        )
+        self.add_item(self.quantity_field)
+
     async def on_submit(self, interaction: discord.Interaction):
         from core.factories import build_and_save_entity
         character = repositories.entity.get_by_id(self.char_id)
         
         name = self.name_field.value.strip()
         description = self.description_field.value.strip()
+        quantity_str = self.quantity_field.value.strip()
+        quantity = int(quantity_str) if quantity_str.isdigit() else 1
         
         if not name:
             await interaction.response.send_message("❌ Item name cannot be empty.", ephemeral=True)
@@ -361,7 +425,7 @@ class AddItemModal(ui.Modal, title="Add New Item"):
         )
         
         # Add to character's inventory
-        character.add_to_inventory(self.guild_id, new_item)
+        character.add_item(self.guild_id, new_item, quantity=quantity)
         repositories.entity.upsert_entity(interaction.guild.id, character, system=character.system)
         
         await interaction.response.edit_message(

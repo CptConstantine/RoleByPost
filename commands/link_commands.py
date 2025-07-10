@@ -2,58 +2,29 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from data.repositories.repository_factory import repositories
-from core.base_models import EntityLinkType
+from core.base_models import EntityLinkType, EntityType
 from core.base_models import BaseEntity
 from typing import Optional, List
-import core.factories as factories
+from .entity_commands import entity_autocomplete
 
-class EntityLinkCommands(commands.Cog):
+async def link_type_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+    """Autocomplete for link types"""
+    link_types = EntityLinkType.get_all_dict()
+    
+    # Filter based on current input
+    if current:
+        filtered_types = {name: value for name, value in link_types.items() if current.lower() in name.lower()}
+    else:
+        filtered_types = link_types
+    
+    return [
+        app_commands.Choice(name=name, value=value.value)
+        for name, value in filtered_types.items()
+    ]
+
+class LinkCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
-    async def entity_autocomplete(self, interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
-        """Autocomplete for any entity name - shows all entities if GM, owned entities if not GM"""
-        if not interaction.guild:
-            return []
-        
-        # Check if user is GM
-        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
-        
-        if is_gm:
-            # GMs can see all entities (both characters and other entities)
-            all_entities = repositories.entity.get_all_by_guild(str(interaction.guild.id))
-        else:
-            # Users can only see entities they own
-            all_entities = repositories.entity.get_all_by_owner(str(interaction.guild.id), str(interaction.user.id))
-        
-        # Filter based on current input
-        if current:
-            all_entities = [entity for entity in all_entities if current.lower() in entity.name.lower()]
-        
-        # Format the choices with entity type for clarity
-        choices = []
-        for entity in all_entities[:25]:  # Limit to 25 results
-            entity_type = entity.entity_type.value.upper()
-            choices.append(
-                app_commands.Choice(name=f"{entity.name} ({entity_type})", value=entity.name)
-            )
-        
-        return choices
-
-    async def link_type_autocomplete(self, interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
-        """Autocomplete for link types"""
-        link_types = EntityLinkType.get_all_dict()
-        
-        # Filter based on current input
-        if current:
-            filtered_types = {name: value for name, value in link_types.items() if current.lower() in name.lower()}
-        else:
-            filtered_types = link_types
-        
-        return [
-            app_commands.Choice(name=name, value=value.value)
-            for name, value in filtered_types.items()
-        ]
 
     # Create the link command group
     link_group = app_commands.Group(name="link", description="Manage links between entities")
@@ -66,8 +37,8 @@ class EntityLinkCommands(commands.Cog):
         description="Optional description of the link"
     )
     @app_commands.autocomplete(from_entity=entity_autocomplete)
-    @app_commands.autocomplete(to_entity=entity_autocomplete)
     @app_commands.autocomplete(link_type=link_type_autocomplete)
+    @app_commands.autocomplete(to_entity=entity_autocomplete)
     async def create_link(self, interaction: discord.Interaction, from_entity: str, link_type: str, to_entity: str, description: str = None):
         """Create a link between two entities"""
         # Check GM permissions for certain link types
@@ -226,42 +197,103 @@ class EntityLinkCommands(commands.Cog):
     @link_group.command(name="transfer", description="Transfer possession of an entity to another entity")
     @app_commands.describe(
         possessed_entity="The entity to transfer possession of",
-        new_owner="The entity that will become the new owner"
+        new_owner="The entity that will become the new owner",
+        quantity="Quantity to transfer (for items only, leave blank for all)"
     )
     @app_commands.autocomplete(possessed_entity=entity_autocomplete)
     @app_commands.autocomplete(new_owner=entity_autocomplete)
-    async def transfer_possession(self, interaction: discord.Interaction, possessed_entity: str, new_owner: str):
+    async def transfer_possession(self, interaction: discord.Interaction, possessed_entity: str, new_owner: str, quantity: int = None):
         """Transfer possession of an entity to another entity (GM only)"""
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can transfer possession.", ephemeral=True)
             return
         
-        # Get the entities - try both character and entity repositories
+        # Get the entities
         possessed = self._find_entity_by_name(interaction.guild.id, possessed_entity)
-        new_possessor_char = self._find_entity_by_name(interaction.guild.id, new_owner)
+        new_possessor = self._find_entity_by_name(interaction.guild.id, new_owner)
         
-        if not possessed or not new_possessor_char:
+        if not possessed or not new_possessor:
             await interaction.response.send_message("❌ One or both entities not found.", ephemeral=True)
             return
         
+        # Handle item transfers with quantity
+        if possessed.entity_type == EntityType.ITEM:
+            await self._transfer_item_with_quantity(interaction, possessed, new_possessor, quantity)
+        else:
+            # Handle non-item transfers (existing logic)
+            await self._transfer_entity_ownership(interaction, possessed, new_possessor)
+
+    async def _transfer_item_with_quantity(self, interaction: discord.Interaction, item: BaseEntity, new_owner: BaseEntity, quantity: int = None):
+        """Handle item transfers with quantity support"""
+        guild_id = str(interaction.guild.id)
+        
+        # Find current owners and their quantities
+        current_possessors = repositories.link.get_parents(guild_id, item.id, EntityLinkType.POSSESSES.value)
+        
+        if not current_possessors:
+            await interaction.response.send_message(f"❌ {item.name} is not currently possessed by anyone.", ephemeral=True)
+            return
+        
+        # For simplicity, handle single possessor case first
+        if len(current_possessors) > 1:
+            await interaction.response.send_message(f"❌ {item.name} has multiple possessors. Please specify which one to transfer from.", ephemeral=True)
+            return
+        
+        current_owner = current_possessors[0]
+        current_links = current_owner.get_links_to_entity(guild_id, item.id, EntityLinkType.POSSESSES)
+        current_quantity = current_links[0].metadata.get("quantity", 1) if current_links else 1
+        
+        # Determine transfer quantity
+        transfer_quantity = quantity if quantity is not None else current_quantity
+        
+        if transfer_quantity <= 0:
+            await interaction.response.send_message("❌ Transfer quantity must be positive.", ephemeral=True)
+            return
+        
+        if transfer_quantity > current_quantity:
+            await interaction.response.send_message(
+                f"❌ {current_owner.name} only has {current_quantity}x {item.name}. Cannot transfer {transfer_quantity}.",
+                ephemeral=True
+            )
+            return
+        
+        # Remove from current owner
+        current_owner.remove_item(guild_id, item, transfer_quantity)
+        
+        # Add to new owner
+        new_owner.add_item(guild_id, item, transfer_quantity)
+        
+        # Save both entities
+        repositories.entity.upsert_entity(interaction.guild.id, current_owner, system=current_owner.system)
+        repositories.entity.upsert_entity(interaction.guild.id, new_owner, system=new_owner.system)
+        
+        await interaction.response.send_message(
+            f"✅ Transferred {transfer_quantity}x **{item.name}** from **{current_owner.name}** to **{new_owner.name}**",
+            ephemeral=True
+        )
+
+    async def _transfer_entity_ownership(self, interaction: discord.Interaction, entity: BaseEntity, new_owner: BaseEntity):
+        """Handle non-item entity transfers (existing logic)"""
+        guild_id = str(interaction.guild.id)
+        
         # Remove existing ownership links
-        existing_possessors = repositories.link.get_parents(str(interaction.guild.id), possessed.id, EntityLinkType.POSSESSES.value)
+        existing_possessors = repositories.link.get_parents(guild_id, entity.id, EntityLinkType.POSSESSES.value)
         for possessor in existing_possessors:
             repositories.link.delete_links_by_entities(
-                str(interaction.guild.id), possessor.id, possessed.id, EntityLinkType.POSSESSES.value
+                guild_id, possessor.id, entity.id, EntityLinkType.POSSESSES.value
             )
         
         # Create new ownership link
         repositories.link.create_link(
-            str(interaction.guild.id),
-            new_possessor_char.id,
-            possessed.id,
+            guild_id,
+            new_owner.id,
+            entity.id,
             EntityLinkType.POSSESSES.value,
             {"transferred_by": str(interaction.user.id)}
         )
         
         await interaction.response.send_message(
-            f"✅ **{new_owner}** now possesses **{possessed_entity}**", 
+            f"✅ **{new_owner.name}** now possesses **{entity.name}**",
             ephemeral=True
         )
 
@@ -276,4 +308,4 @@ class EntityLinkCommands(commands.Cog):
         return entity
 
 async def setup_link_commands(bot: commands.Bot):
-    await bot.add_cog(EntityLinkCommands(bot))
+    await bot.add_cog(LinkCommands(bot))

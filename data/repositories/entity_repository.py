@@ -112,6 +112,83 @@ class EntityRepository(BaseRepository[Entity]):
         entities = self.execute_query(query, (str(guild_id), str(owner_id)))
         return self._convert_list_to_base_entities(entities)
     
+    def get_all_accessible(self, guild_id: str, user_id: str, is_gm: bool = False) -> List[BaseEntity]:
+        """
+        Get all entities a user can access through:
+        1. Direct ownership (owner_id)
+        2. Control links (entities they control)
+        3. Access control permissions (public/specific_users)
+        """
+        if is_gm:
+            # GMs can access everything
+            return self.get_all_by_guild(guild_id)
+        
+        user_id = str(user_id)
+        guild_id = str(guild_id)
+        
+        # Complex query to get all accessible entities
+        query = f"""
+        SELECT DISTINCT e.* FROM {self.table_name} e
+        WHERE e.guild_id = %s AND (
+            -- Direct ownership
+            e.owner_id = %s
+            OR
+            -- Public access
+            (e.system_specific_data->>'access_control' IS NULL 
+             OR (e.system_specific_data->'access_control'->>'access_type') = 'public')
+            OR
+            -- Specific user access
+            (
+                (e.system_specific_data->'access_control'->>'access_type') = 'specific_users'
+                AND (
+                    e.system_specific_data->'access_control'->'allowed_user_ids' ? %s
+                    OR e.system_specific_data->'access_control'->>'allowed_user_ids' LIKE %s
+                )
+            )
+            OR
+            -- Entities controlled by user's entities
+            e.id IN (
+                SELECT el.to_entity_id 
+                FROM entity_links el
+                JOIN {self.table_name} owner_entity ON owner_entity.id = el.from_entity_id
+                WHERE el.guild_id = %s 
+                AND el.link_type = 'controls'
+                AND owner_entity.owner_id = %s
+            )
+        )
+        ORDER BY e.name
+        """
+        
+        # Parameters for the query
+        # %s for user_id in JSON search (for exact match and LIKE pattern)
+        like_pattern = f'%"{user_id}"%'
+        
+        entities = self.execute_query(
+            query, 
+            (guild_id, user_id, user_id, like_pattern, guild_id, user_id)
+        )
+        
+        return self._convert_list_to_base_entities(entities)
+    
+    def get_entities_controlled_by_user(self, guild_id: str, user_id: str) -> List[BaseEntity]:
+        """Get entities that are controlled by entities owned by the user"""
+        user_id = str(user_id)
+        guild_id = str(guild_id)
+        
+        query = f"""
+        SELECT DISTINCT controlled.* 
+        FROM {self.table_name} controlled
+        JOIN entity_links el ON controlled.id = el.to_entity_id
+        JOIN {self.table_name} controller ON controller.id = el.from_entity_id
+        WHERE el.guild_id = %s 
+        AND el.link_type = 'controls'
+        AND controller.owner_id = %s
+        ORDER BY controlled.name
+        """
+        
+        entities = self.execute_query(query, (guild_id, user_id))
+        return self._convert_list_to_base_entities(entities)
+    
     def upsert_entity(self, guild_id: str, entity: BaseEntity, system: str) -> None:
         """Save or update a BaseEntity by converting it to Entity first"""
         # Get system-specific fields

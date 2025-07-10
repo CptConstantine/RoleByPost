@@ -421,9 +421,9 @@ class GenericContainerEditView(ui.View):
         
         # Add management buttons (GM/owner only)
         if self.is_gm:
-            manage_button = ui.Button(label="Manage Contents", style=discord.ButtonStyle.secondary, row=2)
-            manage_button.callback = self.manage_contents
-            self.add_item(manage_button)
+            inventory_button = ui.Button(label="Manage Contents", style=discord.ButtonStyle.secondary, row=2)
+            inventory_button.callback = self.manage_inventory
+            self.add_item(inventory_button)
             
             access_button = ui.Button(label="Access Control", style=discord.ButtonStyle.secondary, row=2)
             access_button.callback = self.manage_access
@@ -524,7 +524,8 @@ class GenericContainerEditView(ui.View):
     async def give_items(self, interaction: discord.Interaction):
         await interaction.response.send_modal(GiveItemModal(self.char_id, str(interaction.user.id)))
 
-    async def manage_contents(self, interaction: discord.Interaction):
+    async def manage_inventory(self, interaction: discord.Interaction):
+        """Open the container's inventory for management using EditInventoryView"""
         # Only owner or GM can manage contents directly
         from data.repositories.repository_factory import repositories
         container = repositories.entity.get_by_id(self.char_id)
@@ -533,8 +534,14 @@ class GenericContainerEditView(ui.View):
         if not (container.is_owned_by(str(interaction.user.id)) or is_gm):
             await interaction.response.send_message("❌ Only the owner or GM can directly manage container contents.", ephemeral=True)
             return
-            
-        await interaction.response.send_modal(ContainerManageModal(self.char_id))
+        
+        # Use EditInventoryView to manage the container's contents
+        inventory_view = EditInventoryView(interaction.guild.id, interaction.user.id, self.char_id)
+        
+        await interaction.response.edit_message(
+            content=f"Managing contents of **{container.name}**:",
+            view=inventory_view
+        )
     
     async def manage_access(self, interaction: discord.Interaction):
         # Only owner or GM can manage access
