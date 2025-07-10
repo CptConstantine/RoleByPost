@@ -142,13 +142,13 @@ class CharacterRepository(BaseRepository[Character]):
         self.save(storage_character, conflict_columns=['id'])
 
     def delete_character(self, guild_id: str, character_id: str) -> None:
-        """Delete a character and all its relationships"""
+        """Delete a character and all its links"""
         # Get the character to find its guild_id
         character = self.get_by_id(character_id)
         if character:
-            # Delete all relationships involving this character
+            # Delete all links involving this character
             from .repository_factory import repositories
-            repositories.relationship.delete_all_relationships_for_entity(str(guild_id), character_id)
+            repositories.link.delete_all_links_for_entity(str(guild_id), character_id)
             
         # Delete the character itself
         query = f"DELETE FROM {self.table_name} WHERE id = %s"

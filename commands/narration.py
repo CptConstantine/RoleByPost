@@ -167,11 +167,11 @@ async def can_user_speak_as_character(guild_id: int, user_id: int, character: Ba
     
     # If it's a companion, check if user owns any characters that control this companion
     if character.entity_type == EntityType.COMPANION:
-        from core.base_models import RelationshipType
-        controlling_chars = repositories.relationship.get_parents(
+        from core.base_models import EntityLinkType
+        controlling_chars = repositories.link.get_parents(
             str(guild_id),
             character.id,
-            RelationshipType.CONTROLS.value
+            EntityLinkType.CONTROLS.value
         )
         
         for controller in controlling_chars:

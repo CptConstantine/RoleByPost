@@ -4,7 +4,7 @@ from discord import app_commands
 from discord.ext import commands
 from typing import List, Optional
 from core import channel_restriction
-from core.base_models import BaseEntity, EntityType, RelationshipType
+from core.base_models import BaseEntity, EntityType, EntityLinkType
 from data.repositories.repository_factory import repositories
 import core.factories as factories
 
@@ -143,18 +143,18 @@ class EntityCommands(commands.Cog):
             await interaction.response.send_message("❌ You can only delete entities you own.", ephemeral=True)
             return
         
-        # Check if entity possesses other entities (through relationships)
-        possessed_entities = repositories.relationship.get_children(
+        # Check if entity possesses other entities (through links)
+        possessed_entities = repositories.link.get_children(
             str(interaction.guild.id), 
             entity.id, 
-            RelationshipType.POSSESSES.value
+            EntityLinkType.POSSESSES.value
         )
         
         if possessed_entities and not transfer_inventory:
             entity_names = [entity.name for entity in possessed_entities]
             await interaction.response.send_message(
                 f"❌ Cannot delete `{entity_name}` because it possesses other entities: {', '.join(entity_names)}.\n"
-                f"Use `transfer_inventory: True` to release these items, transfer them manually, or use `/relationship remove` to remove the possession relationships.",
+                f"Use `transfer_inventory: True` to release these items, transfer them manually, or use `/link remove` to remove the possession links.",
                 ephemeral=True
             )
             return
@@ -179,7 +179,7 @@ class EntityCommands(commands.Cog):
     @app_commands.describe(
         owner_entity="Entity to list owned entities of (leave empty for top-level)",
         entity_type="Filter by entity type",
-        show_relationships="Show ownership relationships"
+        show_links="Show ownership links"
     )
     @app_commands.autocomplete(
         owner_entity=top_level_entity_autocomplete,
@@ -191,7 +191,7 @@ class EntityCommands(commands.Cog):
         interaction: discord.Interaction, 
         owner_entity: str = None, 
         entity_type: str = None,
-        show_relationships: bool = False
+        show_links: bool = False
     ):
         """List entities with optional filtering"""
         await interaction.response.defer(ephemeral=True)
@@ -204,12 +204,12 @@ class EntityCommands(commands.Cog):
                 await interaction.followup.send(f"❌ Owner entity `{owner_entity}` not found.", ephemeral=True)
                 return
             
-            entities = repositories.relationship.get_children(
+            entities = repositories.link.get_children(
                 str(interaction.guild.id), 
                 owner.id, 
-                RelationshipType.POSSESSES.value
+                EntityLinkType.POSSESSES.value
             )
-            title = f"Entities owned by {owner.name}"
+            title = f"Entities possessed by {owner.name}"
         else:
             # List top-level entities (those without owners)
             all_entities = repositories.entity.get_all_by_guild(str(interaction.guild.id))
@@ -217,10 +217,10 @@ class EntityCommands(commands.Cog):
             # Filter to only entities that are not owned by other entities
             entities = []
             for entity in all_entities:
-                owners = repositories.relationship.get_parents(
+                owners = repositories.link.get_parents(
                     str(interaction.guild.id), 
                     entity.id, 
-                    RelationshipType.POSSESSES.value
+                    EntityLinkType.POSSESSES.value
                 )
                 if not owners:  # No owners = top-level
                     entities.append(entity)
@@ -238,14 +238,14 @@ class EntityCommands(commands.Cog):
         # Create embed
         embed = discord.Embed(title=title, color=discord.Color.blue())
         
-        if show_relationships:
-            # Show detailed relationship information
-            relationships = []
+        if show_links:
+            # Show detailed link information
+            links = []
             for entity in entities:
-                relationships_str = RelationshipType.get_relationships_str(str(interaction.guild.id), entity)
-                relationships_str = f"{entity.name} - {relationships_str if relationships_str else 'No relationships'}"
-                relationships.append(relationships_str)
-            embed.description = "\n\n".join(relationships)
+                links_str = EntityLinkType.get_links_str(str(interaction.guild.id), entity)
+                links_str = f"{entity.name} - {links_str if links_str else 'No links'}"
+                links.append(links_str)
+            embed.description = "\n\n".join(links)
         else:
             # Group by entity type for simple view
             by_type = {}
@@ -259,14 +259,14 @@ class EntityCommands(commands.Cog):
             for type_name, type_entities in by_type.items():
                 entity_list = []
                 for entity in type_entities:
-                    # Show owned entities count if any
-                    owned_entities = repositories.relationship.get_children(
+                    # Show possessed entities count if any
+                    possessed_entities = repositories.link.get_children(
                         str(interaction.guild.id), 
                         entity.id, 
-                        RelationshipType.POSSESSES.value
+                        EntityLinkType.POSSESSES.value
                     )
-                    owned_info = f" ({len(owned_entities)} owned)" if owned_entities else ""
-                    entity_list.append(f"• {entity.name}{owned_info}")
+                    possessed_info = f" ({len(possessed_entities)} possessed)" if possessed_entities else ""
+                    entity_list.append(f"• {entity.name}{possessed_info}")
                 
                 embed.add_field(
                     name=f"{type_name.title()} ({len(type_entities)})",
@@ -279,11 +279,11 @@ class EntityCommands(commands.Cog):
     @entity_group.command(name="view", description="View entity details with edit interface")
     @app_commands.describe(
         entity_name="Name of the entity to view",
-        show_relationships="Show detailed relationship information"
+        show_links="Show detailed link information"
     )
     @app_commands.autocomplete(entity_name=entity_name_autocomplete)
     @channel_restriction.no_ic_channels()
-    async def entity_view(self, interaction: discord.Interaction, entity_name: str, show_relationships: bool = False):
+    async def entity_view(self, interaction: discord.Interaction, entity_name: str, show_links: bool = False):
         """View detailed information about an entity with edit interface"""
         entity = repositories.entity.get_by_name(str(interaction.guild.id), entity_name)
         if not entity:
@@ -302,13 +302,13 @@ class EntityCommands(commands.Cog):
         # Format the full sheet embed
         embed = entity.format_full_sheet(str(interaction.guild.id), is_gm=is_gm)
         
-        # Add relationship information if requested
-        if show_relationships:
-            # Add relationship information to the embed
-            relationship_info = RelationshipType.get_relationships_str(str(interaction.guild.id), entity)
+        # Add link information if requested
+        if show_links:
+            # Add link information to the embed
+            link_info = EntityLinkType.get_links_str(str(interaction.guild.id), entity)
             
-            if relationship_info:
-                embed.add_field(name="🔗 Relationships", value="\n".join(relationship_info), inline=False)
+            if link_info:
+                embed.add_field(name="🔗 Links", value="\n".join(link_info), inline=False)
 
         await interaction.response.send_message(
             embed=embed,
@@ -359,22 +359,22 @@ class ConfirmDeleteEntityView(discord.ui.View):
     @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
     async def confirm_delete(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.transfer_inventory:
-            # Remove all POSSESSES relationships for this entity
-            possessed_entities = repositories.relationship.get_children(
+            # Remove all POSSESSES links for this entity
+            possessed_entities = repositories.link.get_children(
                 str(interaction.guild.id),
                 self.entity.id,
-                RelationshipType.POSSESSES.value
+                EntityLinkType.POSSESSES.value
             )
             
             for possessed_entity in possessed_entities:
-                repositories.relationship.delete_relationships_by_entities(
+                repositories.link.delete_links_by_entities(
                     str(interaction.guild.id),
                     self.entity.id,
                     possessed_entity.id,
-                    RelationshipType.POSSESSES.value
+                    EntityLinkType.POSSESSES.value
                 )
         
-        # Delete the entity (this will also delete all remaining relationships)
+        # Delete the entity (this will also delete all remaining links)
         repositories.entity.delete_entity(str(interaction.guild.id), self.entity.id)
         
         delete_msg = f"✅ Deleted entity `{self.entity.name}`."

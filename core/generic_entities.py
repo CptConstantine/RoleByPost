@@ -1,10 +1,10 @@
 from typing import Any, ClassVar, Dict, List
 import discord
 from discord import ui
-from core.base_models import BaseCharacter, BaseEntity, EntityDefaults, EntityType, RelationshipType, AccessLevel
+from core.base_models import BaseCharacter, BaseEntity, EntityDefaults, EntityType, EntityLinkType, AccessLevel
 from core.shared_views import EditNameModal, EditNotesModal, FinalizeRollButton, RollFormulaView
 from core.roll_formula import RollFormula
-from data.models import Relationship
+from data.models import EntityLink
 
 class GenericEntity(BaseEntity):
     """Generic system entity - simple entity with basic properties"""
@@ -329,11 +329,11 @@ class GenericContainer(BaseEntity):
         if contained_items:
             items_display = []
             for item in contained_items:
-                # Get quantity from relationship metadata if available
-                relationships = self.get_relationships_to_entity(guild_id, item.id, RelationshipType.POSSESSES)
+                # Get quantity from link metadata if available
+                links = self.get_links_to_entity(guild_id, item.id, EntityLinkType.POSSESSES)
                 quantity = 1
-                if relationships:
-                    quantity = relationships[0].metadata.get("quantity", 1)
+                if links:
+                    quantity = links[0].metadata.get("quantity", 1)
                 
                 quantity_str = f" x{quantity}" if quantity > 1 else ""
                 items_display.append(f"• {item.name}{quantity_str}")
@@ -785,9 +785,9 @@ class GiveItemModal(ui.Modal, title="Give Items to Container"):
             if inv_item.name == item_name:
                 target_item = inv_item
                 # Get quantity from character's inventory
-                relationships = character.get_relationships_to_entity(guild_id, inv_item.id, RelationshipType.POSSESSES)
-                if relationships:
-                    available_quantity += relationships[0].metadata.get("quantity", 1)
+                links = character.get_links_to_entity(guild_id, inv_item.id, EntityLinkType.POSSESSES)
+                if links:
+                    available_quantity += links[0].metadata.get("quantity", 1)
         
         if not target_item:
             await interaction.response.send_message(f"❌ {character_name} doesn't have {item_name} in their inventory.", ephemeral=True)

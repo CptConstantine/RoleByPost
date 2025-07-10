@@ -144,12 +144,12 @@ class EntityRepository(BaseRepository[Entity]):
         self.save(storage_entity, conflict_columns=['id'])
     
     def delete_entity(self, guild_id: str, entity_id: str) -> None:
-        """Delete an entity and all its relationships"""
+        """Delete an entity and all its links"""
         entity = self.get_by_id(entity_id)
         if entity:
-            # Delete all relationships involving this entity
+            # Delete all links involving this entity
             from .repository_factory import repositories
-            repositories.relationship.delete_all_relationships_for_entity(
+            repositories.link.delete_all_links_for_entity(
                 guild_id,
                 entity_id
             )

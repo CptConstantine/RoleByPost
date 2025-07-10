@@ -1,7 +1,7 @@
 from collections import defaultdict
 from typing import Any, Dict
 import discord
-from core.base_models import BaseCharacter, EntityType, EntityDefaults, RelationshipType, RollFormula
+from core.base_models import BaseCharacter, EntityType, EntityDefaults, EntityLinkType, RollFormula
 from core.roll_formula import RollFormula
 from rpg_systems.mgt2e.mgt2e_roll_formula import MGT2ERollFormula
 from rpg_systems.mgt2e.mgt2e_roll_views import MGT2ERollFormulaView
@@ -356,7 +356,7 @@ class MGT2ECharacter(BaseCharacter):
             embed.add_field(name="Skills", value="None", inline=False)
 
         # --- Inventory ---
-        items = self.get_children(guild_id=guild_id, relationship_type=RelationshipType.POSSESSES)
+        items = self.get_children(guild_id=guild_id, link_type=EntityLinkType.POSSESSES)
         if items:
             # Group items by entity type and count them
             item_counts = {}

@@ -11,15 +11,15 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
   - System-specific fields and validation (e.g., Fate aspects, Traveller skills).
   - Import/export characters as JSON files for easy transfer between servers.
 
-- **Entity Relationship System**
-  - Create complex relationships between characters, NPCs, and other entities
+- **Entity Connections System**
+  - Create complex links between characters, NPCs, and other entities
   - Hierarchical entity management for companions, minions, and hirelings
   - Support for ownership and control of companions (and speak as them through the narration system)
 
 - **Inventory and Container Management**
   - Create items and containers with stacking support for quantities
   - GMs can create "loot containers" that players can take from and give items to
-  - Inventory tracking for characters with item relationships
+  - Inventory tracking for characters with item links
 
 - **Scene Management**  
   - Create and manage multiple scenes and keep track of NPCs and notes
@@ -121,8 +121,8 @@ The following are the commands that are currently available.
 - `/char sheet [char_name]`  
   View a character or NPC's sheet with buttons for editing. Defaults to your active character if no name is given.
 
-- `/char list [show_npcs] [owned_by] [show_relationships]`  
-  List characters and NPCs. Filter by owner or show relationship details.
+- `/char list [show_npcs] [owned_by] [show_links]`  
+  List characters and NPCs. Filter by owner or show link details.
 
 - `/char delete [char_name]`  
   Delete a character or NPC.
@@ -150,35 +150,35 @@ The following are the commands that are currently available.
 - `/entity create [entity_type] [name] [parent_entity]`  
   Create a new entity (item, container, etc.). Optionally specify a parent entity that will own this entity.
 
-- `/entity list [owner_entity] [entity_type] [show_relationships]`  
-  List entities with optional filtering by owner or type. Show relationship details if requested.
+- `/entity list [owner_entity] [entity_type] [show_links]`  
+  List entities with optional filtering by owner or type. Show link details if requested.
 
 - `/entity view [entity_name]`  
-  View detailed information about an entity including its relationships and interactive editing interface.
+  View detailed information about an entity including its links and interactive editing interface.
 
 - `/entity delete [entity_name]`  
-  Delete an entity. Entities that own other entities cannot be deleted until relationships are transferred.
+  Delete an entity. Entities that own other entities cannot be deleted until links are transferred.
 
 - `/entity rename [entity_name] [new_name]`  
   Rename an entity.
 
-### Relationships
+### Connections
 
-- `/relationship create [from_entity] [to_entity] [relationship_type] [description]`  
-  Create a relationship between two entities.
+- `/link create [from_entity] [to_entity] [link_type] [description]`  
+  Create a link between two entities.
 
-- `/relationship remove [from_entity] [to_entity] [relationship_type]`  
-  Remove a relationship between two entities. Leave relationship_type blank to remove all relationships.
+- `/link remove [from_entity] [to_entity] [link_type]`  
+  Remove a link between two entities. Leave link_type blank to remove all links.
 
-- `/relationship list [entity_name]`  
-  List all relationships for an entity, showing both incoming and outgoing relationships.
+- `/link list [entity_name]`  
+  List all links for an entity, showing both incoming and outgoing links.
 
-- `/relationship transfer [owned_entity] [new_owner]`  
-  (GM only) Transfer ownership of an entity to another entity. Removes existing ownership relationships and creates new ones.
+- `/link transfer [owned_entity] [new_owner]`  
+  (GM only) Transfer ownership of an entity to another entity. Removes existing ownership links and creates new ones.
 
 **Permissions:**
-- Only GMs can create/remove ownership and control relationships
-- Users can only create relationships involving entities they own
+- Only GMs can create/remove ownership and control links
+- Users can only create links involving entities they own
 - GMs can see all entities, users see only their own entities in autocomplete
 
 ### Rolling

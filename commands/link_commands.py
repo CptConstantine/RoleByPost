@@ -2,12 +2,12 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from data.repositories.repository_factory import repositories
-from core.base_models import RelationshipType
+from core.base_models import EntityLinkType
 from core.base_models import BaseEntity
 from typing import Optional, List
 import core.factories as factories
 
-class RelationshipCommands(commands.Cog):
+class EntityLinkCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
@@ -33,53 +33,47 @@ class RelationshipCommands(commands.Cog):
         # Format the choices with entity type for clarity
         choices = []
         for entity in all_entities[:25]:  # Limit to 25 results
-            if hasattr(entity, 'is_npc'):
-                # This is a character
-                entity_type = "NPC" if entity.is_npc else "PC"
-            else:
-                # This is a regular entity
-                entity_type = entity.entity_type.value.upper()
-            
+            entity_type = entity.entity_type.value.upper()
             choices.append(
                 app_commands.Choice(name=f"{entity.name} ({entity_type})", value=entity.name)
             )
         
         return choices
 
-    async def relationship_type_autocomplete(self, interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
-        """Autocomplete for relationship types"""
-        relationship_types = RelationshipType.get_all_dict()
+    async def link_type_autocomplete(self, interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+        """Autocomplete for link types"""
+        link_types = EntityLinkType.get_all_dict()
         
         # Filter based on current input
         if current:
-            filtered_types = {name: value for name, value in relationship_types.items() if current.lower() in name.lower()}
+            filtered_types = {name: value for name, value in link_types.items() if current.lower() in name.lower()}
         else:
-            filtered_types = relationship_types
+            filtered_types = link_types
         
         return [
             app_commands.Choice(name=name, value=value.value)
             for name, value in filtered_types.items()
         ]
 
-    # Create the relationship command group
-    relationship_group = app_commands.Group(name="relationship", description="Manage relationships between entities")
+    # Create the link command group
+    link_group = app_commands.Group(name="link", description="Manage links between entities")
 
-    @relationship_group.command(name="create", description="Create a relationship between two entities")
+    @link_group.command(name="create", description="Create a link between two entities")
     @app_commands.describe(
-        from_entity="The entity that has the relationship",
-        to_entity="The entity that is the target of the relationship", 
-        relationship_type="Type of relationship",
-        description="Optional description of the relationship"
+        from_entity="The entity that has the link",
+        to_entity="The entity that is the target of the link", 
+        link_type="Type of link",
+        description="Optional description of the link"
     )
     @app_commands.autocomplete(from_entity=entity_autocomplete)
     @app_commands.autocomplete(to_entity=entity_autocomplete)
-    @app_commands.autocomplete(relationship_type=relationship_type_autocomplete)
-    async def create_relationship(self, interaction: discord.Interaction, from_entity: str, to_entity: str, relationship_type: str, description: str = None):
-        """Create a relationship between two entities"""
-        # Check GM permissions for certain relationship types
-        if relationship_type in [RelationshipType.POSSESSES.value, RelationshipType.CONTROLS.value]:
+    @app_commands.autocomplete(link_type=link_type_autocomplete)
+    async def create_link(self, interaction: discord.Interaction, from_entity: str, to_entity: str, link_type: str, description: str = None):
+        """Create a link between two entities"""
+        # Check GM permissions for certain link types
+        if link_type in [EntityLinkType.POSSESSES.value, EntityLinkType.CONTROLS.value]:
             if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-                await interaction.response.send_message("❌ Only GMs can create ownership and control relationships.", ephemeral=True)
+                await interaction.response.send_message("❌ Only GMs can create ownership and control links.", ephemeral=True)
                 return
         
         # Get the entities - try both character and entity repositories
@@ -94,42 +88,42 @@ class RelationshipCommands(commands.Cog):
             await interaction.response.send_message(f"❌ Entity '{to_entity}' not found.", ephemeral=True)
             return
         
-        # Check if relationship already exists
-        existing = repositories.relationship.get_relationship_by_entities(
-            str(interaction.guild.id), from_char.id, to_char.id, relationship_type
+        # Check if link already exists
+        existing = repositories.link.get_link_by_entities(
+            str(interaction.guild.id), from_char.id, to_char.id, link_type
         )
         
         if existing:
-            await interaction.response.send_message(f"❌ Relationship already exists between {from_entity} and {to_entity}.", ephemeral=True)
+            await interaction.response.send_message(f"❌ Link already exists between {from_entity} and {to_entity}.", ephemeral=True)
             return
         
-        # Create the relationship
+        # Create the link
         metadata = {"description": description} if description else {}
-        relationship = repositories.relationship.create_relationship(
+        link = repositories.link.create_link(
             str(interaction.guild.id),
             from_char.id,
             to_char.id,
-            relationship_type,
+            link_type,
             metadata
         )
         
-        relationship_name = relationship_type.replace("_", " ").title()
+        link_name = link_type.replace("_", " ").title()
         await interaction.response.send_message(
-            f"✅ Created relationship: **{from_entity}** {relationship_name.lower()} **{to_entity}**", 
+            f"✅ Created link: **{from_entity}** {link_name.lower()} **{to_entity}**", 
             ephemeral=True
         )
 
-    @relationship_group.command(name="remove", description="Remove a relationship between two entities")
+    @link_group.command(name="remove", description="Remove a link between two entities")
     @app_commands.describe(
-        from_entity="The entity that has the relationship",
-        to_entity="The entity that is the target of the relationship",
-        relationship_type="Type of relationship to remove (leave blank to remove all)"
+        from_entity="The entity that has the link",
+        to_entity="The entity that is the target of the link",
+        link_type="Type of link to remove (leave blank to remove all)"
     )
     @app_commands.autocomplete(from_entity=entity_autocomplete)
     @app_commands.autocomplete(to_entity=entity_autocomplete)
-    @app_commands.autocomplete(relationship_type=relationship_type_autocomplete)
-    async def remove_relationship(self, interaction: discord.Interaction, from_entity: str, to_entity: str, relationship_type: str = None):
-        """Remove a relationship between two entities"""
+    @app_commands.autocomplete(link_type=link_type_autocomplete)
+    async def remove_link(self, interaction: discord.Interaction, from_entity: str, to_entity: str, link_type: str = None):
+        """Remove a link between two entities"""
         
         # Get the entities - try both character and entity repositories
         from_entity = self._find_entity_by_name(interaction.guild.id, from_entity)
@@ -139,97 +133,97 @@ class RelationshipCommands(commands.Cog):
             await interaction.response.send_message("❌ One or both entities not found.", ephemeral=True)
             return
         
-        # Check permissions for certain relationship types
-        if relationship_type in [RelationshipType.POSSESSES.value, RelationshipType.CONTROLS.value]:
+        # Check permissions for certain link types
+        if link_type in [EntityLinkType.POSSESSES.value, EntityLinkType.CONTROLS.value]:
             if from_entity.owner_id != interaction.user.id and not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-                await interaction.response.send_message("❌ Only owners or GMs can remove ownership and control relationships.", ephemeral=True)
+                await interaction.response.send_message("❌ Only owners or GMs can remove ownership and control links.", ephemeral=True)
                 return
         
-        # Remove the relationship
-        success = repositories.relationship.delete_relationships_by_entities(
-            str(interaction.guild.id), from_entity.id, to_entity.id, relationship_type
+        # Remove the link
+        success = repositories.link.delete_links_by_entities(
+            str(interaction.guild.id), from_entity.id, to_entity.id, link_type
         )
         
         if success:
-            if relationship_type:
-                relationship_name = relationship_type.replace("_", " ").title()
+            if link_type:
+                link_name = link_type.replace("_", " ").title()
                 await interaction.response.send_message(
-                    f"✅ Removed {relationship_name.lower()} relationship between **{from_entity.name}** and **{to_entity.name}**", 
+                    f"✅ Removed {link_name.lower()} link between **{from_entity.name}** and **{to_entity.name}**", 
                     ephemeral=True
                 )
             else:
                 await interaction.response.send_message(
-                    f"✅ Removed all relationships between **{from_entity.name}** and **{to_entity.name}**", 
+                    f"✅ Removed all links between **{from_entity.name}** and **{to_entity.name}**", 
                     ephemeral=True
                 )
         else:
-            await interaction.response.send_message("❌ No relationship found to remove.", ephemeral=True)
+            await interaction.response.send_message("❌ No link found to remove.", ephemeral=True)
 
-    @relationship_group.command(name="list", description="List all relationships for an entity")
-    @app_commands.describe(entity_name="The entity to show relationships for")
+    @link_group.command(name="list", description="List all links for an entity")
+    @app_commands.describe(entity_name="The entity to show links for")
     @app_commands.autocomplete(entity_name=entity_autocomplete)
-    async def list_relationships(self, interaction: discord.Interaction, entity_name: str):
-        """List all relationships for an entity"""
+    async def list_links(self, interaction: discord.Interaction, entity_name: str):
+        """List all links for an entity"""
         # Get the entity - try both character and entity repositories
         entity = self._find_entity_by_name(interaction.guild.id, entity_name)
         if not entity:
             await interaction.response.send_message(f"❌ Entity '{entity_name}' not found.", ephemeral=True)
             return
         
-        # Get all relationships involving this entity
-        relationships = repositories.relationship.get_relationships_for_entity(str(interaction.guild.id), entity.id)
+        # Get all links involving this entity
+        links = repositories.link.get_links_for_entity(str(interaction.guild.id), entity.id)
         
-        if not relationships:
-            await interaction.response.send_message(f"**{entity_name}** has no relationships.", ephemeral=True)
+        if not links:
+            await interaction.response.send_message(f"**{entity_name}** has no links.", ephemeral=True)
             return
         
         embed = discord.Embed(
-            title=f"🔗 Relationships for {entity_name}",
+            title=f"🔗 Links for {entity_name}",
             color=discord.Color.blue()
         )
         
-        outgoing_relationships = []
-        incoming_relationships = []
+        outgoing_links = []
+        incoming_links = []
         
-        for rel in relationships:
+        for rel in links:
             if rel.from_entity_id == entity.id:
-                # This entity has a relationship TO another entity
+                # This entity has a link TO another entity
                 target_entity = self._find_entity_by_id(rel.to_entity_id)
                 if target_entity:
-                    rel_name = rel.relationship_type.replace("_", " ").title()
+                    rel_name = rel.link_type.replace("_", " ").title()
                     description = rel.metadata.get("description", "") if rel.metadata else ""
                     line = f"• **{rel_name}** {target_entity.name}"
                     if description:
                         line += f" - *{description}*"
-                    outgoing_relationships.append(line)
+                    outgoing_links.append(line)
             else:
-                # Another entity has a relationship TO this entity
+                # Another entity has a link TO this entity
                 source_entity = self._find_entity_by_id(rel.from_entity_id)
                 if source_entity:
-                    rel_name = rel.relationship_type.replace("_", " ").title()
+                    rel_name = rel.link_type.replace("_", " ").title()
                     description = rel.metadata.get("description", "") if rel.metadata else ""
                     line = f"• **{source_entity.name}** {rel_name.lower()} this entity"
                     if description:
                         line += f" - *{description}*"
-                    incoming_relationships.append(line)
+                    incoming_links.append(line)
         
-        if outgoing_relationships:
+        if outgoing_links:
             embed.add_field(
-                name="Relationships To Others",
-                value="\n".join(outgoing_relationships),
+                name="Links To Others",
+                value="\n".join(outgoing_links),
                 inline=False
             )
         
-        if incoming_relationships:
+        if incoming_links:
             embed.add_field(
-                name="Relationships From Others", 
-                value="\n".join(incoming_relationships),
+                name="Links From Others", 
+                value="\n".join(incoming_links),
                 inline=False
             )
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @relationship_group.command(name="transfer", description="Transfer possession of an entity to another entity")
+    @link_group.command(name="transfer", description="Transfer possession of an entity to another entity")
     @app_commands.describe(
         possessed_entity="The entity to transfer possession of",
         new_owner="The entity that will become the new owner"
@@ -250,19 +244,19 @@ class RelationshipCommands(commands.Cog):
             await interaction.response.send_message("❌ One or both entities not found.", ephemeral=True)
             return
         
-        # Remove existing ownership relationships
-        existing_owners = repositories.relationship.get_parents(str(interaction.guild.id), owned_char.id, RelationshipType.POSSESSES.value)
+        # Remove existing ownership links
+        existing_owners = repositories.link.get_parents(str(interaction.guild.id), owned_char.id, EntityLinkType.POSSESSES.value)
         for owner in existing_owners:
-            repositories.relationship.delete_relationships_by_entities(
-                str(interaction.guild.id), owner.id, owned_char.id, RelationshipType.POSSESSES.value
+            repositories.link.delete_links_by_entities(
+                str(interaction.guild.id), owner.id, owned_char.id, EntityLinkType.POSSESSES.value
             )
         
-        # Create new ownership relationship
-        repositories.relationship.create_relationship(
+        # Create new ownership link
+        repositories.link.create_link(
             str(interaction.guild.id),
             new_owner_char.id,
             owned_char.id,
-            RelationshipType.POSSESSES.value,
+            EntityLinkType.POSSESSES.value,
             {"transferred_by": str(interaction.user.id)}
         )
         
@@ -281,5 +275,5 @@ class RelationshipCommands(commands.Cog):
         entity = repositories.entity.get_by_id(entity_id)
         return entity
 
-async def setup_relationship_commands(bot: commands.Bot):
-    await bot.add_cog(RelationshipCommands(bot))
+async def setup_link_commands(bot: commands.Bot):
+    await bot.add_cog(EntityLinkCommands(bot))

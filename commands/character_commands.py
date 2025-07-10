@@ -2,7 +2,7 @@ import uuid
 import discord
 from discord import app_commands
 from discord.ext import commands
-from core.base_models import BaseCharacter, BaseEntity, EntityType, RelationshipType
+from core.base_models import BaseCharacter, BaseEntity, EntityType, EntityLinkType
 from data.repositories.repository_factory import repositories
 import core.factories as factories
 import json
@@ -44,10 +44,10 @@ async def character_or_npc_autocomplete(interaction: discord.Interaction, curren
                 options.append(c.name)
             else:
                 # Check if user owns any characters that control this companion
-                controlling_chars = repositories.relationship.get_parents(
+                controlling_chars = repositories.link.get_parents(
                     str(interaction.guild.id),
                     c.id,
-                    RelationshipType.CONTROLS.value
+                    EntityLinkType.CONTROLS.value
                 )
                 
                 user_controls_companion = any(
@@ -78,10 +78,10 @@ async def companion_autocomplete(interaction: discord.Interaction, current: str)
                 options.append(c.name)
             else:
                 # Check if user owns any characters that control this companion
-                controlling_chars = repositories.relationship.get_parents(
+                controlling_chars = repositories.link.get_parents(
                     str(interaction.guild.id),
                     c.id,
-                    RelationshipType.CONTROLS.value
+                    EntityLinkType.CONTROLS.value
                 )
                 
                 user_controls_companion = any(
@@ -184,9 +184,9 @@ class CharacterCommands(commands.Cog):
     @character_group.command(name="list", description="List characters and NPCs")
     @app_commands.describe(
         show_npcs="Show NPCs (GM only)",
-        show_relationships="Show ownership relationships"
+        show_links="Show ownership links"
     )
-    async def list_characters(self, interaction: discord.Interaction, show_npcs: bool = False, show_relationships: bool = False):
+    async def list_characters(self, interaction: discord.Interaction, show_npcs: bool = False, show_links: bool = False):
         await interaction.response.defer(ephemeral=True)
         
         system = repositories.server.get_system(interaction.guild.id)
@@ -217,20 +217,20 @@ class CharacterCommands(commands.Cog):
         # Create embed
         embed = discord.Embed(title=title, color=discord.Color.blue())
         
-        if show_relationships:
-            # Show detailed information for CONTROLS relationships
+        if show_links:
+            # Show detailed information for CONTROLS links
             character_info = []
             for char in characters:
-                controlled_by = repositories.relationship.get_parents(
+                controlled_by = repositories.link.get_parents(
                     str(interaction.guild.id), 
                     char.id, 
-                    RelationshipType.CONTROLS.value
+                    EntityLinkType.CONTROLS.value
                 )
                 
-                controls_entities = repositories.relationship.get_children(
+                controls_entities = repositories.link.get_children(
                     str(interaction.guild.id),
                     char.id,
-                    RelationshipType.CONTROLS.value
+                    EntityLinkType.CONTROLS.value
                 )
                 
                 info = f"**{char.name}** ({'NPC' if char.is_npc else 'PC'})"
@@ -294,17 +294,17 @@ class CharacterCommands(commands.Cog):
                 return
 
         # Check if this character possesses other entities
-        possessed_entities = repositories.relationship.get_children(
+        possessed_entities = repositories.link.get_children(
             str(interaction.guild.id), 
             character.id, 
-            RelationshipType.POSSESSES.value
+            EntityLinkType.POSSESSES.value
         )
         
         if possessed_entities and not transfer_inventory:
             entity_names = [entity.name for entity in possessed_entities]
             await interaction.response.send_message(
                 f"❌ Cannot delete **{char_name}** because it possesses other entities: {', '.join(entity_names)}.\n"
-                f"Use `transfer_inventory: True` to release these items, transfer them manually, or use `/relationship remove` to remove the possession relationships.",
+                f"Use `transfer_inventory: True` to release these items, transfer them manually, or use `/link remove` to remove the possession links.",
                 ephemeral=True
             )
             return
@@ -354,10 +354,10 @@ class CharacterCommands(commands.Cog):
             # Companions can be viewed by their owner or by the owner of characters that control them
             if str(character.owner_id) != str(interaction.user.id) and not is_gm:
                 # Check if user owns any characters that control this companion
-                controlling_chars = repositories.relationship.get_parents(
+                controlling_chars = repositories.link.get_parents(
                     str(interaction.guild.id),
                     character.id,
-                    RelationshipType.CONTROLS.value
+                    EntityLinkType.CONTROLS.value
                 )
                 
                 user_controls_companion = any(
@@ -617,12 +617,12 @@ class CharacterCommands(commands.Cog):
             owner_id=str(owner_char.owner_id)
         )
 
-        # Create CONTROLS relationship
-        repositories.relationship.create_relationship(
+        # Create CONTROLS link
+        repositories.link.create_link(
             str(interaction.guild.id),
             owner_char.id,
             companion.id,
-            RelationshipType.CONTROLS.value,
+            EntityLinkType.CONTROLS.value,
             {"created_by": str(interaction.user.id)}
         )
         
@@ -651,10 +651,10 @@ class CharacterCommands(commands.Cog):
                 await interaction.followup.send("❌ You can only view companions for characters you own.", ephemeral=True)
                 return
             
-            companions = repositories.relationship.get_children(
+            companions = repositories.link.get_children(
                 str(interaction.guild.id),
                 character.id,
-                RelationshipType.CONTROLS.value
+                EntityLinkType.CONTROLS.value
             )
             companions = [c for c in companions if c.entity_type == EntityType.COMPANION]
             
@@ -676,10 +676,10 @@ class CharacterCommands(commands.Cog):
             
             all_companions = []
             for char in user_chars:
-                companions = repositories.relationship.get_children(
+                companions = repositories.link.get_children(
                     str(interaction.guild.id),
                     char.id,
-                    RelationshipType.CONTROLS.value
+                    EntityLinkType.CONTROLS.value
                 )
                 companions = [c for c in companions if c.entity_type == EntityType.COMPANION]
                 
@@ -740,27 +740,27 @@ class CharacterCommands(commands.Cog):
             await interaction.followup.send("❌ You can only transfer companions you own.", ephemeral=True)
             return
         
-        # Remove existing control relationships
-        existing_controllers = repositories.relationship.get_parents(
+        # Remove existing control links
+        existing_controllers = repositories.link.get_parents(
             str(interaction.guild.id),
             companion.id,
-            RelationshipType.CONTROLS.value
+            EntityLinkType.CONTROLS.value
         )
         
         for controller in existing_controllers:
-            repositories.relationship.delete_relationships_by_entities(
+            repositories.link.delete_links_by_entities(
                 str(interaction.guild.id),
                 controller.id,
                 companion.id,
-                RelationshipType.CONTROLS.value
+                EntityLinkType.CONTROLS.value
             )
         
-        # Create new control relationship
-        repositories.relationship.create_relationship(
+        # Create new control link
+        repositories.link.create_link(
             str(interaction.guild.id),
             new_controller_char.id,
             companion.id,
-            RelationshipType.CONTROLS.value,
+            EntityLinkType.CONTROLS.value,
             {"transferred_by": str(interaction.user.id)}
         )
         
@@ -779,22 +779,22 @@ class ConfirmDeleteCharacterView(discord.ui.View):
     @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
     async def confirm_delete(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.transfer_inventory:
-            # Remove all POSSESSES relationships for this character
-            possessed_entities = repositories.relationship.get_children(
+            # Remove all POSSESSES links for this character
+            possessed_entities = repositories.link.get_children(
                 str(interaction.guild.id),
                 self.character.id,
-                RelationshipType.POSSESSES.value
+                EntityLinkType.POSSESSES.value
             )
             
             for entity in possessed_entities:
-                repositories.relationship.delete_relationships_by_entities(
+                repositories.link.delete_links_by_entities(
                     str(interaction.guild.id),
                     self.character.id,
                     entity.id,
-                    RelationshipType.POSSESSES.value
+                    EntityLinkType.POSSESSES.value
                 )
         
-        # Delete the character (this will also delete all remaining relationships)
+        # Delete the character (this will also delete all remaining links)
         repositories.character.delete_character(interaction.guild.id, self.character.id)
         
         delete_msg = f"✅ Deleted character **{self.character.name}**."

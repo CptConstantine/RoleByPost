@@ -1,6 +1,6 @@
 import discord
 from discord import ui, SelectOption
-from core.base_models import BaseEntity, RelationshipType
+from core.base_models import BaseEntity, EntityLinkType
 from core.shared_views import PaginatedSelectView, EditNameModal, EditNotesModal
 from rpg_systems.fate.aspect import Aspect
 from rpg_systems.fate.fate_character import FateCharacter, get_character, SYSTEM
@@ -1402,11 +1402,11 @@ class EditInventoryView(ui.View):
             for i, item in enumerate(page_items):
                 # Show quantity if available
                 quantity_info = ""
-                relationships = self.char.get_relationships_to_entity(
-                    str(self.guild_id), item.id, RelationshipType.POSSESSES
+                links = self.char.get_links_to_entity(
+                    str(self.guild_id), item.id, EntityLinkType.POSSESSES
                 )
-                if relationships:
-                    quantity = relationships[0].metadata.get("quantity", 1) if hasattr(relationships[0], 'metadata') else 1
+                if links:
+                    quantity = links[0].metadata.get("quantity", 1) if hasattr(links[0], 'metadata') else 1
                     if quantity > 1:
                         quantity_info = f" (x{quantity})"
                 

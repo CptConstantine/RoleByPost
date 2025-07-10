@@ -5,7 +5,7 @@ from discord import app_commands
 from typing import List
 from data.repositories.repository_factory import repositories
 from core import channel_restriction
-from core.base_models import BaseEntity, EntityType, RelationshipType
+from core.base_models import BaseEntity, EntityType, EntityLinkType
 import core.factories as factories
 
 SYSTEM = "fate"
@@ -207,22 +207,22 @@ class ConfirmDeleteExtraView(discord.ui.View):
     @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
     async def confirm_delete(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.transfer_inventory:
-            # Remove all POSSESSES relationships for this extra
-            possessed_entities = repositories.relationship.get_children(
+            # Remove all POSSESSES links for this extra
+            possessed_entities = repositories.link.get_children(
                 str(interaction.guild.id),
                 self.extra.id,
-                RelationshipType.POSSESSES.value
+                EntityLinkType.POSSESSES.value
             )
             
             for possessed_entity in possessed_entities:
-                repositories.relationship.delete_relationships_by_entities(
+                repositories.link.delete_links_by_entities(
                     str(interaction.guild.id),
                     self.extra.id,
                     possessed_entity.id,
-                    RelationshipType.POSSESSES.value
+                    EntityLinkType.POSSESSES.value
                 )
         
-        # Delete the extra (this will also delete all remaining relationships)
+        # Delete the extra (this will also delete all remaining links)
         repositories.entity.delete_entity(str(interaction.guild.id), self.extra.id)
         
         delete_msg = f"✅ Deleted {self.extra.entity_type.value} `{self.extra.name}`."

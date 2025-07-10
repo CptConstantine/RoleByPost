@@ -198,12 +198,12 @@ class Entity:
     avatar_url: str
 
 @dataclass
-class Relationship:
+class EntityLink:
     id: str
     guild_id: str
     from_entity_id: str
     to_entity_id: str
-    relationship_type: str
+    link_type: str
     metadata: Dict[str, Any] = None
     created_at: Optional[datetime] = None
     

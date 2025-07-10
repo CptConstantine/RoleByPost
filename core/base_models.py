@@ -6,7 +6,7 @@ from typing import Any, ClassVar, Dict, List, Optional
 import discord
 import discord.ui as ui
 from core.roll_formula import RollFormula
-from data.models import Relationship
+from data.models import EntityLink
 
 @dataclass
 class AccessLevel:
@@ -309,8 +309,8 @@ class EntityType(Enum):
         except ValueError:
             raise ValueError(f"Unknown entity type: {entity_type_str}")
     
-class RelationshipType(Enum):
-    """Types of relationships between entities"""
+class EntityLinkType(Enum):
+    """Types of links between entities"""
     POSSESSES = "possesses" # For Inventory
     CONTROLS = "controls"   # Can speak as this entity
     
@@ -318,98 +318,98 @@ class RelationshipType(Enum):
         return self.value
     
     @staticmethod
-    def get_all_dict() -> Dict[str, 'RelationshipType']:
-        return {name: member for name, member in RelationshipType.__members__.items()}
+    def get_all_dict() -> Dict[str, 'EntityLinkType']:
+        return {name: member for name, member in EntityLinkType.__members__.items()}
     
     @staticmethod
-    def get_relationships_str(guild_id: str, entity: 'BaseEntity') -> List[str]:
-        """Get a list of relationship strings for the entity."""
-        relationships_dict = RelationshipType.get_relationships_dict(guild_id, entity)
-        return [f"{key}: {value}" for key, value in relationships_dict.items()]
+    def get_links_str(guild_id: str, entity: 'BaseEntity') -> List[str]:
+        """Get a list of link strings for the entity."""
+        links_dict = EntityLinkType.get_links_dict(guild_id, entity)
+        return [f"{key}: {value}" for key, value in links_dict.items()]
 
     @staticmethod
-    def get_relationships_dict(guild_id: str, entity: 'BaseEntity') -> Dict[str, str]:
-        """Get a dictionary of relationship types and their string representations."""
+    def get_links_dict(guild_id: str, entity: 'BaseEntity') -> Dict[str, str]:
+        """Get a dictionary of link types and their string representations."""
         from data.repositories.repository_factory import repositories
-        relationships_dict = {}
+        links_dict = {}
         
         # Entities this entity owns
-        possessed_entities = repositories.relationship.get_children(
+        possessed_entities = repositories.link.get_children(
             guild_id, 
             entity.id, 
-            RelationshipType.POSSESSES.value
+            EntityLinkType.POSSESSES.value
         )
         if possessed_entities:
             possessed_names = [e.name for e in possessed_entities[:5]]  # Show first 5
             possessed_text = ", ".join(possessed_names)
             if len(possessed_entities) > 5:
                 possessed_text += f" (+{len(possessed_entities) - 5} more)"
-            relationships_dict[f"📦 Possesses ({len(possessed_entities)})"] = possessed_text
+            links_dict[f"📦 Possesses ({len(possessed_entities)})"] = possessed_text
         
         # Entities that own this entity
-        possessors = repositories.relationship.get_parents(
+        possessors = repositories.link.get_parents(
             guild_id,
             entity.id, 
-            RelationshipType.POSSESSES.value
+            EntityLinkType.POSSESSES.value
         )
         if possessors:
             possessor_names = [e.name for e in possessors]
-            relationships_dict["📦 Possessed By"] = ", ".join(possessor_names)
+            links_dict["📦 Possessed By"] = ", ".join(possessor_names)
 
-        # Control relationships
-        controlled_entities = repositories.relationship.get_children(
+        # Control links
+        controlled_entities = repositories.link.get_children(
             guild_id, 
             entity.id, 
-            RelationshipType.CONTROLS.value
+            EntityLinkType.CONTROLS.value
         )
         if controlled_entities:
             controlled_names = [e.name for e in controlled_entities]
-            relationships_dict["🎮 Controls"] = ", ".join(controlled_names)
+            links_dict["🎮 Controls"] = ", ".join(controlled_names)
         
-        controllers = repositories.relationship.get_parents(
+        controllers = repositories.link.get_parents(
             guild_id, 
             entity.id, 
-            RelationshipType.CONTROLS.value
+            EntityLinkType.CONTROLS.value
         )
         if controllers:
             controller_names = [e.name for e in controllers]
-            relationships_dict["🎮 Controlled By"] = ", ".join(controller_names)
+            links_dict["🎮 Controlled By"] = ", ".join(controller_names)
         
-        # Get all other relationships
-        all_relationships = repositories.relationship.get_relationships_for_entity(
+        # Get all other links
+        all_links = repositories.link.get_links_for_entity(
             guild_id, 
             entity.id
         )
         
-        # Filter out POSSESSES and CONTROLS relationships (already shown above)
-        other_relationships = [
-            rel for rel in all_relationships 
-            if rel.relationship_type not in [RelationshipType.POSSESSES.value, RelationshipType.CONTROLS.value]
+        # Filter out POSSESSES and CONTROLS links (already shown above)
+        other_links = [
+            rel for rel in all_links 
+            if rel.link_type not in [EntityLinkType.POSSESSES.value, EntityLinkType.CONTROLS.value]
         ]
         
-        if other_relationships:
+        if other_links:
             rel_lines = []
-            for rel in other_relationships[:3]:  # Show first 3 other relationships
+            for rel in other_links[:3]:  # Show first 3 other links
                 if rel.from_entity_id == entity.id:
-                    # This entity has a relationship TO another entity
+                    # This entity has a link TO another entity
                     target_entity = repositories.entity.get_by_id(rel.to_entity_id)
                     if target_entity:
-                        rel_name = rel.relationship_type.replace("_", " ").title()
+                        rel_name = rel.link_type.replace("_", " ").title()
                         rel_lines.append(f"• {rel_name} **{target_entity.name}**")
                 else:
-                    # Another entity has a relationship TO this entity
+                    # Another entity has a link TO this entity
                     source_entity = repositories.entity.get_by_id(rel.from_entity_id)
                     if source_entity:
-                        rel_name = rel.relationship_type.replace("_", " ").title()
+                        rel_name = rel.link_type.replace("_", " ").title()
                         rel_lines.append(f"• **{source_entity.name}** {rel_name.lower()} this entity")
             
             if rel_lines:
                 rel_text = "\n".join(rel_lines)
-                if len(other_relationships) > 3:
-                    rel_text += f"\n(+{len(other_relationships) - 3} more relationships)"
-                relationships_dict["🔗 Other Relationships"] = rel_text
+                if len(other_links) > 3:
+                    rel_text += f"\n(+{len(other_links) - 3} more links)"
+                links_dict["🔗 Other Links"] = rel_text
         
-        return relationships_dict
+        return links_dict
 
 @dataclass
 class EntityDefaults:
@@ -525,9 +525,9 @@ class BaseEntity(BaseRpgObj):
         total_quantity = 0
         for contained_item in self.get_contained_items(guild_id):
             if contained_item.name == item_name:
-                relationships = self.get_relationships_to_entity(guild_id, contained_item.id, RelationshipType.POSSESSES)
-                if relationships:
-                    total_quantity += relationships[0].metadata.get("quantity", 1)
+                links = self.get_links_to_entity(guild_id, contained_item.id, EntityLinkType.POSSESSES)
+                if links:
+                    total_quantity += links[0].metadata.get("quantity", 1)
         return total_quantity
     
     def can_take_item(self, guild_id: str, item_name: str, quantity: int = 1) -> bool:
@@ -555,36 +555,36 @@ class BaseEntity(BaseRpgObj):
         
         return target_item
     
-    def get_relationships_to_entity(self, guild_id: str, entity_id: str, relationship_type: RelationshipType) -> List[Relationship]:
-        """Helper method to get relationships to a specific entity"""
+    def get_links_to_entity(self, guild_id: str, entity_id: str, link_type: EntityLinkType) -> List[EntityLink]:
+        """Helper method to get links to a specific entity"""
         from data.repositories.repository_factory import repositories
-        all_relationships = repositories.relationship.get_relationships_for_entity(guild_id, self.id)
-        return [rel for rel in all_relationships 
+        all_links = repositories.link.get_links_for_entity(guild_id, self.id)
+        return [rel for rel in all_links 
                 if rel.from_entity_id == self.id and rel.to_entity_id == entity_id 
-                and rel.relationship_type == relationship_type.value]
+                and rel.link_type == link_type.value]
 
-    def get_children(self, guild_id: str, relationship_type: RelationshipType = None) -> List['BaseEntity']:
-        """Get entities this entity has relationships to"""
+    def get_children(self, guild_id: str, link_type: EntityLinkType = None) -> List['BaseEntity']:
+        """Get entities this entity has links to"""
         from data.repositories.repository_factory import repositories
-        return repositories.relationship.get_children(guild_id, self.id, relationship_type.value if relationship_type else None)
+        return repositories.link.get_children(guild_id, self.id, link_type.value if link_type else None)
     
     def get_contained_items(self, guild_id: str) -> List['BaseEntity']:
         """Get all items contained in this container"""
-        return [item for item in self.get_children(guild_id, RelationshipType.POSSESSES) if item.entity_type == EntityType.ITEM]
+        return [item for item in self.get_children(guild_id, EntityLinkType.POSSESSES) if item.entity_type == EntityType.ITEM]
 
-    def get_parents(self, guild_id: str, relationship_type: RelationshipType = None) -> List['BaseEntity']:
-        """Get entities that have relationships to this entity"""
+    def get_parents(self, guild_id: str, link_type: EntityLinkType = None) -> List['BaseEntity']:
+        """Get entities that have links to this entity"""
         from data.repositories.repository_factory import repositories
-        return repositories.relationship.get_parents(guild_id, self.id, relationship_type.value if relationship_type else None)
+        return repositories.link.get_parents(guild_id, self.id, link_type.value if link_type else None)
     
     def get_possesser(self) -> Optional['BaseEntity']:
         """Get the entity that owns this entity (if any)"""
-        owners = self.get_parents(RelationshipType.POSSESSES.value)
+        owners = self.get_parents(EntityLinkType.POSSESSES.value)
         return owners[0] if owners else None
     
     def get_controlled_entities(self) -> List['BaseEntity']:
         """Get entities that this entity controls"""
-        return self.get_children(RelationshipType.CONTROLS.value)
+        return self.get_children(EntityLinkType.CONTROLS.value)
     
     def can_be_controlled_by(self, user_id: str) -> bool:
         """Check if a user can control this entity"""
@@ -593,44 +593,44 @@ class BaseEntity(BaseRpgObj):
             return True
         
         # Check if user owns any entities that control this entity
-        controlling_entities = self.get_parents(RelationshipType.CONTROLS.value)
+        controlling_entities = self.get_parents(EntityLinkType.CONTROLS.value)
         for entity in controlling_entities:
             if entity.owner_id == str(user_id):
                 return True
         
         return False
 
-    def add_relationship(self, guild_id: str, target_entity: 'BaseEntity', relationship_type: RelationshipType, metadata: Dict[str, Any] = None) -> 'Relationship':
-        """Add a relationship to another entity"""
+    def add_link(self, guild_id: str, target_entity: 'BaseEntity', link_type: EntityLinkType, metadata: Dict[str, Any] = None) -> 'EntityLink':
+        """Add a link to another entity"""
         from data.repositories.repository_factory import repositories
-        return repositories.relationship.create_relationship(
+        return repositories.link.create_link(
             guild_id, 
             self.id, 
             target_entity.id, 
-            relationship_type.value, 
+            link_type.value, 
             metadata
         )
 
-    def remove_relationship(self, guild_id: str, target_entity: 'BaseEntity', relationship_type: RelationshipType = None) -> bool:
-        """Remove a relationship to another entity"""
+    def remove_link(self, guild_id: str, target_entity: 'BaseEntity', link_type: EntityLinkType = None) -> bool:
+        """Remove a link to another entity"""
         from data.repositories.repository_factory import repositories
-        return repositories.relationship.delete_relationships_by_entities(
+        return repositories.link.delete_links_by_entities(
             guild_id, 
             self.id, 
             target_entity.id, 
-            relationship_type.value if relationship_type else None
+            link_type.value if link_type else None
         )
     
     def get_inventory(self, guild_id: str) -> List['BaseEntity']:
         """Get all items in this entity's inventory"""
-        possessed_entities = self.get_children(guild_id, RelationshipType.POSSESSES)
+        possessed_entities = self.get_children(guild_id, EntityLinkType.POSSESSES)
         return [entity for entity in possessed_entities if entity.entity_type == EntityType.ITEM]
     
-    def add_to_inventory(self, guild_id: str, item: 'BaseEntity') -> 'Relationship':
+    def add_to_inventory(self, guild_id: str, item: 'BaseEntity') -> 'EntityLink':
         """Add an item to this entity's inventory"""
         if item.entity_type != EntityType.ITEM:
             raise ValueError("Only ITEM entities can be added to inventory")
-        return self.add_relationship(guild_id, item, RelationshipType.POSSESSES)
+        return self.add_link(guild_id, item, EntityLinkType.POSSESSES)
     
     def add_item(self, guild_id: str, item: 'BaseEntity', quantity: int = 1) -> bool:
         """Add an item to the container with specified quantity, stacking if same item exists"""
@@ -638,21 +638,21 @@ class BaseEntity(BaseRpgObj):
             return False
         
         # Check if we already have this item (by name for stacking)
-        existing_relationships = []
+        existing_links = []
         for contained_item in self.get_contained_items(guild_id):
             if contained_item.name == item.name:
-                relationships = self.get_relationships_to_entity(guild_id, contained_item.id, RelationshipType.POSSESSES)
-                if relationships:
-                    existing_relationships.extend(relationships)
+                links = self.get_links_to_entity(guild_id, contained_item.id, EntityLinkType.POSSESSES)
+                if links:
+                    existing_links.extend(links)
         
-        if existing_relationships:
+        if existing_links:
             # Stack with existing item
-            relationship = existing_relationships[0]
-            current_quantity = relationship.metadata.get("quantity", 1)
-            relationship.metadata["quantity"] = current_quantity + quantity
+            link = existing_links[0]
+            current_quantity = link.metadata.get("quantity", 1)
+            link.metadata["quantity"] = current_quantity + quantity
             
             from data.repositories.repository_factory import repositories
-            repositories.relationship.save(relationship)
+            repositories.link.save(link)
             return True
         else:
             # Check if container has space for new unique item
@@ -662,16 +662,16 @@ class BaseEntity(BaseRpgObj):
                 if unique_items >= max_items:
                     return False
             
-            # Create new relationship with quantity metadata
+            # Create new link with quantity metadata
             metadata = {"quantity": quantity}
-            self.add_relationship(guild_id, item, RelationshipType.POSSESSES, metadata)
+            self.add_link(guild_id, item, EntityLinkType.POSSESSES, metadata)
             return True
     
     def remove_from_inventory(self, guild_id: str, item: 'BaseEntity') -> bool:
         """Remove an item from this entity's inventory"""
         if item.entity_type != EntityType.ITEM:
             raise ValueError("Only ITEM entities can be removed from inventory")
-        return self.remove_relationship(guild_id, item, RelationshipType.POSSESSES)
+        return self.remove_link(guild_id, item, EntityLinkType.POSSESSES)
     
     def remove_item(self, guild_id: str, item: 'BaseEntity', quantity: int = None) -> bool:
         """Remove an item from the container"""
@@ -680,24 +680,24 @@ class BaseEntity(BaseRpgObj):
         
         # If no quantity specified, remove all
         if quantity is None:
-            return self.remove_relationship(guild_id, item, RelationshipType.POSSESSES)
+            return self.remove_link(guild_id, item, EntityLinkType.POSSESSES)
         
-        # Get current relationship to check quantity
-        relationships = self.get_relationships_to_entity(guild_id, item.id, RelationshipType.POSSESSES)
-        if not relationships:
+        # Get current link to check quantity
+        links = self.get_links_to_entity(guild_id, item.id, EntityLinkType.POSSESSES)
+        if not links:
             return False
         
-        relationship = relationships[0]
-        current_quantity = relationship.metadata.get("quantity", 1)
+        link = links[0]
+        current_quantity = link.metadata.get("quantity", 1)
         
         if quantity >= current_quantity:
             # Remove completely
-            return self.remove_relationship(guild_id, item, RelationshipType.POSSESSES)
+            return self.remove_link(guild_id, item, EntityLinkType.POSSESSES)
         else:
             # Update quantity
             from data.repositories.repository_factory import repositories
-            relationship.metadata["quantity"] = current_quantity - quantity
-            repositories.relationship.save(relationship)
+            link.metadata["quantity"] = current_quantity - quantity
+            repositories.link.save(link)
             return True
 
 class BaseCharacter(BaseEntity):

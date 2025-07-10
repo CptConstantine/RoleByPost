@@ -4,7 +4,7 @@ import dotenv
 import discord
 from discord.ext import commands
 from commands.narration import process_narration
-from commands import character_commands, entity_commands, initiative_commands, relationship_commands, reminder_commands, roll_commands, scene_commands, setup_commands, recap_commands, rules_commands
+from commands import character_commands, entity_commands, initiative_commands, link_commands, reminder_commands, roll_commands, scene_commands, setup_commands, recap_commands, rules_commands
 from rpg_systems.fate import fate_commands
 from core.initiative_views import GenericInitiativeView, PopcornInitiativeView
 from core.scene_views import GenericSceneView
@@ -53,7 +53,7 @@ async def setup_hook():
     await recap_commands.setup_recap_commands(bot)
     await rules_commands.setup_rules_commands(bot)
     await entity_commands.setup_entity_commands(bot)
-    await relationship_commands.setup_relationship_commands(bot)
+    await link_commands.setup_link_commands(bot)
     # System-specific commands
     await fate_commands.setup_fate_commands(bot)
     

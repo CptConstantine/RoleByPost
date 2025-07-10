@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Union
 import discord
-from core.base_models import BaseCharacter, EntityDefaults, EntityType, RelationshipType
+from core.base_models import BaseCharacter, EntityDefaults, EntityType, EntityLinkType
 from core.roll_formula import RollFormula
 from data.repositories.repository_factory import repositories
 from rpg_systems.fate.aspect import Aspect
@@ -406,7 +406,7 @@ class FateCharacter(BaseCharacter):
             embed.add_field(name="__Stunts__", value="None", inline=False)
 
         # --- Inventory ---
-        items = self.get_children(guild_id=guild_id, relationship_type=RelationshipType.POSSESSES)
+        items = self.get_children(guild_id=guild_id, link_type=EntityLinkType.POSSESSES)
         if items:
             # Group items by entity type and count them
             item_counts = {}
