@@ -2,6 +2,7 @@ from typing import Any, ClassVar, Dict, List
 import discord
 from discord import ui
 from core.base_models import BaseCharacter, BaseEntity, EntityDefaults, EntityType, EntityLinkType, AccessLevel
+from core.inventory_views import EditInventoryView
 from core.shared_views import EditNameModal, EditNotesModal, FinalizeRollButton, RollFormulaView
 from core.roll_formula import RollFormula
 from data.models import EntityLink
@@ -213,6 +214,10 @@ class GenericSheetEditView(ui.View):
     @ui.button(label="Edit Notes", style=discord.ButtonStyle.secondary, row=0)
     async def edit_notes(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.send_modal(EditNotesModal(self.char_id, self.system))
+    
+    @ui.button(label="Inventory", style=discord.ButtonStyle.secondary, row=3)
+    async def edit_inventory(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.edit_message(content="Editing inventory:", view=EditInventoryView(interaction.guild.id, self.editor_id, self.char_id))
 
 class GenericRollFormulaView(RollFormulaView):
     """
@@ -369,7 +374,7 @@ class GenericContainer(BaseEntity):
 
 class GenericContainerEditView(ui.View):
     def __init__(self, editor_id: int, char_id: str, system: str, is_gm: bool = False):
-        super().__init__(timeout=120)
+        super().__init__(timeout=60*60*24) # 24 hours timeout
         self.editor_id = editor_id
         self.char_id = char_id
         self.system = system

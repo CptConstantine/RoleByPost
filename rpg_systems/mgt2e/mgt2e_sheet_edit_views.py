@@ -1,5 +1,6 @@
 import discord
 import discord.ui as ui
+from core.inventory_views import EditInventoryView
 from core.shared_views import EditNameModal, EditNotesModal, PaginatedSelectView
 from rpg_systems.mgt2e.mgt2e_character import MGT2ECharacter, get_character, get_skill_categories
 from data.repositories.repository_factory import repositories
@@ -46,7 +47,7 @@ class MGT2ESheetEditView(ui.View):
         categories = get_skill_categories(MGT2ECharacter.DEFAULT_SKILLS)
         category_options = [discord.SelectOption(label=cat, value=cat) for cat in sorted(categories.keys())]
 
-        async def on_category_selected(view, interaction, category):
+        async def on_category_selected(view, interaction: discord.Interaction, category):
             skills_in_cat = categories[category]
             
             # If there's only one skill in this category and it's the same as the category name,
@@ -70,6 +71,10 @@ class MGT2ESheetEditView(ui.View):
             view=PaginatedSelectView(category_options, on_category_selected, interaction.user.id, prompt="Select a skill category:"),
             ephemeral=True
         )
+    
+    @ui.button(label="Inventory", style=discord.ButtonStyle.secondary, row=3)
+    async def edit_inventory(self, interaction: discord.Interaction, button: ui.Button):
+        await interaction.response.edit_message(content="Editing inventory:", view=EditInventoryView(interaction.guild.id, self.editor_id, self.char_id))
 
 class EditAttributesModal(ui.Modal, title="Edit Attributes"):
     def __init__(self, char_id: str, attrs: dict):

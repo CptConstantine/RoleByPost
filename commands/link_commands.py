@@ -61,14 +61,14 @@ class EntityLinkCommands(commands.Cog):
     @link_group.command(name="create", description="Create a link between two entities")
     @app_commands.describe(
         from_entity="The entity that has the link",
-        to_entity="The entity that is the target of the link", 
         link_type="Type of link",
+        to_entity="The entity that is the target of the link", 
         description="Optional description of the link"
     )
     @app_commands.autocomplete(from_entity=entity_autocomplete)
     @app_commands.autocomplete(to_entity=entity_autocomplete)
     @app_commands.autocomplete(link_type=link_type_autocomplete)
-    async def create_link(self, interaction: discord.Interaction, from_entity: str, to_entity: str, link_type: str, description: str = None):
+    async def create_link(self, interaction: discord.Interaction, from_entity: str, link_type: str, to_entity: str, description: str = None):
         """Create a link between two entities"""
         # Check GM permissions for certain link types
         if link_type in [EntityLinkType.POSSESSES.value, EntityLinkType.CONTROLS.value]:
@@ -237,25 +237,25 @@ class EntityLinkCommands(commands.Cog):
             return
         
         # Get the entities - try both character and entity repositories
-        owned_char = self._find_entity_by_name(interaction.guild.id, possessed_entity)
-        new_owner_char = self._find_entity_by_name(interaction.guild.id, new_owner)
+        possessed = self._find_entity_by_name(interaction.guild.id, possessed_entity)
+        new_possessor_char = self._find_entity_by_name(interaction.guild.id, new_owner)
         
-        if not owned_char or not new_owner_char:
+        if not possessed or not new_possessor_char:
             await interaction.response.send_message("❌ One or both entities not found.", ephemeral=True)
             return
         
         # Remove existing ownership links
-        existing_owners = repositories.link.get_parents(str(interaction.guild.id), owned_char.id, EntityLinkType.POSSESSES.value)
-        for owner in existing_owners:
+        existing_possessors = repositories.link.get_parents(str(interaction.guild.id), possessed.id, EntityLinkType.POSSESSES.value)
+        for possessor in existing_possessors:
             repositories.link.delete_links_by_entities(
-                str(interaction.guild.id), owner.id, owned_char.id, EntityLinkType.POSSESSES.value
+                str(interaction.guild.id), possessor.id, possessed.id, EntityLinkType.POSSESSES.value
             )
         
         # Create new ownership link
         repositories.link.create_link(
             str(interaction.guild.id),
-            new_owner_char.id,
-            owned_char.id,
+            new_possessor_char.id,
+            possessed.id,
             EntityLinkType.POSSESSES.value,
             {"transferred_by": str(interaction.user.id)}
         )

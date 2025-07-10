@@ -147,8 +147,8 @@ The following are the commands that are currently available.
 
 ### Entities
 
-- `/entity create [entity_type] [name] [parent_entity]`  
-  Create a new entity (item, container, etc.). Optionally specify a parent entity that will own this entity.
+- `/entity create [entity_type] [name]`  
+  Create a new entity (item, container, etc.).
 
 - `/entity list [owner_entity] [entity_type] [show_links]`  
   List entities with optional filtering by owner or type. Show link details if requested.
@@ -156,11 +156,14 @@ The following are the commands that are currently available.
 - `/entity view [entity_name]`  
   View detailed information about an entity including its links and interactive editing interface.
 
+- `/entity rename [entity_name] [new_name]`  
+  Rename an entity.
+
 - `/entity delete [entity_name]`  
   Delete an entity. Entities that own other entities cannot be deleted until links are transferred.
 
-- `/entity rename [entity_name] [new_name]`  
-  Rename an entity.
+- `/entity deleteall [entity_type]`
+  Delete all entities that don't have any links to other entities. Optionally, delete all of a specific type of entity.
 
 ### Connections
 
@@ -173,8 +176,8 @@ The following are the commands that are currently available.
 - `/link list [entity_name]`  
   List all links for an entity, showing both incoming and outgoing links.
 
-- `/link transfer [owned_entity] [new_owner]`  
-  (GM only) Transfer ownership of an entity to another entity. Removes existing ownership links and creates new ones.
+- `/link transfer [possessed_entity] [new_owner]`  
+  (GM only) Transfer possession of an entity to another entity. Removes existing possession links and creates new ones.
 
 **Permissions:**
 - Only GMs can create/remove ownership and control links

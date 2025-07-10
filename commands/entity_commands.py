@@ -350,6 +350,183 @@ class EntityCommands(commands.Cog):
             ephemeral=True
         )
 
+    @entity_group.command(name="deleteall", description="Delete all entities with no links (GM only)")
+    @app_commands.describe(
+        entity_type="Filter by entity type (optional)",
+        confirm="Type 'DELETE' to confirm this destructive action"
+    )
+    @app_commands.autocomplete(entity_type=entity_type_autocomplete)
+    @channel_restriction.no_ic_channels()
+    async def entity_delete_all(
+        self, 
+        interaction: discord.Interaction, 
+        confirm: str,
+        entity_type: str = None
+    ):
+        """Delete all entities with no links - GM only command"""
+        # Check GM permissions
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        if not is_gm:
+            await interaction.response.send_message("❌ Only GMs can use this command.", ephemeral=True)
+            return
+        
+        # Require confirmation
+        if confirm.upper() != "DELETE":
+            await interaction.response.send_message(
+                "❌ You must type `DELETE` exactly to confirm this destructive action.",
+                ephemeral=True
+            )
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        # Get all entities in the guild
+        all_entities = repositories.entity.get_all_by_guild(str(interaction.guild.id))
+        
+        # Filter by entity type if specified
+        if entity_type:
+            all_entities = [e for e in all_entities if e.entity_type.value == entity_type]
+        
+        # Find entities with no links
+        entities_to_delete = []
+        entities_with_links = []
+        
+        for entity in all_entities:
+            # Check if entity has any links (incoming or outgoing)
+            links = repositories.link.get_links_for_entity(str(interaction.guild.id), entity.id)
+            
+            if not links:
+                entities_to_delete.append(entity)
+            else:
+                entities_with_links.append(entity)
+        
+        if not entities_to_delete:
+            filter_text = f" of type '{entity_type}'" if entity_type else ""
+            await interaction.followup.send(
+                f"✅ No entities{filter_text} found without links. Nothing to delete.",
+                ephemeral=True
+            )
+            return
+        
+        # Show confirmation with detailed information
+        view = ConfirmDeleteAllView(entities_to_delete, entity_type)
+        
+        # Create summary embed
+        embed = discord.Embed(
+            title="⚠️ Bulk Entity Deletion",
+            color=discord.Color.red(),
+            description=f"Found **{len(entities_to_delete)}** entities without links that will be deleted."
+        )
+        
+        # Group entities by type for display
+        by_type = {}
+        for entity in entities_to_delete:
+            type_name = entity.entity_type.value
+            if type_name not in by_type:
+                by_type[type_name] = []
+            by_type[type_name].append(entity.name)
+        
+        # Add fields for each type (limit to prevent embed size issues)
+        for type_name, entity_names in by_type.items():
+            display_names = entity_names[:10]  # Show first 10
+            if len(entity_names) > 10:
+                display_names.append(f"... and {len(entity_names) - 10} more")
+            
+            embed.add_field(
+                name=f"{type_name.title()} ({len(entity_names)})",
+                value="\n".join([f"• {name}" for name in display_names]),
+                inline=True
+            )
+        
+        if entities_with_links:
+            embed.add_field(
+                name="ℹ️ Entities Preserved",
+                value=f"{len(entities_with_links)} entities with links will be preserved",
+                inline=False
+            )
+        
+        embed.set_footer(text="This action cannot be undone. Click Confirm to proceed.")
+        
+        await interaction.followup.send(
+            embed=embed,
+            view=view,
+            ephemeral=True
+        )
+
+
+class ConfirmDeleteAllView(discord.ui.View):
+    """Confirmation view for bulk entity deletion"""
+    def __init__(self, entities_to_delete: List[BaseEntity], entity_type: str = None):
+        super().__init__(timeout=60)
+        self.entities_to_delete = entities_to_delete
+        self.entity_type = entity_type
+
+    @discord.ui.button(label="Confirm Delete All", style=discord.ButtonStyle.danger)
+    async def confirm_delete_all(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Execute the bulk deletion"""
+        await interaction.response.defer()
+        
+        deleted_count = 0
+        failed_deletions = []
+        
+        # Delete each entity
+        for entity in self.entities_to_delete:
+            try:
+                repositories.entity.delete_entity(str(interaction.guild.id), entity.id)
+                deleted_count += 1
+            except Exception as e:
+                failed_deletions.append(f"{entity.name}: {str(e)}")
+        
+        # Create result message
+        filter_text = f" of type '{self.entity_type}'" if self.entity_type else ""
+        success_msg = f"✅ Successfully deleted **{deleted_count}** entities{filter_text} without links."
+        
+        if failed_deletions:
+            error_msg = "\n\n❌ **Failed to delete:**\n" + "\n".join(failed_deletions[:5])
+            if len(failed_deletions) > 5:
+                error_msg += f"\n... and {len(failed_deletions) - 5} more errors"
+            success_msg += error_msg
+        
+        # Create summary embed
+        embed = discord.Embed(
+            title="🗑️ Bulk Deletion Complete",
+            description=success_msg,
+            color=discord.Color.green() if not failed_deletions else discord.Color.orange()
+        )
+        
+        if deleted_count > 0:
+            embed.add_field(
+                name="Deleted",
+                value=f"{deleted_count} entities",
+                inline=True
+            )
+        
+        if failed_deletions:
+            embed.add_field(
+                name="Failed",
+                value=f"{len(failed_deletions)} entities",
+                inline=True
+            )
+        
+        await interaction.edit_original_response(
+            embed=embed,
+            view=None
+        )
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel_delete_all(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Cancel the bulk deletion"""
+        embed = discord.Embed(
+            title="❌ Bulk Deletion Cancelled",
+            description="No entities were deleted.",
+            color=discord.Color.blue()
+        )
+        
+        await interaction.response.edit_message(
+            embed=embed,
+            view=None
+        )
+
 class ConfirmDeleteEntityView(discord.ui.View):
     def __init__(self, entity: BaseEntity, transfer_inventory: bool = False):
         super().__init__(timeout=60)

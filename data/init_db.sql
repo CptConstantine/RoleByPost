@@ -1,29 +1,4 @@
 
-ALTER TABLE relationships RENAME TO entity_links;
-
-ALTER INDEX IF EXISTS idx_relationships_guild_id RENAME TO idx_entity_links_guild_id;
-ALTER INDEX IF EXISTS idx_relationships_from RENAME TO idx_entity_links_from;
-ALTER INDEX IF EXISTS idx_relationships_to RENAME TO idx_entity_links_to;
-ALTER INDEX IF EXISTS idx_relationships_guild_from RENAME TO idx_entity_links_guild_from;
-ALTER INDEX IF EXISTS idx_relationships_guild_to RENAME TO idx_entity_links_guild_to;
-ALTER INDEX IF EXISTS idx_relationships_type RENAME TO idx_entity_links_link_type;
-ALTER INDEX IF EXISTS idx_relationships_guild RENAME TO idx_links_guild;
-ALTER INDEX IF EXISTS relationships_pkey RENAME TO entity_links_pkey;
-ALTER TABLE entity_links RENAME COLUMN relationship_type TO link_type;
-ALTER TABLE entity_links DROP CONSTRAINT IF EXISTS relationships_guild_id_from_entity_id_to_entity_id_relation_key;
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.table_constraints 
-        WHERE constraint_name = 'entity_links_guild_id_from_entity_id_to_entity_id_link_type_key'
-        AND table_name = 'entity_links'
-        AND table_schema = 'public'
-    ) THEN
-        ALTER TABLE entity_links ADD CONSTRAINT entity_links_guild_id_from_entity_id_to_entity_id_link_type_key 
-            UNIQUE(guild_id, from_entity_id, to_entity_id, link_type);
-    END IF;
-END $$;
-
 -- Server settings
 CREATE TABLE IF NOT EXISTS server_settings (
     guild_id TEXT PRIMARY KEY,
