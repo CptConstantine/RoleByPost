@@ -509,14 +509,20 @@ class CharacterCommands(commands.Cog):
         repositories.active_character.set_active_character(str(interaction.guild.id), str(interaction.user.id), character.id)
         await interaction.response.send_message(f"✅ `{char_name}` is now your active character.", ephemeral=True)
 
-    @character_group.command(name="setavatar", description="Set your character's avatar image")
+    @character_group.command(name="set-avatar", description="Set your character's avatar image")
     @app_commands.describe(
-        avatar_url="URL to an image for your character's avatar",
+        avatar_url="Optional: URL to an image for your character's avatar",
+        file="Optional: Upload an image file instead of providing a URL",
         char_name="Optional: Character/NPC name (defaults to your active character)"
     )
     @app_commands.autocomplete(char_name=character_or_npc_autocomplete)
-    async def character_setavatar(self, interaction: discord.Interaction, avatar_url: str, char_name: str = None):
-        """Set an avatar image URL for your character or an NPC (if GM)"""
+    async def character_setavatar(self, interaction: discord.Interaction, avatar_url: str = None, file: discord.Attachment = None, char_name: str = None):
+        """Set an avatar image for your character or an NPC (if GM)"""
+        
+        # Must provide either URL or file, but not both
+        if (avatar_url and file) or (not avatar_url and not file):
+            await interaction.response.send_message("❌ Please provide either an avatar URL or upload a file, but not both.", ephemeral=True)
+            return
         
         # Determine which character to set avatar for
         character = None
@@ -546,13 +552,24 @@ class CharacterCommands(commands.Cog):
                 await interaction.response.send_message("❌ You don't have an active character set. Use `/character switch` to choose one or specify a character name.", ephemeral=True)
                 return
         
-        # Basic URL validation
-        if not avatar_url.startswith(("http://", "https://")):
-            await interaction.response.send_message("❌ Please provide a valid image URL starting with http:// or https://", ephemeral=True)
-            return
+        # Handle file upload
+        if file:
+            # Validate file type
+            if not file.content_type or not file.content_type.startswith('image/'):
+                await interaction.response.send_message("❌ Please upload a valid image file.", ephemeral=True)
+                return
+            
+            # Use the Discord CDN URL of the uploaded file
+            final_avatar_url = file.url
+        else:
+            # Handle URL input
+            if not avatar_url.startswith(("http://", "https://")):
+                await interaction.response.send_message("❌ Please provide a valid image URL starting with http:// or https://", ephemeral=True)
+                return
+            final_avatar_url = avatar_url
         
         # Save the avatar URL to the character
-        character.avatar_url = avatar_url
+        character.avatar_url = final_avatar_url
         system = repositories.server.get_system(interaction.guild.id)
         repositories.entity.upsert_entity(interaction.guild.id, character, system=system)
 
@@ -562,7 +579,7 @@ class CharacterCommands(commands.Cog):
             description=f"Avatar for **{character.name}** has been set.",
             color=discord.Color.green()
         )
-        embed.set_image(url=avatar_url)
+        embed.set_image(url=final_avatar_url)
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
 

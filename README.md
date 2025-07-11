@@ -142,8 +142,8 @@ The following are the commands that are currently available.
 - `/char switch [char_name]`  
   Set your active character (PC) for this server.
 
-- `/char set-avatar [avatar_url] [char_name]`  
-  Set your character's avatar image with a URL.
+- `/char set-avatar [avatar_url] [file] [char_name]`  
+  Set your character's avatar image with either a url OR a file upload.
 
 - `/char narration-help`  
   Get help with character narration formatting and channel restrictions.
