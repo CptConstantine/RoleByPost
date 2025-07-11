@@ -86,17 +86,20 @@ The following are the commands that are currently available.
 - `/setup system [system]`  
   Set the RPG system for your server. You must be an Admin in the server.
 
-- `/setup gmrole [role]`  
+- `/setup gm-role [role]`  
   Set a Discord role as the GM role for the server. Anyone with this role will have GM permissions. You must be an Admin.
 
-- `/setup playerrole [role]`  
+- `/setup player-role [role]`  
   Set a Discord role as the player role for the server. Anyone with this role will be considered a player. You must be an Admin.
   
-- `/setup defaultskillsfile [.txt file]` or `/setup defaultskills [skill1:0, skill2:0, skill3:1, etc.]`  
+- `/setup default-skills-file [.txt file]` or `/setup default-skills [skill1:0, skill2:0, skill3:1, etc.]`  
   (GM only) Set default skills via command or file upload. Skills are validated per system (if the system has skills).
 
-- `/setup openai set_api_key [api_key]`  
+- `/setup openai set-api-key [api_key]`  
   (GM only) Set the OpenAI API key used for generating recaps and answering rules questions. Required for all AI functionality.
+
+- `/setup openai remove-api-key`  
+  (GM only) Removes your api key if it was set.
 
 - `/setup openai status`  
   Check if an OpenAI API key is configured for this server and see available AI features.
@@ -139,10 +142,10 @@ The following are the commands that are currently available.
 - `/char switch [char_name]`  
   Set your active character (PC) for this server.
 
-- `/char setavatar [avatar_url] [char_name]`  
+- `/char set-avatar [avatar_url] [char_name]`  
   Set your character's avatar image with a URL.
 
-- `/char narration`  
+- `/char narration-help`  
   Get help with character narration formatting and channel restrictions.
 
 ### Entities
@@ -162,7 +165,7 @@ The following are the commands that are currently available.
 - `/entity delete [entity_name]`  
   Delete an entity. Entities that own other entities cannot be deleted until links are transferred.
 
-- `/entity deleteall [entity_type]`
+- `/entity delete-all [entity_type]`
   Delete all entities that don't have any links to other entities. Optionally, delete all of a specific type of entity.
 
 ### Connections
@@ -200,6 +203,9 @@ The following are the commands that are currently available.
 - `/scene create [name]`  
   (GM only) Create a new scene with the given name.
 
+- `/scene set-image [name] [image_url] [file]`
+  (GM only) Sets the image for a scene. Defaults to the active scene. Use an image url OR upload a file.
+
 - `/scene list`  
   (GM only) View all available scenes.
 
@@ -215,10 +221,10 @@ The following are the commands that are currently available.
 - `/scene view [scene_name]`  
   View any scene (active or inactive). If no scene name is provided, shows the current active scene.
   
-- `/scene addnpc [npc name] [scene_name]`  
+- `/scene add-npc [npc name] [scene_name]`  
   (GM only) Add an NPC to a scene. If scene_name is not provided, adds to the active scene.
 
-- `/scene removenpc [npc name] [scene_name]`  
+- `/scene remove-npc [npc name] [scene_name]`  
   (GM only) Remove an NPC from a scene. If scene_name is not provided, removes from the active scene.
 
 - `/scene clear`  
@@ -232,19 +238,19 @@ The following are the commands that are currently available.
 
 ### Initiative
 
-- `/initiative start [type] [scene]`  
+- `/init start [type] [scene]`  
   (GM only) Start initiative in the current channel. Scene and type are optional.
 
-- `/initiative end`  
+- `/init end`  
   (GM only) End initiative in the current channel.
 
-- `/initiative add [name]`  
+- `/init add-npc [name]`  
   (GM only) Add a PC or NPC to the current initiative.
 
-- `/initiative remove [name]`  
+- `/init remove-npc [name]`  
   (GM only) Remove a PC or NPC from the current initiative.
 
-- `/initiative default [type]`  
+- `/init set-default [type]`  
   (GM only) Set the default initiative type for this server.
 
 ### Story Recaps
@@ -252,13 +258,13 @@ The following are the commands that are currently available.
 - `/recap generate [days] [private]`  
   Generate a summary of recent game events. Specify how many days to include and whether the recap should be private.
 
-- `/recap setauto [enabled] [channel] [days_interval] [days_to_include]`  
+- `/recap set-auto [enabled] [channel] [days_interval] [days_to_include]`  
   (GM only) Configure automatic story recaps. Enable or disable them, set which channel they post to, how often they run, and how many days of history they include.
 
-- `/recap autostatus`  
+- `/recap auto-status`  
   Check the current automatic recap settings for this server, including next scheduled recap time.
 
-- `/recap autonow`  
+- `/recap auto-now`  
   (GM only) Force an automatic recap to be generated immediately.
 
 ### Reminders
@@ -269,13 +275,13 @@ The following are the commands that are currently available.
 - `/reminder set [user] [time] [message]`  
   (GM only) Set a reminder for yourself or another user with a custom message and time delay.
 
-- `/reminder setauto [enabled] [delay]`  
+- `/reminder set-auto [enabled] [delay]`  
   (GM only) Configure automatic reminders when users are mentioned. Set whether they're enabled and/or the delay before sending.
 
-- `/reminder autooptout [opt_out]`  
+- `/reminder auto-opt-out [opt_out]`  
   Opt out of receiving automatic reminders when mentioned. Set to false to opt back in.
 
-- `/reminder autostatus`  
+- `/reminder auto-status`  
   Check the current automatic reminder settings for this server.
 
 ### Rules Questions
@@ -286,10 +292,10 @@ The following are the commands that are currently available.
 - `/rules homebrew [rule_name] [rule_text]`  
   (GM only) Add or update a homebrew rule for the server. These rules are used as context when answering rules questions.
 
-- `/rules homebrewlist`  
+- `/rules homebrew-list`  
   View all homebrew rules and clarifications for this server.
 
-- `/rules homebrewremove [rule_name]`  
+- `/rules homebrew-remove [rule_name]`  
   (GM only) Remove a homebrew rule from the server.
 
 ### Character Speech and Narration
@@ -320,11 +326,11 @@ This bot provides special message prefixes that transform regular text messages 
   Creates a purple-bordered embed with the GM's avatar for scene descriptions and narration.
 
 - **Character Avatars**  
-  Set your character's avatar with `/char setavatar [url]` to enhance the immersion.
+  Set your character's avatar with `/char set-avatar [url]` to enhance the immersion.
 
 **Channel Restrictions:** Narration commands (`pc::`, `npc::`, `gm::`) are automatically blocked in **Out-of-Character (OOC)** channels to maintain immersion. Use them in **In-Character (IC)** or **Unrestricted** channels.
 
-For more detailed help, use `/char narration`.
+For more detailed help, use `/char narration-help`.
 
 ### Fate System Commands
 
@@ -345,6 +351,7 @@ All aspect editing supports:
 
 ## Features Planned
 
+- Iron out any leftover bugs with the access level system
 - System specific features
   - Traveller: starships, travel, and maintenance cost calculations
   - Container management features (weight/bulk, item type filtering, etc.)

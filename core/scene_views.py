@@ -381,7 +381,10 @@ class GenericSceneView(BasePinnableSceneView):
         embed.set_footer(text="Scene view is pinned and will update automatically when the scene changes.")
         
         content = "🎭 **CURRENT SCENE** 🎭"
-        
+
+        if scene.image_url:
+            embed.set_thumbnail(url=scene.image_url)
+
         return embed, content
         
     def build_view_components(self):

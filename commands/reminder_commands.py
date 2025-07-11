@@ -122,7 +122,7 @@ class ReminderCommands(commands.Cog):
         await interaction.response.send_message(f"✅ Reminder set for {user.mention} in {time}.", ephemeral=True)
     
     @reminder_group.command(
-        name="setauto", 
+        name="set-auto", 
         description="GM: Configure automatic reminders when users are mentioned"
     )
     @app_commands.describe(
@@ -206,7 +206,7 @@ class ReminderCommands(commands.Cog):
         await interaction.response.send_message(f"✅ {' and '.join(response_parts)}.", ephemeral=True)
     
     @reminder_group.command(
-        name="autooptout", 
+        name="auto-opt-out", 
         description="Opt out of receiving automatic reminders when mentioned"
     )
     @app_commands.describe(
@@ -219,7 +219,7 @@ class ReminderCommands(commands.Cog):
         await interaction.response.send_message(f"✅ You have {status} automatic reminders.", ephemeral=True)
 
     @reminder_group.command(
-        name="autostatus", 
+        name="auto-status", 
         description="Check the current automatic reminder settings"
     )
     @channel_restriction.no_ic_channels()

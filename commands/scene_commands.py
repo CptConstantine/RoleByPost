@@ -244,7 +244,7 @@ class SceneCommands(commands.Cog):
             ephemeral=True
         )
 
-    @scene_group.command(name="addnpc", description="Add an NPC to a scene")
+    @scene_group.command(name="add-npc", description="Add an NPC to a scene")
     @app_commands.describe(
         npc_name="The name of the NPC to add to the scene",
         scene_name="Optional: Name of the scene to add to (defaults to active scene)"
@@ -303,7 +303,7 @@ class SceneCommands(commands.Cog):
             ephemeral=True
         )
 
-    @scene_group.command(name="removenpc", description="Remove an NPC from a scene")
+    @scene_group.command(name="remove-npc", description="Remove an NPC from a scene")
     @app_commands.describe(
         npc_name="The name of the NPC to remove from the scene",
         scene_name="Optional: Name of the scene to remove from (defaults to active scene)"
@@ -362,8 +362,8 @@ class SceneCommands(commands.Cog):
             ephemeral=True
         )
 
-    @scene_group.command(name="clear", description="Clear all NPCs from the current scene.")
-    async def scene_clear(self, interaction: discord.Interaction):
+    @scene_group.command(name="clear-npcs", description="Clear all NPCs from the current scene.")
+    async def scene_clear_npcs(self, interaction: discord.Interaction):
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can manage the scene.", ephemeral=True)
             return
@@ -505,11 +505,11 @@ class SceneCommands(commands.Cog):
         else:
             await interaction.followup.send("❌ Failed to pin the scene. Check bot permissions.")
 
-    @scene_group.command(name="off", description="Disable pinned scenes and clear all pins")
-    async def scene_off(self, interaction: discord.Interaction):
-        """Disable pinned scenes and clear all pins"""
+    @scene_group.command(name="unpin", description="Unpin pinned scenes and clear all pins")
+    async def scene_unpin(self, interaction: discord.Interaction):
+        """Unpin pinned scenes and clear all pins"""
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can disable pinned scenes.", ephemeral=True)
+            await interaction.response.send_message("❌ Only GMs can unpin scenes.", ephemeral=True)
             return
             
         # Get all pinned messages for this guild
@@ -556,6 +556,72 @@ class SceneCommands(commands.Cog):
             (f" Failed to unpin {failed} messages." if failed > 0 else ""),
             ephemeral=True
         )
+
+    @scene_group.command(name="set-image", description="Set the image/map for a scene")
+    @app_commands.describe(
+        scene_name="Name of the scene to set image for (defaults to active scene)",
+        image_url="Optional: URL to an image for the scene",
+        file="Optional: Upload an image file for the scene"
+    )
+    @app_commands.autocomplete(scene_name=scene_name_autocomplete)
+    async def scene_set_image(self, interaction: discord.Interaction, scene_name: str = None, image_url: str = None, file: discord.Attachment = None):
+        """Set an image for a scene using either a URL or uploaded file"""
+
+        # Only GMs can set scene images
+        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+            await interaction.response.send_message("❌ Only GMs can set scene images.", ephemeral=True)
+            return
+        
+        # Must provide either URL or file, but not both
+        if (image_url and file) or (not image_url and not file):
+            await interaction.response.send_message("❌ Please provide either an image URL or upload a file, but not both.", ephemeral=True)
+            return
+
+        # Determine which scene to set image for
+        scene = None
+        if scene_name:
+            scene = repositories.scene.get_by_name(str(interaction.guild.id), scene_name)
+            if not scene:
+                await interaction.response.send_message(f"❌ Scene '{scene_name}' not found.", ephemeral=True)
+                return
+        else:
+            scene = repositories.scene.get_active_scene(str(interaction.guild.id))
+            if not scene:
+                await interaction.response.send_message("❌ No active scene. Create one with `/scene create` first or specify a scene name.", ephemeral=True)
+                return
+        
+        # Handle file upload
+        if file:
+            # Validate file type
+            if not file.content_type or not file.content_type.startswith('image/'):
+                await interaction.response.send_message("❌ Please upload a valid image file.", ephemeral=True)
+                return
+            
+            # Use the Discord CDN URL of the uploaded file
+            final_image_url = file.url
+        else:
+            # Handle URL input
+            if not image_url.startswith(("http://", "https://")):
+                await interaction.response.send_message("❌ Please provide a valid image URL starting with http:// or https://", ephemeral=True)
+                return
+            final_image_url = image_url
+
+        # Save the image URL to the scene
+        repositories.scene.set_scene_image(str(interaction.guild.id), scene.scene_id, final_image_url)
+
+        # Update all pinned scenes if this is the active scene
+        if scene.is_active:
+            await self._update_all_pinned_scenes(interaction.guild, scene.scene_id)
+        
+        # Show a preview
+        embed = discord.Embed(
+            title="Scene Image Updated",
+            description=f"Image for scene **{scene.name}** has been set.",
+            color=discord.Color.green()
+        )
+        embed.set_image(url=final_image_url)
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     # Helper method to update all pinned scenes after a change
     async def _update_all_pinned_scenes(self, guild, scene_id=None):
@@ -621,7 +687,6 @@ class SceneCommands(commands.Cog):
         except Exception as e:
             logging.error(f"Error in _update_all_pinned_scenes: {e}")
 
-
 class ConfirmDeleteView(discord.ui.View):
     def __init__(self, guild_id, scene, cog):
         super().__init__(timeout=60)
@@ -678,7 +743,6 @@ class ConfirmDeleteView(discord.ui.View):
             content="Scene deletion cancelled.",
             view=None
         )
-
 
 async def setup_scene_commands(bot: commands.Bot):
     await bot.add_cog(SceneCommands(bot))

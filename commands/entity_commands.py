@@ -415,7 +415,7 @@ class EntityCommands(commands.Cog):
             ephemeral=True
         )
 
-    @entity_group.command(name="deleteall", description="Delete all entities with no links (GM only)")
+    @entity_group.command(name="delete-all", description="Delete all entities with no links (GM only)")
     @app_commands.describe(
         entity_type="Filter by entity type (optional)",
         confirm="Type 'DELETE' to confirm this destructive action"
@@ -518,7 +518,7 @@ class EntityCommands(commands.Cog):
             ephemeral=True
         )
 
-    @entity_group.command(name="access", description="Set access level for an entity and its possessed entities")
+    @entity_group.command(name="set-access", description="Set access level for an entity and its possessed entities")
     @app_commands.describe(
         entity_name="Name of the entity",
         access_type="Access level (public or gm_only)"

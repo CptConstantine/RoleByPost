@@ -70,7 +70,7 @@ class RecapCommands(commands.Cog):
             await interaction.followup.send(f"❌ Error generating recap: {str(e)}", ephemeral=True)
     
     @recap_group.command(
-        name="setauto",
+        name="set-auto",
         description="GM: Set up automatic story recaps"
     )
     @app_commands.describe(
@@ -162,7 +162,7 @@ class RecapCommands(commands.Cog):
             await interaction.response.send_message("❌ Automatic recaps are currently disabled.", ephemeral=True)
     
     @recap_group.command(
-        name="autonow",
+        name="auto-now",
         description="GM: Force an automatic recap to be generated now"
     )
     @channel_restriction.no_ic_channels()
@@ -204,11 +204,11 @@ class RecapCommands(commands.Cog):
         self.recap_tasks[guild_id] = task
     
     @recap_group.command(
-        name="autostatus",
+        name="auto-status",
         description="Check the status of automatic story recaps for this server"
     )
     @channel_restriction.no_ic_channels()
-    async def recap_autostatus(self, interaction: discord.Interaction):
+    async def recap_auto_status(self, interaction: discord.Interaction):
         """Show the current automatic recap settings for this server"""
         settings = repositories.auto_recap.get_settings(str(interaction.guild.id))
         api_key_set = repositories.api_key.get_openai_key(str(interaction.guild.id)) is not None

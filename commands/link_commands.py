@@ -143,7 +143,7 @@ class LinkCommands(commands.Cog):
         else:
             await interaction.response.send_message("❌ No link found to remove.", ephemeral=True)
 
-    @link_group.command(name="removeall", description="Remove all links to and from an entity")
+    @link_group.command(name="remove-all", description="Remove all links to and from an entity")
     @app_commands.describe(entity_name="The entity to remove all links for")
     @app_commands.autocomplete(entity_name=entity_autocomplete)
     async def remove_all_links(self, interaction: discord.Interaction, entity_name: str):

@@ -145,7 +145,7 @@ class RulesCommands(commands.Cog):
         )
 
     @rules_group.command(
-        name="homebrewlist",
+        name="homebrew-list",
         description="View all homebrew rules for this server"
     )
     @channel_restriction.no_ic_channels()
@@ -182,7 +182,7 @@ class RulesCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
     
     @rules_group.command(
-        name="homebrewremove",
+        name="home-brew-remove",
         description="GM: Remove a homebrew rule from this server"
     )
     @app_commands.describe(

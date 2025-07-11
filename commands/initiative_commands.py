@@ -10,7 +10,7 @@ class InitiativeCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    initiative_group = app_commands.Group(name="initiative", description="Initiative management commands")
+    initiative_group = app_commands.Group(name="init", description="Initiative management commands")
 
     async def initiative_type_autocomplete(
         self,
@@ -119,9 +119,9 @@ class InitiativeCommands(commands.Cog):
         repositories.initiative.end_initiative(str(guild_id), str(channel_id))
         await interaction.response.send_message("🛑 Initiative ended.", ephemeral=False)
 
-    @initiative_group.command(name="add", description="Add a PC or NPC to the current initiative.")
+    @initiative_group.command(name="add-char", description="Add a PC or NPC to the current initiative.")
     @app_commands.describe(name="Name of the PC or NPC to add")
-    async def initiative_add(self, interaction: discord.Interaction, name: str):
+    async def initiative_add_char(self, interaction: discord.Interaction, name: str):
         # Check GM permissions
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can add participants to initiative.", ephemeral=True)
@@ -164,9 +164,9 @@ class InitiativeCommands(commands.Cog):
         
         await interaction.response.send_message(f"✅ Added {char.name} to initiative.", ephemeral=True)
 
-    @initiative_group.command(name="remove", description="Remove a PC or NPC from the current initiative.")
+    @initiative_group.command(name="remove-char", description="Remove a PC or NPC from the current initiative.")
     @app_commands.describe(name="Name of the PC or NPC to remove")
-    async def initiative_remove(self, interaction: discord.Interaction, name: str):
+    async def initiative_remove_char(self, interaction: discord.Interaction, name: str):
         # Check GM permissions
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can remove participants from initiative.", ephemeral=True)
@@ -197,7 +197,7 @@ class InitiativeCommands(commands.Cog):
         
         await interaction.response.send_message(f"✅ Removed {name} from initiative.", ephemeral=True)
 
-    @initiative_group.command(name="default", description="Set the default initiative type for this server.")
+    @initiative_group.command(name="set-default", description="Set the default initiative type for this server.")
     @app_commands.describe(type="Type of initiative (e.g., popcorn, generic)")
     @app_commands.autocomplete(type=initiative_type_autocomplete)
     async def set_default_initiative(self, interaction: discord.Interaction, type: str):

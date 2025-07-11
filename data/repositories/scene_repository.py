@@ -14,7 +14,8 @@ class SceneRepository(BaseRepository[Scene]):
             'scene_id': entity.scene_id,
             'name': entity.name,
             'is_active': entity.is_active,
-            'creation_time': entity.creation_time
+            'creation_time': entity.creation_time,
+            'image_url': entity.image_url
         }
     
     def from_dict(self, data: dict) -> Scene:
@@ -23,10 +24,11 @@ class SceneRepository(BaseRepository[Scene]):
             scene_id=data['scene_id'],
             name=data['name'],
             is_active=bool(data['is_active']),
-            creation_time=data['creation_time']
+            creation_time=data['creation_time'],
+            image_url=data.get('image_url', None)
         )
     
-    def create_scene(self, guild_id: str, name: str) -> str:
+    def create_scene(self, guild_id: str, name: str, image_url: str = None) -> str:
         """Create a new scene and return its ID"""
         scene_id = str(uuid.uuid4())
         
@@ -39,12 +41,18 @@ class SceneRepository(BaseRepository[Scene]):
             scene_id=scene_id,
             name=name,
             is_active=is_first_scene,
-            creation_time=time.time()
+            creation_time=time.time(),
+            image_url=image_url
         )
         
         self.save(scene)
         return scene_id
-    
+
+    def set_scene_image(self, guild_id: str, scene_id: str, image_url: str) -> None:
+        """Set the image URL for a scene"""
+        query = f"UPDATE {self.table_name} SET image_url = %s WHERE guild_id = %s AND scene_id = %s"
+        self.execute_query(query, (image_url, str(guild_id), str(scene_id)))
+
     def get_all_scenes(self, guild_id: str) -> List[Scene]:
         """Get all scenes for a guild"""
         query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s ORDER BY creation_time DESC"

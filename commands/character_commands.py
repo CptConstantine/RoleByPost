@@ -566,7 +566,7 @@ class CharacterCommands(commands.Cog):
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @character_group.command(name="narration", description="Get help with character narration formatting")
+    @character_group.command(name="narration-help", description="Get help with character narration formatting")
     async def character_narration_help(self, interaction: discord.Interaction):
         """Display help information about speaking as characters and GM narration"""
         

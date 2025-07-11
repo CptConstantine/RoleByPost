@@ -14,7 +14,7 @@ class SetupCommands(commands.Cog):
     channel_group = app_commands.Group(name="channel", description="Channel permission management", parent=setup_group)
 
     @setup_group.command(
-        name="gmrole",
+        name="gm-role",
         description="Set a Discord role as the GM role for the server. You must be an Admin."
     )
     @app_commands.describe(role="The Discord role to set as the GM role")
@@ -32,7 +32,7 @@ class SetupCommands(commands.Cog):
         )
 
     @setup_group.command(
-        name="playerrole",
+        name="player-role",
         description="Set a Discord role as the player role for the server. You must be an Admin."
     )
     @app_commands.describe(role="The Discord role to set as the player role")
@@ -69,10 +69,10 @@ class SetupCommands(commands.Cog):
         repositories.server.set_system(str(interaction.guild.id), system)
         await interaction.response.send_message(f"✅ System set to {system.upper()} for this server.", ephemeral=True)
 
-    @setup_group.command(name="defaultskillsfile", description="Set default skills for this server's system with a .txt file (one skill per line).")
+    @setup_group.command(name="default-skills-file", description="Set default skills for this server's system with a .txt file (one skill per line).")
     @app_commands.describe(file="A .txt file with skills, one per line or Skill:Value per line")
     @channel_restriction.no_ic_channels()
-    async def setup_defaultskillsfile(self, interaction: discord.Interaction, file: discord.Attachment):
+    async def setup_default_skills_file(self, interaction: discord.Interaction, file: discord.Attachment):
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can set default skills.", ephemeral=True)
             return
@@ -113,10 +113,10 @@ class SetupCommands(commands.Cog):
         repositories.default_skills.set_default_skills(str(interaction.guild.id), system, skills_dict)
         await interaction.response.send_message(f"✅ Default skills for {system.upper()} updated from file.", ephemeral=True)
 
-    @setup_group.command(name="defaultskills", description="Set default skills for this server's system via text.")
+    @setup_group.command(name="default-skills", description="Set default skills for this server's system via text.")
     @app_commands.describe(skills="Skill list, e.g. Admin:0, Gun Combat:1, Pilot:2")
     @channel_restriction.no_ic_channels()
-    async def setup_defaultskills(self, interaction: discord.Interaction, skills: str):
+    async def setup_default_skills(self, interaction: discord.Interaction, skills: str):
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can set default skills.", ephemeral=True)
             return
@@ -153,7 +153,7 @@ class SetupCommands(commands.Cog):
         await interaction.response.send_message(f"✅ Default skills for {system.upper()} updated for this server.", ephemeral=True)
 
     @openai_group.command(
-        name="set_api_key",
+        name="set-api-key",
         description="GM: Set the OpenAI API key used for generating recaps and other AI features"
     )
     @app_commands.describe(api_key="Your OpenAI API key (will be stored securely)")
@@ -176,7 +176,7 @@ class SetupCommands(commands.Cog):
         await interaction.response.send_message("✅ OpenAI API key set successfully. You can now use AI features like story recaps.", ephemeral=True)
 
     @openai_group.command(
-        name="remove_api_key",
+        name="remove-api-key",
         description="GM: Remove the OpenAI API key and disable AI features"
     )
     @channel_restriction.no_ic_channels()
@@ -343,7 +343,7 @@ class SetupCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @setup_group.command(
-        name="genericdice",
+        name="generic-dice",
         description="GM: Set the base dice formula for the Generic system"
     )
     @app_commands.describe(

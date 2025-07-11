@@ -79,6 +79,9 @@ class MGT2ESceneView(BasePinnableSceneView):
             embed.set_footer(text="This is not the active scene. Use /scene switch to make it active.")
             content = "🎭 **INACTIVE SCENE** 🎭"
         
+        if scene.image_url:
+            embed.set_thumbnail(url=scene.image_url)
+
         return embed, content
         
     def build_view_components(self):

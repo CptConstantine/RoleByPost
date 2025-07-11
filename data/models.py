@@ -72,7 +72,7 @@ class Scene:
     name: str
     is_active: bool
     creation_time: float
-    notes: Optional[str] = None
+    image_url: Optional[str] = None
 
 @dataclass
 class SceneNPC:
