@@ -2,10 +2,23 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from data.repositories.repository_factory import repositories
-from core.base_models import EntityLinkType, EntityType
+from core.base_models import AccessType, EntityLinkType, EntityType
 from core.base_models import BaseEntity
 from typing import Optional, List
 from .entity_commands import entity_autocomplete
+
+async def _transfer_requires_public_access(new_owner: BaseEntity, guild_id: str) -> bool:
+    parent_entities = new_owner.get_parents(guild_id)
+    # If any controlling entities' owner is not a gm, set access to public
+    if parent_entities:
+        for parent in parent_entities:
+            if not await repositories.server.has_gm_permission(guild_id, parent.owner_id) or parent.access_type == AccessType.PUBLIC:
+                requires_public = True
+                break
+    if not requires_public:
+        requires_public = await repositories.server.has_gm_permission(guild_id, new_owner.owner_id)
+
+    return requires_public
 
 async def link_type_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
     """Autocomplete for link types"""
@@ -129,6 +142,61 @@ class LinkCommands(commands.Cog):
                 )
         else:
             await interaction.response.send_message("❌ No link found to remove.", ephemeral=True)
+
+    @link_group.command(name="removeall", description="Remove all links to and from an entity")
+    @app_commands.describe(entity_name="The entity to remove all links for")
+    @app_commands.autocomplete(entity_name=entity_autocomplete)
+    async def remove_all_links(self, interaction: discord.Interaction, entity_name: str):
+        """Remove all links involving an entity"""
+        # Get the entity
+        entity = self._find_entity_by_name(interaction.guild.id, entity_name)
+        if not entity:
+            await interaction.response.send_message(f"❌ Entity '{entity_name}' not found.", ephemeral=True)
+            return
+        
+        # Check permissions - only GMs or entity owners can remove all links
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        if not is_gm and entity.entity_type == EntityType.PC and entity.owner_id != str(interaction.user.id):
+            await interaction.response.send_message("❌ You can only remove links for PCs you own.", ephemeral=True)
+            return
+        elif not is_gm and entity.entity_type != EntityType.PC:
+            await interaction.response.send_message("❌ Only GMs can remove links for non-PC entities.", ephemeral=True)
+            return
+        
+        # Get all links involving this entity
+        all_links = repositories.link.get_links_for_entity(str(interaction.guild.id), entity.id)
+        
+        if not all_links:
+            await interaction.response.send_message(f"**{entity_name}** has no links to remove.", ephemeral=True)
+            return
+        
+        # Show confirmation with link details
+        view = ConfirmRemoveAllLinksView(entity, all_links)
+        
+        embed = discord.Embed(
+            title=f"⚠️ Remove All Links for {entity_name}",
+            description=f"This will remove **{len(all_links)}** links involving this entity.",
+            color=discord.Color.orange()
+        )
+        
+        # Group links by type for display
+        link_summary = {}
+        for link in all_links:
+            link_type = link.link_type.replace("_", " ").title()
+            if link_type not in link_summary:
+                link_summary[link_type] = 0
+            link_summary[link_type] += 1
+        
+        summary_text = "\n".join([f"• {count}x {link_type}" for link_type, count in link_summary.items()])
+        embed.add_field(name="Links to Remove", value=summary_text, inline=False)
+        
+        embed.set_footer(text="This action cannot be undone. Click Confirm to proceed.")
+        
+        await interaction.response.send_message(
+            embed=embed,
+            view=view,
+            ephemeral=True
+        )
 
     @link_group.command(name="list", description="List all links for an entity")
     @app_commands.describe(entity_name="The entity to show links for")
@@ -292,10 +360,21 @@ class LinkCommands(commands.Cog):
             {"transferred_by": str(interaction.user.id)}
         )
         
-        await interaction.response.send_message(
-            f"✅ **{new_owner.name}** now possesses **{entity.name}**",
-            ephemeral=True
-        )
+        # Set access to public if transferring to a player character or companion
+        if await _transfer_requires_public_access(new_owner, guild_id):
+            entity.set_access_type(AccessType.PUBLIC)
+            system = repositories.server.get_system(guild_id)
+            repositories.entity.upsert_entity(guild_id, entity, system)
+            
+            await interaction.response.send_message(
+                f"✅ **{new_owner.name}** now possesses **{entity.name}** and entity access set to public",
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                f"✅ **{new_owner.name}** now possesses **{entity.name}**",
+                ephemeral=True
+            )
 
     def _find_entity_by_name(self, guild_id: str, entity_name: str) -> Optional[BaseEntity]:
         """Helper method to find an entity by name in both character and entity repositories"""
@@ -306,6 +385,78 @@ class LinkCommands(commands.Cog):
         """Helper method to find an entity by ID in both character and entity repositories"""
         entity = repositories.entity.get_by_id(entity_id)
         return entity
+
+class ConfirmRemoveAllLinksView(discord.ui.View):
+    """Confirmation view for removing all links from an entity"""
+    def __init__(self, entity: BaseEntity, links_to_remove: List):
+        super().__init__(timeout=60)
+        self.entity = entity
+        self.links_to_remove = links_to_remove
+
+    @discord.ui.button(label="Confirm Remove All", style=discord.ButtonStyle.danger)
+    async def confirm_remove_all(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Execute the link removal"""
+        await interaction.response.defer()
+        
+        removed_count = 0
+        failed_removals = []
+        
+        # Remove each link
+        for link in self.links_to_remove:
+            try:
+                repositories.link.delete_link(link.id)
+                removed_count += 1
+            except Exception as e:
+                failed_removals.append(f"{link.link_type}: {str(e)}")
+        
+        # Create result message
+        success_msg = f"✅ Successfully removed **{removed_count}** links from **{self.entity.name}**."
+        
+        if failed_removals:
+            error_msg = "\n\n❌ **Failed to remove:**\n" + "\n".join(failed_removals[:3])
+            if len(failed_removals) > 3:
+                error_msg += f"\n... and {len(failed_removals) - 3} more errors"
+            success_msg += error_msg
+        
+        # Create summary embed
+        embed = discord.Embed(
+            title="🔗 Link Removal Complete",
+            description=success_msg,
+            color=discord.Color.green() if not failed_removals else discord.Color.orange()
+        )
+        
+        if removed_count > 0:
+            embed.add_field(
+                name="Removed",
+                value=f"{removed_count} links",
+                inline=True
+            )
+        
+        if failed_removals:
+            embed.add_field(
+                name="Failed",
+                value=f"{len(failed_removals)} links",
+                inline=True
+            )
+        
+        await interaction.edit_original_response(
+            embed=embed,
+            view=None
+        )
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
+    async def cancel_remove_all(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Cancel the link removal"""
+        embed = discord.Embed(
+            title="❌ Link Removal Cancelled",
+            description="No links were removed.",
+            color=discord.Color.blue()
+        )
+        
+        await interaction.response.edit_message(
+            embed=embed,
+            view=None
+        )
 
 async def setup_link_commands(bot: commands.Bot):
     await bot.add_cog(LinkCommands(bot))

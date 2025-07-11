@@ -17,6 +17,7 @@ class Character:
     name: str
     owner_id: str
     entity_type: str
+    access_type: str
     system: Optional[str] = None
     system_specific_data: Optional[Dict[str, Any]] = None
     notes: List[str] = None
@@ -196,6 +197,7 @@ class Entity:
     system_specific_data: Dict[str, Any]
     notes: List[str]
     avatar_url: str
+    access_type: str
 
 @dataclass
 class EntityLink:

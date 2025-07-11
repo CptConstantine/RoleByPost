@@ -8,54 +8,38 @@ import discord.ui as ui
 from core.roll_formula import RollFormula
 from data.models import EntityLink
 
+class AccessType(Enum):
+    """Simple access control for entities"""
+    PUBLIC = "public"  # Anyone can access
+    GM_ONLY = "gm_only"  # Only GMs can access
+
 @dataclass
 class AccessLevel:
-    """Container access control configuration"""
-    access_type: str  # 'public', 'gm_only', 'specific_users'
-    allowed_user_ids: List[str] = None
-    
-    def __post_init__(self):
-        if self.allowed_user_ids is None:
-            self.allowed_user_ids = []
+    """Simplified access control configuration"""
+    access_type: AccessType = AccessType.PUBLIC
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for storage"""
         return {
-            "access_type": self.access_type,
-            "allowed_user_ids": self.allowed_user_ids
+            "access_type": self.access_type.value
         }
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "AccessLevel":
         """Create from dictionary"""
-        return cls(
-            access_type=data.get("access_type", "public"),
-            allowed_user_ids=data.get("allowed_user_ids", [])
-        )
+        access_type_str = data.get("access_type", "public")
+        try:
+            access_type = AccessType(access_type_str)
+        except ValueError:
+            access_type = AccessType.PUBLIC
+        return cls(access_type=access_type)
     
     def can_access(self, user_id: str, is_gm: bool = False) -> bool:
-        """Check if a user can access the container"""
-        if self.access_type == "public":
+        """Check if a user can access the entity"""
+        if self.access_type == AccessType.PUBLIC:
             return True
-        elif self.access_type == "gm_only":
+        elif self.access_type == AccessType.GM_ONLY:
             return is_gm
-        elif self.access_type == "specific_users":
-            return is_gm or str(user_id) in self.allowed_user_ids
-        
-        return False
-    
-    def add_user(self, user_id: str) -> None:
-        """Add a user to the allowed list"""
-        user_id = str(user_id)
-        if user_id not in self.allowed_user_ids:
-            self.allowed_user_ids.append(user_id)
-    
-    def remove_user(self, user_id: str) -> bool:
-        """Remove a user from the allowed list. Returns True if user was removed."""
-        user_id = str(user_id)
-        if user_id in self.allowed_user_ids:
-            self.allowed_user_ids.remove(user_id)
-            return True
         return False
 
 class BaseRpgObj(ABC):
@@ -64,16 +48,13 @@ class BaseRpgObj(ABC):
     """
     def __init__(self, data: Dict[str, Any]):
         self.data = data
-        # Ensure access_control exists for all entities
-        self._ensure_access_control()
+        # Ensure access_type exists for all entities
+        self._ensure_access_type()
 
-    def _ensure_access_control(self):
-        """Ensure access_control field exists with proper defaults"""
-        if "access_control" not in self.data:
-            self.data["access_control"] = {
-                "access_type": "specific_users",
-                "allowed_user_ids": []
-            }
+    def _ensure_access_type(self):
+        """Ensure access_type field exists with proper defaults"""
+        if "access_type" not in self.data:
+            self.data["access_type"] = AccessType.PUBLIC.value
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "BaseRpgObj":
@@ -99,81 +80,46 @@ class BaseRpgObj(ABC):
         self.data["owner_id"] = value
 
     @property
-    def access_control(self) -> AccessLevel:
-        """Get additional access control configuration"""
-        # Ensure field exists
-        self._ensure_access_control()
-        access_data = self.data.get("access_control", {"access_type": "specific_users", "allowed_user_ids": []})
-        return AccessLevel.from_dict(access_data)
+    def access_type(self) -> AccessType:
+        """Get access type"""
+        access_type_str = self.data.get("access_type", "public")
+        try:
+            return AccessType(access_type_str)
+        except ValueError:
+            return AccessType.PUBLIC
 
-    @access_control.setter
-    def access_control(self, value: AccessLevel):
-        """Set additional access control configuration"""
-        self.data["access_control"] = value.to_dict()
+    @access_type.setter
+    def access_type(self, value: AccessType):
+        """Set access type"""
+        self.data["access_type"] = value.value
 
-    def can_access(self, user_id: str, is_gm: bool = False) -> bool:
+    def can_be_accessed_by(self, user_id: str, is_gm: bool = False) -> bool:
         """
-        Hybrid access checking: combines owner_id with access_control
+        Check if a user can access the entity
         
         Args:
             user_id: Discord user ID to check
             is_gm: Whether the user has GM permissions
+            owner_id: The owner ID of the entity (optional)
             
         Returns:
             True if user can access this entity
         """
         user_id = str(user_id)
         
-        # Primary owner always has access (maintains existing behavior)
-        if self.owner_id == user_id:
-            return True
-        
         # GMs always have access
         if is_gm:
             return True
         
-        # Check additional access control rules
-        return self.access_control.can_access(user_id, is_gm)
-
-    def add_allowed_user(self, user_id: str) -> None:
-        """Add a user to the additional access list (beyond primary owner)"""
-        access_control = self.access_control
-        access_control.add_user(user_id)
-        self.access_control = access_control
-
-    def remove_allowed_user(self, user_id: str) -> bool:
-        """Remove a user from the additional access list"""
-        access_control = self.access_control
-        result = access_control.remove_user(user_id)
-        self.access_control = access_control
-        return result
-
-    def set_access_type(self, access_type: str) -> None:
-        """Set the access type for additional access control"""
-        valid_types = ["public", "gm_only", "specific_users"]
-        if access_type not in valid_types:
-            raise ValueError(f"Invalid access type. Must be one of: {valid_types}")
+        # Check access type
+        if self.access_type == AccessType.PUBLIC:
+            return True
         
-        access_control = self.access_control
-        access_control.access_type = access_type
-        self.access_control = access_control
+        return False
 
-    def get_all_allowed_users(self) -> List[str]:
-        """Get all users who can access this entity (owner + additional users)"""
-        allowed_users = []
-        
-        # Add primary owner
-        if self.owner_id:
-            allowed_users.append(self.owner_id)
-        
-        # Add additional users from access control
-        access_control = self.access_control
-        if access_control.access_type == "specific_users":
-            for user_id in access_control.allowed_user_ids:
-                if user_id not in allowed_users:
-                    allowed_users.append(user_id)
-        
-        return allowed_users
+    def set_access_type(self, access_type: AccessType) -> None:
+        """Set the access type"""
+        self.access_type = access_type
 
     def is_owned_by(self, user_id: str) -> bool:
         """Check if user is the primary owner (for strict ownership checks)"""
@@ -496,6 +442,7 @@ class BaseEntity(BaseRpgObj):
         entity_type: EntityType,
         notes: List[str] = None, 
         avatar_url: str = None, 
+        access_type: AccessType = AccessType.PUBLIC,
         system_specific_fields: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """Helper method to create a standardized entity dictionary."""
@@ -507,10 +454,7 @@ class BaseEntity(BaseRpgObj):
             "entity_type": entity_type.value,
             "notes": notes or [],
             "avatar_url": avatar_url or '',
-            "access_control": {
-                "access_type": "specific_users",
-                "allowed_user_ids": [owner_id]
-            }
+            "access_type": access_type.value
         }
         
         # Add system-specific fields

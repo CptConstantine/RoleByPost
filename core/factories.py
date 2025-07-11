@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional
 import uuid
 from core import initiative_types, initiative_views, scene_views
-from core.base_models import BaseEntity, BaseInitiative, EntityType
+from core.base_models import AccessType, BaseEntity, BaseInitiative, EntityType
 from rpg_systems.fate import fate_character, fate_extra, fate_roll_formula, fate_roll_views, fate_scene_views, fate_sheet_edit_views
 from rpg_systems.mgt2e import mgt2e_character, mgt2e_roll_formula, mgt2e_roll_views, mgt2e_scene_views, mgt2e_sheet_edit_views
 from core import generic_entities
@@ -14,6 +14,7 @@ def build_entity(
     guild_id: Optional[str] = None,
     notes: Optional[list] = None,
     avatar_url: Optional[str] = None,
+    access_type: AccessType = AccessType.PUBLIC,
     system_specific_fields: Optional[Dict[str, Any]] = None
 ) -> BaseEntity:
     """
@@ -47,6 +48,7 @@ def build_entity(
         entity_type=entity_type,
         notes=notes,
         avatar_url=avatar_url,
+        access_type=access_type,
         system_specific_fields=system_specific_fields
     )
     
@@ -67,6 +69,7 @@ def build_and_save_entity(
     guild_id: str,
     notes: Optional[list] = None,
     avatar_url: Optional[str] = None,
+    access_type: AccessType = AccessType.PUBLIC,
     system_specific_fields: Optional[Dict[str, Any]] = None
 ) -> BaseEntity:
     """
@@ -99,6 +102,7 @@ def build_and_save_entity(
         guild_id=guild_id,
         notes=notes,
         avatar_url=avatar_url,
+        access_type=access_type,
         system_specific_fields=system_specific_fields
     )
     

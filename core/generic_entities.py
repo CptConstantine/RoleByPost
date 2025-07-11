@@ -1,7 +1,7 @@
 from typing import Any, ClassVar, Dict, List
 import discord
 from discord import ui
-from core.base_models import BaseCharacter, BaseEntity, EntityDefaults, EntityType, EntityLinkType, AccessLevel
+from core.base_models import AccessType, BaseCharacter, BaseEntity, EntityDefaults, EntityType, EntityLinkType, AccessLevel
 from core.inventory_views import EditInventoryView
 from core.shared_views import EditNameModal, EditNotesModal, FinalizeRollButton, RollFormulaView
 from core.roll_formula import RollFormula
@@ -284,15 +284,9 @@ class GenericContainer(BaseEntity):
             # Container properties
             max_items = self.data.get("max_items", 0)
             is_locked = self.data.get("is_locked", False)
-            access_control = self.access_control
             
             # Format access control display
-            access_display = access_control.access_type.replace("_", " ").title()
-            if access_control.access_type == "specific_users":
-                total_users = len(self.get_all_allowed_users())
-                if total_users > 0:
-                    access_display += f" ({total_users} users)"
-            
+            access_display = self.access_type.value.title()
             embed.add_field(
                 name="🔧 Properties (GM Only)",
                 value=f"**Max Items:** {'Unlimited' if max_items == 0 else max_items}\n"
@@ -300,34 +294,6 @@ class GenericContainer(BaseEntity):
                       f"**Access:** {access_display}",
                 inline=False
             )
-            
-            # Show owner and additional allowed users
-            access_info = []
-            if self.owner_id:
-                access_info.append(f"**Owner:** <@{self.owner_id}>")
-            
-            if access_control.access_type == "specific_users" and access_control.allowed_user_ids:
-                try:
-                    # Show up to 5 additional users
-                    additional_users = [uid for uid in access_control.allowed_user_ids if uid != self.owner_id][:5]
-                    if additional_users:
-                        user_mentions = [f"<@{user_id}>" for user_id in additional_users]
-                        additional_text = ", ".join(user_mentions)
-                        if len(access_control.allowed_user_ids) > 5:
-                            additional_text += f" ... and {len(access_control.allowed_user_ids) - 5} more"
-                        access_info.append(f"**Additional Access:** {additional_text}")
-                except:
-                    # Fallback
-                    additional_count = len([uid for uid in access_control.allowed_user_ids if uid != self.owner_id])
-                    if additional_count > 0:
-                        access_info.append(f"**Additional Access:** {additional_count} users")
-            
-            if access_info:
-                embed.add_field(
-                    name="🔐 Access Control (GM Only)",
-                    value="\n".join(access_info),
-                    inline=False
-                )
         
         # Show contained items (visible to everyone who can access the container)
         contained_items = self.get_contained_items(guild_id)
@@ -405,7 +371,7 @@ class GenericContainerEditView(ui.View):
         # Add reveal button only for GM/owner when container is not public
         from data.repositories.repository_factory import repositories
         container = repositories.entity.get_by_id(self.char_id)
-        if container and self.is_gm and container.access_control.access_type != "public":
+        if container and self.is_gm and container.access_type != AccessType.PUBLIC:
             reveal_button = ui.Button(label="📢 Reveal to Players", style=discord.ButtonStyle.success, row=0)
             reveal_button.callback = self.reveal_to_players
             self.add_item(reveal_button)
@@ -441,7 +407,7 @@ class GenericContainerEditView(ui.View):
             # Rebuild view if GM status changed
             self.build_view_components()
         
-        if not container.can_access(str(interaction.user.id), is_gm):
+        if not container.can_be_accessed_by(str(interaction.user.id), is_gm):
             await interaction.response.send_message("❌ You don't have access to this container.", ephemeral=True)
             return False
         return True
@@ -562,15 +528,8 @@ class ContainerAccessModal(ui.Modal, title="Manage Container Access"):
         
     access_type = ui.TextInput(
         label="Access Type",
-        placeholder="Enter: public, gm_only, or specific_users",
+        placeholder="Enter: public or gm",
         required=True
-    )
-    
-    user_mentions = ui.TextInput(
-        label="Additional Users (for specific_users only)",
-        placeholder="@user1 @user2 or user IDs separated by spaces",
-        required=False,
-        style=discord.TextStyle.paragraph
     )
     
     async def on_submit(self, interaction: discord.Interaction):
@@ -582,7 +541,7 @@ class ContainerAccessModal(ui.Modal, title="Manage Container Access"):
             return
         
         access_type = self.access_type.value.strip().lower()
-        valid_types = ["public", "gm_only", "specific_users"]
+        valid_types = ["public", "gm"]
         
         if access_type not in valid_types:
             await interaction.response.send_message(
@@ -591,51 +550,16 @@ class ContainerAccessModal(ui.Modal, title="Manage Container Access"):
             )
             return
         
+        access_type = AccessType(access_type if access_type == "public" else "gm_only")
+        
         try:
             container.set_access_type(access_type)
             
-            # Handle additional user list for specific_users access type
-            if access_type == "specific_users" and self.user_mentions.value.strip():
-                user_input = self.user_mentions.value.strip()
-                user_ids = []
-                
-                # Parse user mentions and IDs
-                import re
-                # Extract user IDs from mentions (<@!123456> or <@123456>)
-                mention_pattern = r'<@!?(\d+)>'
-                mentioned_ids = re.findall(mention_pattern, user_input)
-                user_ids.extend(mentioned_ids)
-                
-                # Extract raw user IDs (just numbers)
-                words = user_input.split()
-                for word in words:
-                    # Remove mention formatting and check if it's a valid user ID
-                    clean_word = re.sub(r'[<@!>]', '', word)
-                    if clean_word.isdigit() and len(clean_word) >= 17:  # Discord user IDs are typically 17-19 digits
-                        user_ids.append(clean_word)
-                
-                # Clear existing additional users (but keep owner_id separate)
-                access_control = container.access_control
-                access_control.allowed_user_ids = []
-                for user_id in set(user_ids):  # Remove duplicates
-                    # Don't add the owner to the additional access list
-                    if user_id != container.owner_id:
-                        access_control.add_user(user_id)
-                container.access_control = access_control
-                
-                repositories.entity.upsert_entity(str(interaction.guild.id), container, system=container.system)
-                
-                total_users = len(container.get_all_allowed_users())
-                await interaction.response.send_message(
-                    f"✅ Updated {container.name} access to '{access_type}' with {total_users} total users (owner + {len(user_ids)} additional).",
-                    ephemeral=True
-                )
-            else:
-                repositories.entity.upsert_entity(str(interaction.guild.id), container, system=container.system)
-                await interaction.response.send_message(
-                    f"✅ Updated {container.name} access to '{access_type}'.",
-                    ephemeral=True
-                )
+            repositories.entity.upsert_entity(str(interaction.guild.id), container, system=container.system)
+            await interaction.response.send_message(
+                f"✅ Updated {container.name} access to '{access_type.value}'.",
+                ephemeral=True
+            )
                 
         except Exception as e:
             await interaction.response.send_message(f"❌ Error updating access control: {str(e)}", ephemeral=True)
@@ -691,7 +615,7 @@ class TakeItemModal(ui.Modal, title="Take Items from Container"):
         
         # Check if user can control this character
         is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
-        if not character.can_access(self.user_id, is_gm):
+        if not character.can_be_accessed_by(self.user_id, is_gm):
             await interaction.response.send_message(f"❌ You don't have access to {character_name}.", ephemeral=True)
             return
         
@@ -781,7 +705,7 @@ class GiveItemModal(ui.Modal, title="Give Items to Container"):
         
         # Check if user can control this character
         is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
-        if not character.can_access(self.user_id, is_gm):
+        if not character.can_be_accessed_by(self.user_id, is_gm):
             await interaction.response.send_message(f"❌ You don't have access to {character_name}.", ephemeral=True)
             return
         

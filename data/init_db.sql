@@ -1,4 +1,19 @@
 
+ALTER TABLE entities ADD COLUMN access_type VARCHAR(20) DEFAULT 'public';
+
+-- Migrate existing data: convert complex access_control to simple access_type
+UPDATE entities 
+SET access_type = CASE 
+    WHEN system_specific_data->'access_control'->>'access_type' = 'gm_only' THEN 'gm_only'
+    ELSE 'public'
+END
+WHERE system_specific_data->'access_control' IS NOT NULL;
+
+-- For entities without access_control, default to public
+UPDATE entities 
+SET access_type = 'public'
+WHERE access_type IS NULL;
+
 -- Server settings
 CREATE TABLE IF NOT EXISTS server_settings (
     guild_id TEXT PRIMARY KEY,

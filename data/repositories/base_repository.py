@@ -20,7 +20,7 @@ class BaseRepository(Generic[T], ABC):
         """Convert dictionary from database to entity"""
         pass
     
-    def execute_query(self, query: str, params: tuple = None, fetch_one: bool = False):
+    def execute_query(self, query: str, params: tuple = None, fetch_one: bool = False, select_override: bool = False):
         """Execute a query and return results"""
         try:
             with db_manager.get_connection() as conn:
@@ -28,7 +28,7 @@ class BaseRepository(Generic[T], ABC):
                 cur.execute(query, params or ())
                 
                 # Only try to fetch if this is a SELECT query
-                if query.strip().upper().startswith('SELECT'):
+                if query.strip().upper().startswith('SELECT') or select_override:
                     if fetch_one:
                         result = cur.fetchone()
                         return self.from_dict(dict(result)) if result else None

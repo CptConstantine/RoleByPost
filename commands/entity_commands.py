@@ -4,7 +4,7 @@ from discord import app_commands
 from discord.ext import commands
 from typing import List, Optional
 from core import channel_restriction
-from core.base_models import BaseEntity, EntityType, EntityLinkType
+from core.base_models import AccessType, BaseEntity, EntityType, EntityLinkType
 from data.repositories.repository_factory import repositories
 import core.factories as factories
 
@@ -31,7 +31,7 @@ async def entity_autocomplete(interaction: discord.Interaction, current: str) ->
     is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
     
     # Get all entities the user can access
-    all_entities = repositories.entity.get_all_accessible(
+    accessible_entities = repositories.entity.get_all_accessible(
         str(interaction.guild.id), 
         str(interaction.user.id), 
         is_gm
@@ -39,18 +39,18 @@ async def entity_autocomplete(interaction: discord.Interaction, current: str) ->
     
     # Filter based on current input
     if current:
-        all_entities = [entity for entity in all_entities if current.lower() in entity.name.lower()]
+        accessible_entities = [entity for entity in accessible_entities if current.lower() in entity.name.lower()]
     
     # Format the choices with entity type for clarity
     choices = []
-    for entity in all_entities[:25]:  # Limit to 25 results
+    for entity in accessible_entities[:25]:  # Limit to 25 results
         entity_type = entity.entity_type.value.upper()
         # Add indicator for access type
         access_indicator = ""
         if not is_gm:
             if entity.owner_id == str(interaction.user.id):
                 access_indicator = " [OWNED]"
-            elif entity.access_control.access_type == "public":
+            elif entity.access_type == "public":
                 access_indicator = " [PUBLIC]"
             else:
                 # Check if controlled
@@ -96,7 +96,7 @@ async def top_level_entity_autocomplete(interaction: discord.Interaction, curren
         if not is_gm:
             if entity.owner_id == str(interaction.user.id):
                 access_indicator = " [OWNED]"
-            elif entity.access_control.access_type == "public":
+            elif entity.access_type == "public":
                 access_indicator = " [PUBLIC]"
             else:
                 # Check if controlled
@@ -159,13 +159,16 @@ class EntityCommands(commands.Cog):
             await interaction.followup.send(f"❌ An entity named `{name}` already exists.", ephemeral=True)
             return
         
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        
         # Create the entity using the new factory method
         entity = factories.build_and_save_entity(
             system=system,
             entity_type=e_type,
             name=name,
             owner_id=str(interaction.user.id),
-            guild_id=str(interaction.guild.id)
+            guild_id=str(interaction.guild.id),
+            access_type=AccessType.GM_ONLY if is_gm else AccessType.PUBLIC
         )
         
         await interaction.followup.send(f"✅ Created {entity_type}: **{name}**", ephemeral=True)
@@ -226,7 +229,7 @@ class EntityCommands(commands.Cog):
     @app_commands.describe(
         owner_entity="Entity to list owned entities of (leave empty for top-level)",
         entity_type="Filter by entity type",
-        show_links="Show ownership links"
+        show_details="Show additional details (access level, ownership info)"
     )
     @app_commands.autocomplete(
         owner_entity=top_level_entity_autocomplete,
@@ -238,12 +241,14 @@ class EntityCommands(commands.Cog):
         interaction: discord.Interaction, 
         owner_entity: str = None, 
         entity_type: str = None,
-        show_links: bool = False
+        show_details: bool = False
     ):
         """List entities with optional filtering"""
         await interaction.response.defer(ephemeral=True)
         
-        # Determine what entities to show
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        
+        # Get accessible entities based on user permissions
         if owner_entity and owner_entity.strip():
             # List entities owned by specific entity
             owner = repositories.entity.get_by_name(str(interaction.guild.id), owner_entity)
@@ -258,21 +263,27 @@ class EntityCommands(commands.Cog):
             )
             title = f"Entities possessed by {owner.name}"
         else:
-            # List top-level entities (those without owners)
-            all_entities = repositories.entity.get_all_by_guild(str(interaction.guild.id))
+            # Get accessible entities for this user
+            entities = repositories.entity.get_all_accessible(
+                str(interaction.guild.id), 
+                str(interaction.user.id), 
+                is_gm
+            )
             
             # Filter to only entities that are not owned by other entities
-            entities = []
-            for entity in all_entities:
+            top_level_entities = []
+            for entity in entities:
                 owners = repositories.link.get_parents(
                     str(interaction.guild.id), 
                     entity.id, 
                     EntityLinkType.POSSESSES.value
                 )
                 if not owners:  # No owners = top-level
-                    entities.append(entity)
+                    top_level_entities.append(entity)
             
-            title = "Top-level entities"
+            entities = top_level_entities
+            title = "Accessible top-level entities"
+            
             if entity_type:
                 # Apply entity type filter
                 entities = [e for e in entities if e.entity_type.value == entity_type]
@@ -284,42 +295,49 @@ class EntityCommands(commands.Cog):
         
         # Create embed
         embed = discord.Embed(title=title, color=discord.Color.blue())
+        embed.set_footer(text="🌐 = Public, 🔒 = GM Only")
         
-        if show_links:
-            # Show detailed link information
-            links = []
-            for entity in entities:
-                links_str = EntityLinkType.get_links_str(str(interaction.guild.id), entity)
-                links_str = f"{entity.name} - {links_str if links_str else 'No links'}"
-                links.append(links_str)
-            embed.description = "\n\n".join(links)
-        else:
-            # Group by entity type for simple view
-            by_type = {}
-            for entity in entities:
-                type_name = entity.entity_type.value
-                if type_name not in by_type:
-                    by_type[type_name] = []
-                by_type[type_name].append(entity)
-            
-            # Add fields for each type
-            for type_name, type_entities in by_type.items():
-                entity_list = []
-                for entity in type_entities:
-                    # Show possessed entities count if any
-                    possessed_entities = repositories.link.get_children(
-                        str(interaction.guild.id), 
-                        entity.id, 
-                        EntityLinkType.POSSESSES.value
-                    )
-                    possessed_info = f" ({len(possessed_entities)} possessed)" if possessed_entities else ""
-                    entity_list.append(f"• {entity.name}{possessed_info}")
+        # Group by entity type for display
+        by_type = {}
+        for entity in entities:
+            type_name = entity.entity_type.value
+            if type_name not in by_type:
+                by_type[type_name] = []
+            by_type[type_name].append(entity)
+        
+        # Add fields for each type
+        for type_name, type_entities in by_type.items():
+            entity_list = []
+            for entity in type_entities:
+                # Always show access level indicator
+                access_indicator = "🔒" if entity.access_type == AccessType.GM_ONLY else "🌐"
+                entry = f"• {entity.name} {access_indicator}"
                 
-                embed.add_field(
-                    name=f"{type_name.title()} ({len(type_entities)})",
-                    value="\n".join(entity_list)[:1024],  # Discord field limit
-                    inline=False
+                if show_details:
+                    # Add ownership info for GMs or for user's own entities
+                    if is_gm and entity.owner_id:
+                        entry += f" (owned by <@{entity.owner_id}>)"
+                    elif not is_gm and entity.entity_type == EntityType.PC and entity.owner_id == str(interaction.user.id):
+                        entry += " (your PC)"
+                
+                # Show possessed entities count if any
+                possessed_entities = repositories.link.get_children(
+                    str(interaction.guild.id), 
+                    entity.id, 
+                    EntityLinkType.POSSESSES.value
                 )
+                if possessed_entities:
+                    entry += f" ({len(possessed_entities)} possessed)"
+                
+                entity_list.append(entry)
+            
+            field_value = "\n".join(entity_list)[:1024]  # Discord field limit
+            
+            embed.add_field(
+                name=f"{type_name.title()} ({len(type_entities)})",
+                value=field_value,
+                inline=False
+            )
         
         await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -500,6 +518,147 @@ class EntityCommands(commands.Cog):
             ephemeral=True
         )
 
+    @entity_group.command(name="access", description="Set access level for an entity and its possessed entities")
+    @app_commands.describe(
+        entity_name="Name of the entity",
+        access_type="Access level (public or gm_only)"
+    )
+    @app_commands.autocomplete(entity_name=entity_autocomplete)
+    @app_commands.choices(access_type=[
+        app_commands.Choice(name="Public", value="public"),
+        app_commands.Choice(name="GM Only", value="gm_only")
+    ])
+    @channel_restriction.no_ic_channels()
+    async def entity_set_access(
+        self, 
+        interaction: discord.Interaction, 
+        entity_name: str, 
+        access_type: str
+    ):
+        """Set access level for an entity and all its possessed entities"""
+        entity = repositories.entity.get_by_name(str(interaction.guild.id), entity_name)
+        if not entity:
+            await interaction.response.send_message(f"❌ Entity `{entity_name}` not found.", ephemeral=True)
+            return
+        
+        # Check permissions - only GMs and PC owners can change access
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        if not is_gm and entity.entity_type == EntityType.PC and entity.owner_id != str(interaction.user.id):
+            await interaction.response.send_message("❌ You can only change access for PCs you own.", ephemeral=True)
+            return
+        elif not is_gm and entity.entity_type != EntityType.PC:
+            await interaction.response.send_message("❌ Only GMs can change access for non-PC entities.", ephemeral=True)
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        # Validate and set access type
+        try:
+            new_access_type = AccessType(access_type)
+        except ValueError:
+            await interaction.followup.send(f"❌ Invalid access type. Must be 'public' or 'gm_only'.", ephemeral=True)
+            return
+        
+        # Get all possessed entities recursively
+        def get_all_possessed_recursively(entity_id: str, visited: set = None) -> List[BaseEntity]:
+            """Recursively get all possessed entities to avoid infinite loops"""
+            if visited is None:
+                visited = set()
+            
+            if entity_id in visited:
+                return []
+            
+            visited.add(entity_id)
+            possessed = repositories.link.get_children(
+                str(interaction.guild.id), 
+                entity_id, 
+                EntityLinkType.POSSESSES.value
+            )
+            
+            all_possessed = possessed.copy()
+            for child in possessed:
+                all_possessed.extend(get_all_possessed_recursively(child.id, visited))
+            
+            return all_possessed
+        
+        # Set access for the main entity
+        entity.set_access_type(new_access_type)
+        system = repositories.server.get_system(str(interaction.guild.id))
+        repositories.entity.upsert_entity(str(interaction.guild.id), entity, system=system)
+        
+        # Get all possessed entities
+        all_possessed = get_all_possessed_recursively(entity.id)
+        
+        # Set access for all possessed entities
+        updated_count = 1  # Count the main entity
+        failed_updates = []
+        
+        for possessed_entity in all_possessed:
+            try:
+                possessed_entity.set_access_type(new_access_type)
+                repositories.entity.upsert_entity(str(interaction.guild.id), possessed_entity, system=system)
+                updated_count += 1
+            except Exception as e:
+                failed_updates.append(f"{possessed_entity.name}: {str(e)}")
+        
+        # Create response message
+        access_display = "Public" if new_access_type.value == "public" else "GM Only"
+        success_msg = f"✅ Set access level for **{entity_name}** to **{access_display}**."
+        
+        if len(all_possessed) > 0:
+            success_msg += f"\n\nAlso updated {len(all_possessed)} possessed entities:"
+            
+            # Group possessed entities by type for display
+            by_type = {}
+            for possessed in all_possessed:
+                type_name = possessed.entity_type.value
+                if type_name not in by_type:
+                    by_type[type_name] = []
+                by_type[type_name].append(possessed.name)
+            
+            type_summary = []
+            for type_name, names in by_type.items():
+                if len(names) <= 3:
+                    type_summary.append(f"• {type_name}: {', '.join(names)}")
+                else:
+                    type_summary.append(f"• {type_name}: {', '.join(names[:3])} (+{len(names)-3} more)")
+            
+            success_msg += "\n" + "\n".join(type_summary)
+        
+        if failed_updates:
+            error_msg = f"\n\n❌ **Failed to update {len(failed_updates)} entities:**\n"
+            error_msg += "\n".join(failed_updates[:3])
+            if len(failed_updates) > 3:
+                error_msg += f"\n... and {len(failed_updates) - 3} more errors"
+            success_msg += error_msg
+        
+        # Create embed for better formatting
+        embed = discord.Embed(
+            title="🔐 Access Level Updated",
+            description=success_msg,
+            color=discord.Color.green() if not failed_updates else discord.Color.orange()
+        )
+        
+        embed.add_field(
+            name="New Access Level",
+            value=f"**{access_display}**",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="Entities Updated",
+            value=f"{updated_count} total",
+            inline=True
+        )
+        
+        if failed_updates:
+            embed.add_field(
+                name="Failed Updates",
+                value=f"{len(failed_updates)} entities",
+                inline=True
+            )
+        
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 class ConfirmDeleteAllView(discord.ui.View):
     """Confirmation view for bulk entity deletion"""

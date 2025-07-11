@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Any
 from .base_repository import BaseRepository
 from data.models import Entity
-from core.base_models import BaseEntity, EntityType, EntityJSONEncoder
+from core.base_models import AccessType, BaseEntity, EntityType, EntityJSONEncoder
 import json
 import uuid
 import time
@@ -21,7 +21,8 @@ class EntityRepository(BaseRepository[Entity]):
             'system': entity.system,
             'system_specific_data': json.dumps(entity.system_specific_data, cls=EntityJSONEncoder),
             'notes': json.dumps(entity.notes),
-            'avatar_url': entity.avatar_url
+            'avatar_url': entity.avatar_url,
+            'access_type': entity.access_type
         }
     
     def from_dict(self, data: dict) -> Entity:
@@ -48,7 +49,8 @@ class EntityRepository(BaseRepository[Entity]):
             system=data['system'],
             system_specific_data=system_specific_data,
             notes=notes,
-            avatar_url=data.get('avatar_url', '')
+            avatar_url=data.get('avatar_url', ''),
+            access_type=data.get('access_type', 'public')
         )
     
     def _convert_to_base_entity(self, entity: Entity) -> BaseEntity:
@@ -68,21 +70,20 @@ class EntityRepository(BaseRepository[Entity]):
             entity_type=EntityType(entity.entity_type),
             notes=entity.notes,
             avatar_url=entity.avatar_url,
+            access_type=AccessType(entity.access_type),
             system_specific_fields=entity.system_specific_data
         )
-        
-        # Add access_control if it doesn't exist (migration)
-        if "access_control" not in entity_dict:
-            entity_dict["access_control"] = {
-                "access_type": "specific_users",
-                "allowed_user_ids": []
-            }
         
         return EntityClass.from_dict(entity_dict)
     
     def _convert_list_to_base_entities(self, entities: List[Entity]) -> List[BaseEntity]:
         """Convert a list of Entity objects to BaseEntity objects"""
         return [self._convert_to_base_entity(entity) for entity in entities if entity]
+    
+    def _row_to_entity(self, row_dict: dict) -> BaseEntity:
+        """Convert a database row dictionary to a BaseEntity"""
+        entity = self.from_dict(row_dict)
+        return self._convert_to_base_entity(entity)
     
     def get_by_id(self, entity_id: str) -> Optional[BaseEntity]:
         """Get entity by ID"""
@@ -112,61 +113,72 @@ class EntityRepository(BaseRepository[Entity]):
         entities = self.execute_query(query, (str(guild_id), str(owner_id)))
         return self._convert_list_to_base_entities(entities)
     
-    def get_all_accessible(self, guild_id: str, user_id: str, is_gm: bool = False) -> List[BaseEntity]:
-        """
-        Get all entities a user can access through:
-        1. Direct ownership (owner_id)
-        2. Control links (entities they control)
-        3. Access control permissions (public/specific_users)
-        """
+    def get_all_accessible(self, guild_id: str, user_id: str, is_gm: bool) -> List[BaseEntity]:
+        """Get all entities accessible to a user with optimized database queries"""
+        
         if is_gm:
-            # GMs can access everything
-            return self.get_all_by_guild(guild_id)
+            # GMs can see everything
+            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s ORDER BY name"
+            entities = self.execute_query(query, (str(guild_id),))
+            return self._convert_list_to_base_entities(entities)
         
-        user_id = str(user_id)
-        guild_id = str(guild_id)
-        
-        # Complex query to get all accessible entities
-        query = f"""
-        SELECT DISTINCT e.* FROM {self.table_name} e
-        WHERE e.guild_id = %s AND (
-            -- Direct ownership
-            e.owner_id = %s
-            OR
-            -- Public access
-            (e.system_specific_data->>'access_control' IS NULL 
-             OR (e.system_specific_data->'access_control'->>'access_type') = 'public')
-            OR
-            -- Specific user access
-            (
-                (e.system_specific_data->'access_control'->>'access_type') = 'specific_users'
-                AND (
-                    e.system_specific_data->'access_control'->'allowed_user_ids' ? %s
-                    OR e.system_specific_data->'access_control'->>'allowed_user_ids' LIKE %s
-                )
-            )
-            OR
-            -- Entities controlled by user's entities
-            e.id IN (
-                SELECT el.to_entity_id 
-                FROM entity_links el
-                JOIN {self.table_name} owner_entity ON owner_entity.id = el.from_entity_id
+        # Single optimized query for non-GM users
+        # Note: owner_id is only relevant for PCs, not for general entity access
+        access_query = f"""
+        WITH user_accessible AS (
+            -- User's own PCs (owner_id only matters for PCs)
+            SELECT e.* FROM {self.table_name} e 
+            WHERE e.guild_id = %s 
+            AND e.entity_type = 'pc'
+            AND e.owner_id = %s
+            
+            UNION
+            
+            -- All public entities (regardless of owner_id since it's not relevant for access)
+            SELECT e.* FROM {self.table_name} e 
+            WHERE e.guild_id = %s 
+            AND e.access_type = 'public'
+            AND NOT EXISTS (
+                -- Exclude if possessed by non-public entity
+                SELECT 1 FROM entity_links el 
+                JOIN {self.table_name} possessor ON possessor.id = el.from_entity_id
                 WHERE el.guild_id = %s 
-                AND el.link_type = 'controls'
-                AND owner_entity.owner_id = %s
+                AND el.to_entity_id = e.id 
+                AND el.link_type = 'possesses'
+                AND possessor.access_type != 'public'
             )
+            AND NOT EXISTS (
+                -- Exclude if controlled by non-public entity
+                SELECT 1 FROM entity_links el 
+                JOIN {self.table_name} controller ON controller.id = el.from_entity_id
+                WHERE el.guild_id = %s 
+                AND el.to_entity_id = e.id 
+                AND el.link_type = 'controls'
+                AND controller.access_type != 'public'
+            )
+            
+            UNION
+            
+            -- Entities possessed/controlled by user's PCs
+            SELECT e.* FROM {self.table_name} e
+            JOIN entity_links el ON e.id = el.to_entity_id
+            JOIN {self.table_name} user_pc ON user_pc.id = el.from_entity_id
+            WHERE e.guild_id = %s 
+            AND el.guild_id = %s
+            AND user_pc.entity_type = 'pc'
+            AND user_pc.owner_id = %s
+            AND el.link_type IN ('possesses', 'controls')
         )
-        ORDER BY e.name
+        SELECT DISTINCT * FROM user_accessible ORDER BY name
         """
         
-        # Parameters for the query
-        # %s for user_id in JSON search (for exact match and LIKE pattern)
-        like_pattern = f'%"{user_id}"%'
-        
-        entities = self.execute_query(
-            query, 
-            (guild_id, user_id, user_id, like_pattern, guild_id, user_id)
-        )
+        entities = self.execute_query(access_query, (
+            str(guild_id), str(user_id),  # User's own PCs
+            str(guild_id),                # Public entities
+            str(guild_id),                # Possesses check
+            str(guild_id),                # Controls check
+            str(guild_id), str(guild_id), str(user_id)  # PC links
+        ), select_override=True)
         
         return self._convert_list_to_base_entities(entities)
     
@@ -199,10 +211,6 @@ class EntityRepository(BaseRepository[Entity]):
         for key in system_fields:
             system_specific_data[key] = entity.data.get(key)
 
-        # Include access_control in system_specific_data for storage
-        if "access_control" in entity.data:
-            system_specific_data["access_control"] = entity.data["access_control"]
-
         notes = entity.notes or []
         
         # Create Entity from BaseEntity
@@ -215,7 +223,8 @@ class EntityRepository(BaseRepository[Entity]):
             system=system,
             system_specific_data=system_specific_data,
             notes=notes,
-            avatar_url=entity.avatar_url
+            avatar_url=entity.avatar_url,
+            access_type=entity.access_type.value
         )
         
         self.save(storage_entity, conflict_columns=['id'])

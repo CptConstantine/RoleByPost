@@ -37,11 +37,6 @@ class ServerRepository(BaseRepository[ServerSettings]):
     
     async def has_gm_permission(self, guild_id: int, user: discord.Member) -> bool:
         """Check if user has GM permissions"""
-        # Check if user is admin
-        if user.guild_permissions.administrator:
-            return True
-        
-        # Check if user has GM role
         server_settings = self.get_by_guild_id(str(guild_id))
         if server_settings and server_settings.gm_role_id:
             gm_role = user.guild.get_role(int(server_settings.gm_role_id))

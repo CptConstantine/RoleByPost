@@ -1,7 +1,7 @@
 from typing import List, Optional
 from .base_repository import BaseRepository
 from data.models import Character, ActiveCharacter
-from core.base_models import BaseCharacter, BaseEntity, EntityJSONEncoder, EntityType
+from core.base_models import AccessType, BaseCharacter, BaseEntity, EntityJSONEncoder, EntityType
 import json
 import core.factories as factories
 
@@ -19,7 +19,8 @@ class CharacterRepository(BaseRepository[Character]):
             'system': entity.system,
             'system_specific_data': json.dumps(entity.system_specific_data, cls=EntityJSONEncoder),
             'notes': json.dumps(entity.notes),
-            'avatar_url': entity.avatar_url
+            'avatar_url': entity.avatar_url,
+            'access_type': entity.access_type
         }
 
     def from_dict(self, data: dict) -> Character:
@@ -46,6 +47,7 @@ class CharacterRepository(BaseRepository[Character]):
             system=data.get('system'),
             system_specific_data=system_specific_data,
             notes=notes,
+            access_type=data.get('access_type', 'public'),
             avatar_url=data.get('avatar_url', '')
         )
 
@@ -66,6 +68,7 @@ class CharacterRepository(BaseRepository[Character]):
             entity_type=EntityType(character.entity_type),
             notes=character.notes,
             avatar_url=character.avatar_url,
+            access_type=AccessType(character.access_type),
             system_specific_fields=character.system_specific_data
         )
         
@@ -193,6 +196,7 @@ class ActiveCharacterRepository(BaseRepository[ActiveCharacter]):
             entity_type=EntityType.get_type_from_str(character.entity_type),
             notes=character.notes,
             avatar_url=character.avatar_url,
+            access_type=AccessType(character.access_type),
             system_specific_fields=character.system_specific_data
         )
         

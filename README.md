@@ -186,14 +186,14 @@ The following are the commands that are currently available.
 
 ### Rolling
 
-- `/roll check [roll_parameters]`  
-  Roll dice for your active character with optional parameters.
+- `/roll check [roll_parameters] [difficulty]`  
+  Roll dice for your active character with optional parameters. The roll_parameters field has intelligent autocomplete that adapts to your server's RPG system, offering relevant skills, attributes, and modifiers.
 
 - `/roll custom`
   Open the system specific roll interface for your character.
 
 - `/roll request [chars_to_roll] [roll_parameters] [difficulty]`  
-  (GM only) Request players to roll with specified parameters. System-specific UIs allow players to adjust skills/attributes.
+  (GM only) Request players to roll with specified parameters. Both character names and roll parameters have smart autocomplete. System-specific UIs allow players to adjust skills/attributes.
 
 ### Scene Management
 

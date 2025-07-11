@@ -1,8 +1,9 @@
+from typing import List
 import uuid
 import discord
 from discord import app_commands
 from discord.ext import commands
-from core.base_models import BaseCharacter, BaseEntity, EntityType, EntityLinkType
+from core.base_models import AccessType, BaseCharacter, BaseEntity, EntityType, EntityLinkType
 from data.repositories.repository_factory import repositories
 import core.factories as factories
 import json
@@ -96,27 +97,102 @@ async def companion_autocomplete(interaction: discord.Interaction, current: str)
     filtered_options = [name for name in options if current.lower() in name.lower()]
     return [app_commands.Choice(name=name, value=name) for name in filtered_options[:25]]
 
-async def owner_entity_autocomplete(interaction: discord.Interaction, current: str):
+async def owner_characters_autocomplete(interaction: discord.Interaction, current: str):
     """Autocomplete for entities that can own other entities"""
     is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
     
     if is_gm:
         # GMs can see all entities as potential owners
-        entities = repositories.character.get_all_by_guild(str(interaction.guild.id))
+        characters = repositories.character.get_all_by_guild(str(interaction.guild.id))
     else:
         # Users can only use their own entities as owners
-        entities = repositories.character.get_user_characters(str(interaction.guild.id), str(interaction.user.id))
+        characters = repositories.character.get_user_characters(str(interaction.guild.id), str(interaction.user.id))
     
     # Filter by current input
     filtered_entities = [
-        entity for entity in entities 
-        if current.lower() in entity.name.lower()
+        char for char in characters 
+        if current.lower() in char.name.lower()
     ]
     
     return [
-        app_commands.Choice(name=f"{entity.name} ({entity.entity_type.value})", value=entity.name)
-        for entity in filtered_entities[:25]
+        app_commands.Choice(name=f"{char.name} ({char.entity_type.value})", value=char.name)
+        for char in filtered_entities[:25]
     ]
+
+async def multi_character_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+    """Enhanced autocomplete that handles comma-separated character names"""
+    # Parse what's already been typed
+    parts = current.split(',')
+    current_typing = parts[-1].strip() if parts else current
+    already_selected = [part.strip() for part in parts[:-1]] if len(parts) > 1 else []
+    
+    # Get available characters (excluding already selected)
+    all_chars = repositories.character.get_all_by_guild(str(interaction.guild.id))
+    is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+    
+    available_chars = []
+    for char in all_chars:
+        # Skip if already selected
+        if char.name in already_selected:
+            continue
+            
+        # Check if current typing matches
+        if current_typing and current_typing.lower() not in char.name.lower():
+            continue
+            
+        # Check permissions
+        if char.entity_type == EntityType.NPC and is_gm:
+            available_chars.append(char.name)
+        elif char.entity_type == EntityType.PC and (str(char.owner_id) == str(interaction.user.id) or is_gm):
+            available_chars.append(char.name)
+        elif char.entity_type == EntityType.COMPANION:
+            if str(char.owner_id) == str(interaction.user.id) or is_gm:
+                available_chars.append(char.name)
+            else:
+                # Check if user owns any characters that control this companion
+                controlling_chars = repositories.link.get_parents(
+                    str(interaction.guild.id),
+                    char.id,
+                    EntityLinkType.CONTROLS.value
+                )
+                
+                user_controls_companion = any(
+                    str(controller.owner_id) == str(interaction.user.id) 
+                    for controller in controlling_chars
+                )
+                
+                if user_controls_companion:
+                    available_chars.append(char.name)
+    
+    # Build the choice values (preserve what's already typed + add new selection)
+    prefix = ', '.join(already_selected)
+    if prefix:
+        prefix += ', '
+    
+    choices = []
+    
+    # If nothing is being typed and we have selected characters, show a summary
+    if not current_typing and already_selected:
+        summary_text = f"Selected: {', '.join(already_selected)} (continue typing...)"
+        choices.append(app_commands.Choice(name=summary_text, value=current))
+    
+    # Add available characters
+    for char_name in available_chars[:24]:  # Leave room for summary if needed
+        full_value = prefix + char_name
+        
+        # Create display name showing context
+        if already_selected:
+            display_name = f"{', '.join(already_selected)}, {char_name}"
+        else:
+            display_name = char_name
+            
+        # Truncate display name if too long (Discord limit is 100 chars)
+        if len(display_name) > 97:
+            display_name = display_name[:94] + "..."
+            
+        choices.append(app_commands.Choice(name=display_name, value=full_value))
+    
+    return choices
 
 class CharacterCommands(commands.Cog):
     def __init__(self, bot):
@@ -132,7 +208,7 @@ class CharacterCommands(commands.Cog):
     @app_commands.describe(
         char_name="The name of your new character"
     )
-    async def create_pc(self, interaction: discord.Interaction, char_name: str, owner: str = None):
+    async def create_pc(self, interaction: discord.Interaction, char_name: str):
         await interaction.response.defer(ephemeral=True)
         
         existing = repositories.character.get_character_by_name(interaction.guild.id, char_name)
@@ -140,13 +216,16 @@ class CharacterCommands(commands.Cog):
             await interaction.followup.send(f"❌ A character named `{char_name}` already exists.", ephemeral=True)
             return
         
+        is_gm = await repositories.server.has_gm_permission(interaction.guild.id, interaction.user)
+
         system = repositories.server.get_system(interaction.guild.id)
         character = factories.build_and_save_entity(
             system=system,
             entity_type=EntityType.PC,
             name=char_name,
             owner_id=str(interaction.user.id),
-            guild_id=str(interaction.guild.id)
+            guild_id=str(interaction.guild.id),
+            access_type=AccessType.PUBLIC if not is_gm else AccessType.GM_ONLY
         )
         
         # Set as active if no active character exists
@@ -176,7 +255,8 @@ class CharacterCommands(commands.Cog):
             entity_type=EntityType.NPC,
             name=npc_name,
             owner_id=str(interaction.user.id),
-            guild_id=str(interaction.guild.id)
+            guild_id=str(interaction.guild.id),
+            access_type=AccessType.GM_ONLY
         )
         
         await interaction.followup.send(f"🤖 Created NPC: **{npc_name}**", ephemeral=True)
@@ -400,10 +480,17 @@ class CharacterCommands(commands.Cog):
             return
             
         character.owner_id = new_owner.id
+        
+        # Set access to public when transferring to a player
+        is_gm = await repositories.server.has_gm_permission(interaction.guild.id, new_owner)
+        if not is_gm:
+            character.set_access_type(AccessType.PUBLIC)
+        
         system = repositories.server.get_system(interaction.guild.id)
         repositories.entity.upsert_entity(interaction.guild.id, character, system=system)
         await interaction.response.send_message(
-            f"✅ Ownership of `{char_name}` transferred to {new_owner.display_name}.", ephemeral=True
+            f"✅ Ownership of `{char_name}` transferred to {new_owner.display_name} and set to public access.", 
+            ephemeral=True
         )
 
     @character_group.command(name="switch", description="Set your active character (PC) for this server")
@@ -764,11 +851,22 @@ class CharacterCommands(commands.Cog):
             {"transferred_by": str(interaction.user.id)}
         )
         
-        await interaction.followup.send(
-            f"✅ **{new_controller}** now controls **{companion_name}**",
-            ephemeral=True
-        )
-
+        # Set access to public if transferring to a PC (player character)
+        new_owner_is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), new_controller_char.owner_id)
+        if new_controller_char.entity_type == EntityType.PC and not new_owner_is_gm:
+            companion.set_access_type(AccessType.PUBLIC)
+            system = repositories.server.get_system(str(interaction.guild.id))
+            repositories.entity.upsert_entity(str(interaction.guild.id), companion, system)
+            
+            await interaction.followup.send(
+                f"✅ **{new_controller}** now controls **{companion_name}** and companion access set to public.",
+                ephemeral=True
+            )
+        else:
+            await interaction.followup.send(
+                f"✅ **{new_controller}** now controls **{companion_name}**",
+                ephemeral=True
+            )
 
 class ConfirmDeleteCharacterView(discord.ui.View):
     def __init__(self, character: BaseCharacter, transfer_inventory: bool = False):
