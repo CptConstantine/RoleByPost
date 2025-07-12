@@ -216,8 +216,8 @@ async def send_character_webhook(channel: discord.TextChannel, character: BaseCh
     # Determine display name (use alias if provided)
     display_name = alias if alias else character.name
     
-    # Get or create the first webhook with the name "PlayByPostBotCharacters"
-    webhook = next((wh for wh in await channel.webhooks() if wh.name == "PlayByPostBotCharacters"), None) or await channel.create_webhook(name="PlayByPostBotCharacters")
+    # Get or create the first webhook with the name "RoleByPostCharacters"
+    webhook = next((wh for wh in await channel.webhooks() if wh.name == "RoleByPostCharacters"), None) or await channel.create_webhook(name="RoleByPostCharacters")
     embed = discord.Embed(
         description=content,
         color=get_character_color(character)
