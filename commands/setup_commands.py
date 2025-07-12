@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from core import channel_restriction
+from core.base_models import SystemType
 import core.factories as factories
 from data.repositories.repository_factory import repositories
 
@@ -52,21 +53,20 @@ class SetupCommands(commands.Cog):
     @setup_group.command(name="system", description="Set the RPG system for your server. You must be an Admin.")
     @app_commands.describe(system="The system to use (e.g. generic, fate, mgt2e)")
     @app_commands.choices(system=[
-        app_commands.Choice(name="Fate Core/Condensed/Accelerated", value="fate"),
-        app_commands.Choice(name="Mongoose Traveller 2nd Edition", value="mgt2e"),
-        app_commands.Choice(name="Generic System", value="generic")
+        app_commands.Choice(name="Fate Core/Condensed/Accelerated", value=SystemType.FATE.value),
+        app_commands.Choice(name="Mongoose Traveller 2nd Edition", value=SystemType.MGT2E.value),
+        app_commands.Choice(name="Generic System", value=SystemType.GENERIC.value),
     ])
     @channel_restriction.no_ic_channels()
     async def setup_system(self, interaction: discord.Interaction, system: str):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Only admins can set the system.", ephemeral=True)
             return
-        valid_systems = ["generic", "fate", "mgt2e"]
-        system = system.lower()
+        valid_systems = [sys_type.value for sys_type in SystemType.get_all()]
         if system not in valid_systems:
             await interaction.response.send_message(f"❌ Invalid system. Valid options: {', '.join(valid_systems)}", ephemeral=True)
             return
-        repositories.server.set_system(str(interaction.guild.id), system)
+        repositories.server.set_system(str(interaction.guild.id), SystemType(system))
         await interaction.response.send_message(f"✅ System set to {system.upper()} for this server.", ephemeral=True)
 
     @setup_group.command(name="default-skills-file", description="Set default skills for this server's system with a .txt file (one skill per line).")
@@ -111,7 +111,7 @@ class SetupCommands(commands.Cog):
                 await interaction.response.send_message("❌ The skills list is invalid for this system.", ephemeral=True)
                 return
         repositories.default_skills.set_default_skills(str(interaction.guild.id), system, skills_dict)
-        await interaction.response.send_message(f"✅ Default skills for {system.upper()} updated from file.", ephemeral=True)
+        await interaction.response.send_message(f"✅ Default skills for {system.value.upper()} updated from file.", ephemeral=True)
 
     @setup_group.command(name="default-skills", description="Set default skills for this server's system via text.")
     @app_commands.describe(skills="Skill list, e.g. Admin:0, Gun Combat:1, Pilot:2")
@@ -150,7 +150,7 @@ class SetupCommands(commands.Cog):
             await interaction.response.send_message("❌ Invalid format or no skills provided. Example: `Admin:0, Gun Combat:1, Pilot:2`", ephemeral=True)
             return
         repositories.default_skills.set_default_skills(str(interaction.guild.id), system, skills_dict)
-        await interaction.response.send_message(f"✅ Default skills for {system.upper()} updated for this server.", ephemeral=True)
+        await interaction.response.send_message(f"✅ Default skills for {system.value.upper()} updated for this server.", ephemeral=True)
 
     @openai_group.command(
         name="set-api-key",
@@ -361,7 +361,7 @@ class SetupCommands(commands.Cog):
         
         # Check if server is using generic system
         system = repositories.server.get_system(str(interaction.guild.id))
-        if system != "generic":
+        if system != SystemType.GENERIC:
             await interaction.response.send_message(
                 "❌ Base dice configuration is only available for the Generic system.",
                 ephemeral=True
@@ -453,7 +453,7 @@ class SetupCommands(commands.Cog):
         
         # Basic Configuration
         config_lines = []
-        config_lines.append(f"**System:** {system.upper()}")
+        config_lines.append(f"**System:** {system.value.upper()}")
         config_lines.append(f"**GM Role:** {gm_role.mention if gm_role else '❌ Not set'}")
         config_lines.append(f"**Player Role:** {player_role.mention if player_role else '❌ Not set'}")
         

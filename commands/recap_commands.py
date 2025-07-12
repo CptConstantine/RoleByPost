@@ -11,7 +11,7 @@ from core import channel_restriction
 from data.repositories.repository_factory import repositories
 
 class RecapCommands(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: discord.Client):
         self.bot = bot
         self.recap_tasks = {}  # Store auto-recap tasks by guild_id
         self.inactive_threshold_days = 30  # Consider a server inactive after 30 days of no messages

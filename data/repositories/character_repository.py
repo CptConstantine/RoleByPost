@@ -1,7 +1,7 @@
 from typing import List, Optional
 from .base_repository import BaseRepository
 from data.models import Character, ActiveCharacter
-from core.base_models import AccessType, BaseCharacter, BaseEntity, EntityJSONEncoder, EntityType
+from core.base_models import AccessType, BaseCharacter, BaseEntity, EntityJSONEncoder, EntityType, SystemType
 import json
 import core.factories as factories
 
@@ -57,14 +57,14 @@ class CharacterRepository(BaseRepository[Character]):
             return None
             
         # Get the system-specific character class
-        CharacterClass = factories.get_specific_character(character.system, EntityType(character.entity_type))
-        
+        CharacterClass = factories.get_specific_character(SystemType(character.system), EntityType(character.entity_type))
+
         # Create the character dict using the helper method
         character_dict = BaseEntity.build_entity_dict(
             id=character.id,
             name=character.name,
             owner_id=character.owner_id,
-            system=character.system,
+            system=SystemType(character.system),
             entity_type=EntityType(character.entity_type),
             notes=character.notes,
             avatar_url=character.avatar_url,
@@ -90,11 +90,11 @@ class CharacterRepository(BaseRepository[Character]):
         character = self.execute_query(query, (str(guild_id), name), fetch_one=True)
         return self._convert_to_base_character(character)
 
-    def get_all_by_guild(self, guild_id: str, system: str = None) -> List[BaseCharacter]:
+    def get_all_by_guild(self, guild_id: str, system: SystemType = None) -> List[BaseCharacter]:
         """Get all characters for a guild, optionally filtered by system"""
         if system:
             query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND system = %s AND entity_type in ('pc', 'npc') ORDER BY name"
-            characters = self.execute_query(query, (str(guild_id), system))
+            characters = self.execute_query(query, (str(guild_id), system.value))
         else:
             query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND entity_type in ('pc', 'npc') ORDER BY name"
             characters = self.execute_query(query, (str(guild_id),))
@@ -116,7 +116,7 @@ class CharacterRepository(BaseRepository[Character]):
         characters = self.execute_query(query, (str(guild_id),))
         return self._convert_list_to_base_characters(characters)
 
-    def upsert_character(self, guild_id, character: BaseCharacter, system: str) -> None:
+    def upsert_character(self, guild_id, character: BaseCharacter, system: SystemType) -> None:
         """Save or update a BaseCharacter by converting it to Character first"""
         CharacterClass = factories.get_specific_character(system, character.entity_type)
 
@@ -185,14 +185,14 @@ class ActiveCharacterRepository(BaseRepository[ActiveCharacter]):
             return None
             
         # Get the system-specific character class
-        CharacterClass = factories.get_specific_character(character.system, EntityType(character.entity_type))
-        
+        CharacterClass = factories.get_specific_character(SystemType(character.system), EntityType(character.entity_type))
+
         # Create the character dict using the helper method
         character_dict = BaseEntity.build_entity_dict(
             id=character.id,
             name=character.name,
             owner_id=character.owner_id,
-            system=character.system,
+            system=SystemType(character.system),
             entity_type=EntityType.get_type_from_str(character.entity_type),
             notes=character.notes,
             avatar_url=character.avatar_url,

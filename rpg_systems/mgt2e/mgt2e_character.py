@@ -1,13 +1,13 @@
 from collections import defaultdict
 from typing import Any, Dict
 import discord
-from core.base_models import BaseCharacter, EntityType, EntityDefaults, EntityLinkType, RollFormula
+from core.base_models import BaseCharacter, EntityType, EntityDefaults, EntityLinkType, RollFormula, SystemType
 from core.roll_formula import RollFormula
 from rpg_systems.mgt2e.mgt2e_roll_formula import MGT2ERollFormula
 from rpg_systems.mgt2e.mgt2e_roll_views import MGT2ERollFormulaView
 from data.repositories.repository_factory import repositories
 
-SYSTEM = "mgt2e"
+SYSTEM = SystemType.MGT2E
 
 class MGT2ECharacter(BaseCharacter):
     ENTITY_DEFAULTS = EntityDefaults({

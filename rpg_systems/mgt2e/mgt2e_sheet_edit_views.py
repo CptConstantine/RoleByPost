@@ -1,11 +1,12 @@
 import discord
 import discord.ui as ui
+from core.base_models import SystemType
 from core.inventory_views import EditInventoryView
 from core.shared_views import EditNameModal, EditNotesModal, PaginatedSelectView
 from rpg_systems.mgt2e.mgt2e_character import MGT2ECharacter, get_character, get_skill_categories
 from data.repositories.repository_factory import repositories
 
-SYSTEM = "mgt2e"
+SYSTEM = SystemType.MGT2E
 
 class MGT2ESheetEditView(ui.View):
     def __init__(self, editor_id: int, char_id: str):

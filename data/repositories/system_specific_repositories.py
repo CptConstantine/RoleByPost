@@ -1,5 +1,6 @@
 from dataclasses import asdict
 from typing import List, Optional, Dict, Any
+from core.base_models import SystemType
 from rpg_systems.fate.aspect import Aspect, AspectType
 from .base_repository import BaseRepository
 from data.models import FateSceneAspects, FateSceneZones, GameAspect, MGT2ESceneEnvironment, DefaultSkills, ZoneAspect
@@ -173,17 +174,17 @@ class DefaultSkillsRepository(BaseRepository[DefaultSkills]):
             skills_json=skills_json
         )
     
-    def get_default_skills(self, guild_id: str, system: str) -> Optional[Dict[str, Any]]:
+    def get_default_skills(self, guild_id: str, system: SystemType) -> Optional[Dict[str, Any]]:
         """Get default skills for a guild and system"""
         query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND system = %s"
         result = self.execute_query(query, (str(guild_id), system), fetch_one=True)
         return result.skills_json if result else None
     
-    def set_default_skills(self, guild_id: str, system: str, skills: Dict[str, Any]) -> None:
+    def set_default_skills(self, guild_id: str, system: SystemType, skills: Dict[str, Any]) -> None:
         """Set default skills for a guild and system"""
         default_skills = DefaultSkills(
             guild_id=str(guild_id),
-            system=system,
+            system=system.value,
             skills_json=skills
         )
         self.save(default_skills, conflict_columns=['guild_id', 'system'])

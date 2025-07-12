@@ -1,7 +1,7 @@
 from typing import Any, ClassVar, Dict, List
 import discord
 from discord import ui
-from core.base_models import AccessType, BaseCharacter, BaseEntity, EntityDefaults, EntityType, EntityLinkType, AccessLevel
+from core.base_models import AccessType, BaseCharacter, BaseEntity, EntityDefaults, EntityType, EntityLinkType, AccessLevel, SystemType
 from core.inventory_views import EditInventoryView
 from core.shared_views import EditNameModal, EditNotesModal, FinalizeRollButton, RollFormulaView
 from core.roll_formula import RollFormula
@@ -195,7 +195,7 @@ class GenericRollFormula(RollFormula):
         super().__init__(roll_parameters_dict)
 
 class GenericSheetEditView(ui.View):
-    def __init__(self, editor_id: int, char_id: str, system: str):
+    def __init__(self, editor_id: int, char_id: str, system: SystemType):
         super().__init__(timeout=120)
         self.editor_id = editor_id
         self.char_id = char_id
@@ -339,7 +339,7 @@ class GenericContainer(BaseEntity):
                 self._apply_default_field(key, value, guild_id)
 
 class GenericContainerEditView(ui.View):
-    def __init__(self, editor_id: int, char_id: str, system: str, is_gm: bool = False):
+    def __init__(self, editor_id: int, char_id: str, system: SystemType, is_gm: bool = False):
         super().__init__(timeout=60*60*24) # 24 hours timeout
         self.editor_id = editor_id
         self.char_id = char_id

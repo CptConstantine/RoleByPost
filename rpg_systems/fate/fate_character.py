@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Union
 import discord
-from core.base_models import BaseCharacter, EntityDefaults, EntityType, EntityLinkType
+from core.base_models import BaseCharacter, EntityDefaults, EntityType, EntityLinkType, SystemType
 from core.roll_formula import RollFormula
 from data.repositories.repository_factory import repositories
 from rpg_systems.fate.aspect import Aspect
@@ -9,7 +9,7 @@ from rpg_systems.fate.fate_roll_views import FateRollFormulaView
 from rpg_systems.fate.stress_track import StressTrack, StressBox
 from rpg_systems.fate.consequence_track import ConsequenceTrack, Consequence
 
-SYSTEM = "fate"
+SYSTEM = SystemType.FATE
 
 class FateCharacter(BaseCharacter):
     SUPPORTED_ENTITY_TYPES: List[EntityType] = [

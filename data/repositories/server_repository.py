@@ -1,4 +1,6 @@
 from typing import Optional
+
+from core.base_models import SystemType
 from .base_repository import BaseRepository
 from data.models import ServerSettings
 import discord
@@ -30,11 +32,11 @@ class ServerRepository(BaseRepository[ServerSettings]):
         query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s"
         return self.execute_query(query, (str(guild_id),), fetch_one=True)
     
-    def get_system(self, guild_id: int) -> str:
+    def get_system(self, guild_id: int) -> SystemType:
         """Get the RPG system for a guild"""
         server = self.get_by_guild_id(str(guild_id))
-        return server.system if server and server.system else 'generic'
-    
+        return SystemType(server.system) if server and server.system else SystemType.GENERIC
+
     async def has_gm_permission(self, guild_id: int, user: discord.Member) -> bool:
         """Check if user has GM permissions"""
         server_settings = self.get_by_guild_id(str(guild_id))
@@ -45,13 +47,13 @@ class ServerRepository(BaseRepository[ServerSettings]):
         
         return False
     
-    def set_system(self, guild_id: str, system: str) -> None:
+    def set_system(self, guild_id: str, system: SystemType) -> None:
         """Set the RPG system for a server"""
         server = self.get_by_guild_id(guild_id)
         if server:
-            server.system = system
+            server.system = system.value
         else:
-            server = ServerSettings(guild_id=guild_id, system=system)
+            server = ServerSettings(guild_id=guild_id, system=system.value)
         self.save(server, conflict_columns=['guild_id'])
     
     def get_gm_role_id(self, guild_id: int) -> Optional[str]:

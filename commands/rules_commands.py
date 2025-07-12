@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import openai
 from core import channel_restriction
+from core.base_models import SystemType
 from core.channel_restriction import channel_restricted
 from data.repositories.repository_factory import repositories
 
@@ -80,7 +81,7 @@ class RulesCommands(commands.Cog):
                 description=response,
                 color=discord.Color.blue()
             )
-            embed.set_footer(text=f"System: {system.upper()} | Asked by {interaction.user.display_name}")
+            embed.set_footer(text=f"System: {system.value.upper()} | Asked by {interaction.user.display_name}")
             
             await interaction.followup.send(embed=embed)
             
@@ -223,7 +224,7 @@ class RulesCommands(commands.Cog):
     async def _generate_rules_response(
         self, 
         prompt: str, 
-        system: str, 
+        system: SystemType, 
         homebrew_rules: dict, 
         api_key: str
     ) -> str:
@@ -280,7 +281,7 @@ Question: {prompt}"""
         except Exception as e:
             raise Exception(f"OpenAI API error: {str(e)}")
 
-    def _get_system_context(self, system: str) -> str:
+    def _get_system_context(self, system: SystemType) -> str:
         """
         Get appropriate context description for the RPG system.
         
@@ -291,12 +292,12 @@ Question: {prompt}"""
             str: Description of the system for AI context
         """
         system_contexts = {
-            'fate': 'Fate Core, Fate Condensed, and Fate Accelerated RPG systems',
-            'mgt2e': 'Mongoose Traveller 2nd Edition RPG system',
-            'generic': 'generic tabletop RPG mechanics and best practices'
+            SystemType.FATE: 'Fate Core, Fate Condensed, and Fate Accelerated RPG systems',
+            SystemType.MGT2E: 'Mongoose Traveller 2nd Edition RPG system',
+            SystemType.GENERIC: 'Generic tabletop RPG system with no specific rules'
         }
-        
-        return system_contexts.get(system, 'generic tabletop RPG systems')
+
+        return system_contexts.get(system, 'Generic tabletop RPG system with no specific rules')
 
 async def setup_rules_commands(bot: commands.Bot):
     """

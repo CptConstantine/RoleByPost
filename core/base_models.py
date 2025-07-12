@@ -8,6 +8,28 @@ import discord.ui as ui
 from core.roll_formula import RollFormula
 from data.models import EntityLink
 
+class SystemType(Enum):
+    """Supported RPG systems"""
+    GENERIC = "generic"
+    FATE = "fate"
+    MGT2E = "mgt2e"
+
+    def __str__(self):
+        return self.value
+
+    @classmethod
+    def get_all(cls) -> List['SystemType']:
+        """Get all system names as a list"""
+        return [member for member in cls]
+
+    @staticmethod
+    def get_system_from_str(system_str: str) -> 'SystemType':
+        """Get the SystemType enum member from a string."""
+        try:
+            return SystemType(system_str.lower())
+        except ValueError:
+            raise ValueError(f"Unknown system type: {system_str}")
+
 class AccessType(Enum):
     """Simple access control for entities"""
     PUBLIC = "public"  # Anyone can access
@@ -33,14 +55,6 @@ class AccessLevel:
         except ValueError:
             access_type = AccessType.PUBLIC
         return cls(access_type=access_type)
-    
-    def can_access(self, user_id: str, is_gm: bool = False) -> bool:
-        """Check if a user can access the entity"""
-        if self.access_type == AccessType.PUBLIC:
-            return True
-        elif self.access_type == AccessType.GM_ONLY:
-            return is_gm
-        return False
 
 class BaseRpgObj(ABC):
     """
@@ -126,12 +140,13 @@ class BaseRpgObj(ABC):
         return self.owner_id == str(user_id)
 
     @property
-    def system(self) -> str:
-        return self.data.get("system")
+    def system(self) -> SystemType:
+        system_str = self.data.get("system", SystemType.GENERIC.value)
+        return SystemType(system_str)
 
     @system.setter
-    def system(self, value: str):
-        self.data["system"] = value
+    def system(self, value: SystemType):
+        self.data["system"] = value.value
 
     @property
     def notes(self) -> list:
@@ -337,7 +352,7 @@ class BaseEntity(BaseRpgObj):
 
     @property
     def entity_type(self) -> EntityType:
-        entity_type_str = self.data.get("entity_type", "generic")
+        entity_type_str = self.data.get("entity_type", EntityType.GENERIC.value)
         return EntityType(entity_type_str)
 
     @entity_type.setter
@@ -392,7 +407,7 @@ class BaseEntity(BaseRpgObj):
         id: str, 
         name: str, 
         owner_id: str, 
-        system: str,
+        system: SystemType,
         entity_type: EntityType,
         notes: List[str] = None, 
         avatar_url: str = None, 
@@ -404,7 +419,7 @@ class BaseEntity(BaseRpgObj):
             "id": id,
             "name": name,
             "owner_id": owner_id,
-            "system": system,
+            "system": system.value,
             "entity_type": entity_type.value,
             "notes": notes or [],
             "avatar_url": avatar_url or '',

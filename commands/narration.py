@@ -1,6 +1,6 @@
 import re
 import discord
-from core.base_models import BaseCharacter, BaseEntity, EntityType
+from core.base_models import BaseCharacter, BaseEntity, EntityType, SystemType
 import core.factories as factories
 from data.repositories.repository_factory import repositories
 
@@ -135,7 +135,7 @@ async def process_narration(message: discord.Message):
             character = factories.build_entity(
                 name=npc_name,
                 owner_id=str(message.author.id),
-                system="generic",  # Use generic system for temporary NPCs
+                system=SystemType.GENERIC,  # Use generic system for temporary NPCs
                 entity_type=EntityType.NPC
             )
     else:

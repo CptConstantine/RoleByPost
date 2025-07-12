@@ -232,7 +232,7 @@ class CharacterCommands(commands.Cog):
         if not repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id):
             repositories.active_character.set_active_character(str(interaction.guild.id), str(interaction.user.id), character.id)
         
-        await interaction.followup.send(f'📝 Created {system.upper()} character: **{char_name}**.', ephemeral=True)
+        await interaction.followup.send(f'📝 Created {system.value.upper()} character: **{char_name}**.', ephemeral=True)
 
     @create_group.command(name="npc", description="GM: Create a new NPC with a required name")
     @app_commands.describe(

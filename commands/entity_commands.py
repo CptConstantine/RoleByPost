@@ -148,7 +148,7 @@ class EntityCommands(commands.Cog):
         valid_types = factories.get_system_entity_types(system)
         
         if entity_type not in [type.value for type in valid_types]:
-            await interaction.followup.send(f"❌ Invalid entity type '{entity_type}' for {system.upper()} system.", ephemeral=True)
+            await interaction.followup.send(f"❌ Invalid entity type '{entity_type}' for {system.value.upper()} system.", ephemeral=True)
             return
         
         e_type = EntityType(entity_type)

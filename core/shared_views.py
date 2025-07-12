@@ -2,7 +2,7 @@ import re
 import discord
 from discord import Interaction, TextStyle, ui
 from core import factories
-from core.base_models import BaseCharacter, RollFormula
+from core.base_models import BaseCharacter, RollFormula, SystemType
 from data.repositories.repository_factory import repositories
 
 class PaginatedSelectView(ui.View):
@@ -145,7 +145,7 @@ class SceneNotesEditView(discord.ui.View):
             self.add_item(SceneNotesButton(guild_id))
 
 class EditNameModal(ui.Modal, title="Edit Character Name"):
-    def __init__(self, entity_id: str, system: str):
+    def __init__(self, entity_id: str, system: SystemType):
         super().__init__()
         self.entity = repositories.entity.get_by_id(str(entity_id))
         self.system = system
@@ -172,7 +172,7 @@ class EditNameModal(ui.Modal, title="Edit Character Name"):
         await interaction.response.edit_message(content="✅ Name updated.", embed=embed, view=view)
 
 class EditNotesModal(ui.Modal, title="Edit Notes"):
-    def __init__(self, entity_id: str, system: str):
+    def __init__(self, entity_id: str, system: SystemType):
         super().__init__()
         self.entity = repositories.entity.get_by_id(str(entity_id))
         self.system = system

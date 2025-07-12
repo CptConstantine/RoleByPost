@@ -5,10 +5,10 @@ from discord import app_commands
 from typing import List
 from data.repositories.repository_factory import repositories
 from core import channel_restriction
-from core.base_models import BaseEntity, EntityType, EntityLinkType
+from core.base_models import BaseEntity, EntityType, EntityLinkType, SystemType
 import core.factories as factories
 
-SYSTEM = "fate"
+SYSTEM = SystemType.FATE
 
 class FateCommands(commands.Cog):
     def __init__(self, bot):
@@ -31,7 +31,7 @@ class FateCommands(commands.Cog):
         """Show all aspects in the current scene and their descriptions"""
         # Check if server is using Fate
         system = repositories.server.get_system(str(interaction.guild.id))
-        if system != "fate":
+        if system != SystemType.FATE:
             await interaction.response.send_message("⚠️ This command is only available for Fate games.", ephemeral=True)
             return
 

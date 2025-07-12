@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Any
 from .base_repository import BaseRepository
 from data.models import Entity
-from core.base_models import AccessType, BaseEntity, EntityType, EntityJSONEncoder
+from core.base_models import AccessType, BaseEntity, EntityType, EntityJSONEncoder, SystemType
 import json
 import uuid
 import time
@@ -59,14 +59,14 @@ class EntityRepository(BaseRepository[Entity]):
             return None
             
         # Get the system-specific entity class
-        EntityClass = factories.get_specific_entity(entity.system, EntityType(entity.entity_type))
-        
+        EntityClass = factories.get_specific_entity(SystemType(entity.system), EntityType(entity.entity_type))
+
         # Create the entity dict using the helper method
         entity_dict = BaseEntity.build_entity_dict(
             id=entity.id,
             name=entity.name,
             owner_id=entity.owner_id,
-            system=entity.system,
+            system=SystemType(entity.system),
             entity_type=EntityType(entity.entity_type),
             notes=entity.notes,
             avatar_url=entity.avatar_url,
@@ -201,7 +201,7 @@ class EntityRepository(BaseRepository[Entity]):
         entities = self.execute_query(query, (guild_id, user_id))
         return self._convert_list_to_base_entities(entities)
     
-    def upsert_entity(self, guild_id: str, entity: BaseEntity, system: str) -> None:
+    def upsert_entity(self, guild_id: str, entity: BaseEntity, system: SystemType) -> None:
         """Save or update a BaseEntity by converting it to Entity first"""
         # Get system-specific fields
         EntityClass = factories.get_specific_entity(system, entity.entity_type)
@@ -220,7 +220,7 @@ class EntityRepository(BaseRepository[Entity]):
             name=entity.name,
             owner_id=entity.owner_id,
             entity_type=entity.entity_type.value,
-            system=system,
+            system=system.value,
             system_specific_data=system_specific_data,
             notes=notes,
             avatar_url=entity.avatar_url,

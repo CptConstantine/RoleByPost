@@ -21,9 +21,9 @@ async def roll_parameters_autocomplete(interaction: discord.Interaction, current
     current_typing = parts[-1].strip() if parts else ""
     
     # System-specific suggestions
-    if system == "fate":
+    if system == SystemType.FATE:
         choices.extend(await _get_fate_roll_parameter_choices(interaction.guild.id, current, parts, current_typing))
-    elif system == "mgt2e":
+    elif system == SystemType.MGT2E:
         choices.extend(await _get_mgt2e_roll_parameter_choices(interaction.guild.id, current, parts, current_typing))
     else:
         # Generic system - just add modifiers
@@ -70,7 +70,7 @@ async def _get_fate_roll_parameter_choices(guild_id: str, current: str, parts: L
         skill_part = current_typing[6:]  # Remove "skill:" prefix
         
         # Get default skills for this guild/system
-        default_skills = repositories.default_skills.get_default_skills(guild_id, "fate")
+        default_skills = repositories.default_skills.get_default_skills(guild_id, SystemType.FATE)
         if not default_skills:
             default_skills = FateCharacter.DEFAULT_SKILLS
         
@@ -168,7 +168,7 @@ async def _get_mgt2e_roll_parameter_choices(guild_id: str, current: str, parts: 
         skill_part = current_typing[6:]  # Remove "skill:" prefix
         
         # Get default skills for this guild/system
-        default_skills = repositories.default_skills.get_default_skills(guild_id, "mgt2e")
+        default_skills = repositories.default_skills.get_default_skills(guild_id, SystemType.MGT2E)
         if not default_skills:
             default_skills = MGT2ECharacter.DEFAULT_SKILLS
         
