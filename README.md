@@ -12,23 +12,25 @@ A Discord bot for running play-by-post tabletop RPGs, supporting multiple system
   - Import/export characters as JSON files for easy transfer between servers.
 
 - **Entity Connections System**
-  - Create complex links between characters, NPCs, and other entities
-  - Hierarchical entity management for companions, minions, and hirelings
-  - Support for ownership and control of companions (and speak as them through the narration system)
+  - Create links between characters, NPCs, and other entities.
+    - Currently allows for inventory and loot management
+  - Support for control of companions (and speak as them through the narration system)
 
 - **Inventory and Container Management**
-  - Create items and containers with stacking support for quantities
+  - Keep track of items and store them in containers or in a character's inventory.
   - GMs can create "loot containers" that players can take from and give items to
   - Inventory tracking for characters with item links
+  - GMs can hide loot from players and reveal it when the time is right.
 
 - **Scene Management**  
   - Create and manage multiple scenes and keep track of NPCs and notes
   - Switch between scenes to organize different locations or encounters
+  - Attach images to scenes for maps or set dressing.
   - System-specific scene details (Fate aspects, Traveller environmental conditions)
   - Pin scenes to channels for easy reference by all players
 
 - **Customizable Skills**  
-  - GMs can set default skill lists per server and system, via .txt file upload.
+  - GMs can set a default skill list via .txt file upload.
 
 - **Dice Rolling**  
   - Supports standard dice notation (e.g., `2d6+3`) and Fate/Fudge dice (`4df+1`).
