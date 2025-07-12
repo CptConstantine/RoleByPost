@@ -47,40 +47,46 @@ class EntityLinkRepository(BaseRepository[EntityLink]):
     def get_children(self, guild_id: str, entity_id: str, link_type: str = None) -> List[BaseEntity]:
         """Get entities that this entity has links TO (children)"""
         from data.repositories.repository_factory import repositories
+        
+        params = [str(guild_id), str(entity_id)]
+        link_type_clause = ""
         if link_type:
-            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND from_entity_id = %s AND link_type = %s"
-            links = self.execute_query(query, (str(guild_id), str(entity_id), link_type))
-        else:
-            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND from_entity_id = %s"
-            links = self.execute_query(query, (str(guild_id), str(entity_id)))
+            link_type_clause = "AND el.link_type = %s"
+            params.append(link_type)
+
+        query = f"""
+            SELECT e.* 
+            FROM entities e
+            JOIN entity_links el ON e.id = el.to_entity_id
+            WHERE el.guild_id = %s AND el.from_entity_id = %s {link_type_clause}
+            ORDER BY e.name
+        """
         
-        # Get the actual entities
-        child_entities = []
-        for link in links:
-            entity = repositories.entity.get_by_id(link.to_entity_id)
-            if entity:
-                child_entities.append(entity)
-        
-        return child_entities
+        # Use the entity repository's methods to handle conversion from dict to BaseEntity
+        child_entity_dicts = repositories.entity.execute_query(query, tuple(params))
+        return repositories.entity._convert_list_to_base_entities(child_entity_dicts)
 
     def get_parents(self, guild_id: str, entity_id: str, link_type: str = None) -> List[BaseEntity]:
         """Get entities that have links TO this entity (parents)"""
         from data.repositories.repository_factory import repositories
+        
+        params = [str(guild_id), str(entity_id)]
+        link_type_clause = ""
         if link_type:
-            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND to_entity_id = %s AND link_type = %s"
-            links = self.execute_query(query, (str(guild_id), str(entity_id), link_type))
-        else:
-            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND to_entity_id = %s"
-            links = self.execute_query(query, (str(guild_id), str(entity_id)))
+            link_type_clause = "AND el.link_type = %s"
+            params.append(link_type)
+
+        query = f"""
+            SELECT e.* 
+            FROM entities e
+            JOIN entity_links el ON e.id = el.from_entity_id
+            WHERE el.guild_id = %s AND el.to_entity_id = %s {link_type_clause}
+            ORDER BY e.name
+        """
         
-        # Get the actual entities
-        parent_entities = []
-        for link in links:
-            entity = repositories.entity.get_by_id(link.from_entity_id)
-            if entity:
-                parent_entities.append(entity)
-        
-        return parent_entities
+        # Use the entity repository's methods to handle conversion from dict to BaseEntity
+        parent_entity_dicts = repositories.entity.execute_query(query, tuple(params))
+        return repositories.entity._convert_list_to_base_entities(parent_entity_dicts)
 
     def get_links_for_entity(self, guild_id: str, entity_id: str) -> List[EntityLink]:
         """Get all links involving this entity (both directions)"""

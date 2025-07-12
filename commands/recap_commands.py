@@ -32,7 +32,6 @@ class RecapCommands(commands.Cog):
         days="Number of days to include in the recap (default: 7)",
         private="Whether to show the recap only to you (default: False)"
     )
-    @channel_restriction.no_ic_channels()
     async def recap_generate(
         self, 
         interaction: discord.Interaction, 

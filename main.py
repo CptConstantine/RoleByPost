@@ -22,15 +22,20 @@ from data.database import db_manager
 def initialize_database():
     """Initialize PostgreSQL database with schema"""
     schema_file = 'data/init_db.sql'
+    view_file = 'data/views.sql'
     
     with open(schema_file, 'r') as f:
         schema_sql = f.read()
-    
+
+    with open(view_file, 'r') as f:
+        view_sql = f.read()
+
     with db_manager.get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(schema_sql)
-    
-    print("PostgreSQL database schema initialized successfully.")
+            cur.execute(view_sql)
+
+    print("PostgreSQL database schema and views initialized successfully.")
 
 initialize_database()
 

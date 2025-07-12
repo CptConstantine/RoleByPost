@@ -1,6 +1,4 @@
 
-ALTER TABLE scenes ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT NULL;
-
 -- Server settings
 CREATE TABLE IF NOT EXISTS server_settings (
     guild_id TEXT PRIMARY KEY,
