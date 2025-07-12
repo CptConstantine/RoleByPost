@@ -299,8 +299,8 @@ class LinkCommands(commands.Cog):
             await interaction.response.send_message(f"❌ {item.name} has multiple possessors. Please specify which one to transfer from.", ephemeral=True)
             return
         
-        current_owner = current_possessors[0]
-        current_links = current_owner.get_links_to_entity(guild_id, item.id, EntityLinkType.POSSESSES)
+        current_possessor = current_possessors[0]
+        current_links = current_possessor.get_links_to_entity(guild_id, item.id, EntityLinkType.POSSESSES)
         current_quantity = current_links[0].metadata.get("quantity", 1) if current_links else 1
         
         # Determine transfer quantity
@@ -312,23 +312,23 @@ class LinkCommands(commands.Cog):
         
         if transfer_quantity > current_quantity:
             await interaction.response.send_message(
-                f"❌ {current_owner.name} only has {current_quantity}x {item.name}. Cannot transfer {transfer_quantity}.",
+                f"❌ {current_possessor.name} only has {current_quantity}x {item.name}. Cannot transfer {transfer_quantity}.",
                 ephemeral=True
             )
             return
         
         # Remove from current owner
-        current_owner.remove_item(guild_id, item, transfer_quantity)
+        current_possessor.remove_item(guild_id, item, transfer_quantity)
         
         # Add to new owner
         new_owner.add_item(guild_id, item, transfer_quantity)
         
         # Save both entities
-        repositories.entity.upsert_entity(interaction.guild.id, current_owner, system=current_owner.system)
+        repositories.entity.upsert_entity(interaction.guild.id, current_possessor, system=current_possessor.system)
         repositories.entity.upsert_entity(interaction.guild.id, new_owner, system=new_owner.system)
         
         await interaction.response.send_message(
-            f"✅ Transferred {transfer_quantity}x **{item.name}** from **{current_owner.name}** to **{new_owner.name}**",
+            f"✅ Transferred {transfer_quantity}x **{item.name}** from **{current_possessor.name}** to **{new_owner.name}**",
             ephemeral=True
         )
 
