@@ -406,6 +406,7 @@ class FateCharacter(BaseCharacter):
             embed.add_field(name="__Stunts__", value="None", inline=False)
 
         # --- Inventory ---
+        # Fate inventories are all extras instead of just items
         items = self.get_children(guild_id=guild_id, link_type=EntityLinkType.POSSESSES)
         if items:
             # Group items by entity type and count them

@@ -13,8 +13,8 @@ async def npc_name_autocomplete(interaction: discord.Interaction, current: str):
     
     if not active_scene:
         return []
-        
-    scene_npcs = set(repositories.scene_npc.get_scene_npc_ids(str(interaction.guild.id)))
+
+    scene_npcs = set(repositories.scene_npc.get_scene_npc_ids(str(interaction.guild.id), str(active_scene.scene_id)))
     npcs = [
         c for c in all_chars
         if c.is_npc and c.id not in scene_npcs and current.lower() in c.name.lower()

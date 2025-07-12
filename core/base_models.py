@@ -223,20 +223,68 @@ class BaseInitiative(ABC):
         # Accepts a list of InitiativeParticipant or dicts
         self.data["participants"] = [p.to_dict() if isinstance(p, InitiativeParticipant) else p for p in value]
 
-    def add_participant(self, participant: InitiativeParticipant):
+    def add_participant(self, participant: InitiativeParticipant, index: int = None):
         """
-        Add a participant to the initiative.
+        Add a participant to the initiative at a specific (1-based) index.
         If the participant already exists, it will not be added again.
+        Also adds the participant to the remaining_in_round list unless index is <= the current participant's index.
         """
-        if not any(p.id == participant.id for p in self.participants):
-            self.participants.append(participant)
+        participants = self.participants
+        if any(p.id == participant.id for p in participants):
+            return
+
+        # Insert at the specified index (1-based), or append if not provided
+        if index is not None and 1 <= index <= len(participants) + 1:
+            participants.insert(index - 1, participant)
+        else:
+            participants.append(participant)
+        self.participants = participants
+
+        # Determine if we should add to remaining_in_round
+        remaining = self.remaining_in_round
+        # Find the current participant's index (if any)
+        current_participant_id = remaining[0] if remaining else None
+        current_index = None
+        if current_participant_id:
+            try:
+                current_index = [p.id for p in participants].index(current_participant_id)
+            except ValueError:
+                current_index = None
+
+        # Only add to remaining_in_round if index is None or index > current_index + 1
+        should_add = True
+        if index is not None and current_index is not None and index <= current_index + 1:
+            should_add = False
+
+        if should_add and participant.id not in remaining:
+            remaining.append(participant.id)
+            self.remaining_in_round = remaining
 
     def remove_participant(self, participant_id: str):
         """
         Remove a participant by their ID.
         If the participant does not exist, nothing happens.
+        Also removes them from the remaining_in_round list.
+        If the participant is the current participant, advance the turn.
         """
+        # Remove from participants
         self.participants = [p for p in self.participants if p.id != participant_id]
+
+        # Remove from remaining_in_round
+        remaining = self.remaining_in_round
+        if participant_id in remaining:
+            idx = remaining.index(participant_id)
+            # If this participant is the current one (first in list), advance turn
+            if idx == 0:
+                # Remove and advance to next
+                remaining.pop(0)
+                self.remaining_in_round = remaining
+                # Optionally, you could trigger any turn-advance logic here
+            else:
+                # Just remove from remaining
+                remaining.remove(participant_id)
+                self.remaining_in_round = remaining
+
 
     def get_participant_name(self, user_id):
         for p in self.participants:

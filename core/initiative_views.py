@@ -23,7 +23,7 @@ class BasePinnedInitiativeView(ABC, discord.ui.View):
     Base class for initiative views that use a single pinned message.
     Handles common functionality for pinning and updating messages.
     """
-    def __init__(self, guild_id=None, channel_id=None, initiative: BaseInitiative=None, message_id=None):
+    def __init__(self, guild_id=None, channel_id=None, initiative: BaseInitiative = None, message_id=None):
         # Always use timeout=None for persistent views
         super().__init__(timeout=None)
         self.guild_id = guild_id
@@ -168,7 +168,7 @@ class GenericInitiativeView(BasePinnedInitiativeView):
     """
     View for generic initiative: End Turn button, shows current participant.
     """
-    def __init__(self, guild_id=None, channel_id=None, initiative=None, message_id=None):
+    def __init__(self, guild_id=None, channel_id=None, initiative: GenericInitiative = None, message_id=None):
         super().__init__(guild_id, channel_id, initiative, message_id)
         
         # Skip adding buttons during persistent view registration or when not initialized

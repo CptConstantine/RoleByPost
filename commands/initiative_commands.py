@@ -2,9 +2,48 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from typing import List
+from core.base_models import EntityType
 from core.initiative_types import InitiativeParticipant
 from data.repositories.repository_factory import repositories
 import core.factories as factories
+
+async def initiative_participant_name_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+    """Autocomplete for participants in the current initiative."""
+    initiative = repositories.initiative.get_active_initiative(str(interaction.guild.id), str(interaction.channel.id))
+    if not initiative:
+        return []
+    # Only suggest names that match the current input
+    return [
+        app_commands.Choice(name=p.name, value=p.name)
+        for p in initiative.participants
+        if current.lower() in p.name.lower()
+    ][:25]
+
+async def initiative_addable_name_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+    """
+    Autocomplete for PCs and NPCs that are NOT currently in initiative.
+    """
+    guild_id = str(interaction.guild.id)
+    channel_id = str(interaction.channel.id)
+    initiative = repositories.initiative.get_active_initiative(guild_id, channel_id)
+    if not initiative:
+        return []
+
+    # Get all PCs and NPCs in the guild
+    all_chars = repositories.character.get_all_by_guild(guild_id)
+    # Names already in initiative (case-insensitive)
+    in_initiative = {p.name.lower() for p in initiative.participants}
+
+    # Only suggest those not already in initiative and matching current input
+    addable = [
+        c for c in all_chars
+        if (c.entity_type in (EntityType.PC, EntityType.NPC, EntityType.COMPANION)) and (c.name.lower() not in in_initiative) and (current.lower() in c.name.lower())
+    ]
+
+    return [
+        app_commands.Choice(name=c.name, value=c.name)
+        for c in addable[:25]
+    ]
 
 class InitiativeCommands(commands.Cog):
     def __init__(self, bot):
@@ -121,7 +160,8 @@ class InitiativeCommands(commands.Cog):
 
     @initiative_group.command(name="add-char", description="Add a PC or NPC to the current initiative.")
     @app_commands.describe(name="Name of the PC or NPC to add")
-    async def initiative_add_char(self, interaction: discord.Interaction, name: str):
+    @app_commands.autocomplete(name=initiative_addable_name_autocomplete)
+    async def initiative_add_char(self, interaction: discord.Interaction, name: str, position: int = None):
         # Check GM permissions
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can add participants to initiative.", ephemeral=True)
@@ -132,8 +172,7 @@ class InitiativeCommands(commands.Cog):
             await interaction.response.send_message("❌ No active initiative.", ephemeral=True)
             return
             
-        all_chars = repositories.character.get_all_by_guild(str(interaction.guild.id))
-        char = next((c for c in all_chars if c.name.lower() == name.lower()), None)
+        char = repositories.character.get_by_name(str(interaction.guild.id), name)
         if not char:
             await interaction.response.send_message("❌ Character not found.", ephemeral=True)
             return
@@ -149,7 +188,7 @@ class InitiativeCommands(commands.Cog):
             owner_id=str(char.owner_id),
             is_npc=bool(char.is_npc)
         )
-        initiative.add_participant(participant)
+        initiative.add_participant(participant, position)
         repositories.initiative.update_initiative_state(str(interaction.guild.id), str(interaction.channel.id), initiative)
         
         # Create a view and update the pinned message 
@@ -162,10 +201,11 @@ class InitiativeCommands(commands.Cog):
         )
         await view.update_view(interaction)
         
-        await interaction.response.send_message(f"✅ Added {char.name} to initiative.", ephemeral=True)
+        await interaction.followup.send(f"✅ Added {char.name} to initiative.", ephemeral=True)
 
     @initiative_group.command(name="remove-char", description="Remove a PC or NPC from the current initiative.")
     @app_commands.describe(name="Name of the PC or NPC to remove")
+    @app_commands.autocomplete(name=initiative_participant_name_autocomplete)
     async def initiative_remove_char(self, interaction: discord.Interaction, name: str):
         # Check GM permissions
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
@@ -176,12 +216,18 @@ class InitiativeCommands(commands.Cog):
         if not initiative:
             await interaction.response.send_message("❌ No active initiative.", ephemeral=True)
             return
-        
-        if name not in [p.name.lower() for p in initiative.participants]:
+
+        if name.lower() not in [p.name.lower() for p in initiative.participants]:
             await interaction.response.send_message("❌ Name not found in initiative.", ephemeral=True)
             return
+
+        if initiative.participants.__len__() <= 1:
+            await interaction.response.send_message("❌ Cannot remove the last participant from initiative. Use `/init end` instead", ephemeral=True)
+            return
         
-        initiative.remove_participant(name)
+        char_id = next((str(p.id) for p in initiative.participants if p.name.lower() == name.lower()), None)
+        
+        initiative.remove_participant(char_id)
             
         repositories.initiative.update_initiative_state(str(interaction.guild.id), str(interaction.channel.id), initiative)
         
@@ -195,7 +241,7 @@ class InitiativeCommands(commands.Cog):
         )
         await view.update_view(interaction)
         
-        await interaction.response.send_message(f"✅ Removed {name} from initiative.", ephemeral=True)
+        await interaction.followup.send(f"✅ Removed {name} from initiative.", ephemeral=True)
 
     @initiative_group.command(name="set-default", description="Set the default initiative type for this server.")
     @app_commands.describe(type="Type of initiative (e.g., popcorn, generic)")
