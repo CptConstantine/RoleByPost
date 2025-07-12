@@ -214,3 +214,19 @@ class EntityLink:
             self.metadata = {}
         if self.created_at is None:
             self.created_at = datetime.now()
+
+@dataclass
+class EntityDetails:
+    """Represents the data returned from the vw_entity_details view."""
+    id: str
+    guild_id: str
+    name: str
+    owner_id: str
+    entity_type: str
+    system: str
+    avatar_url: str
+    access_type: str
+    possessed_items: Optional[List[Dict[str, Any]]]
+    possessed_by: Optional[List[Dict[str, Any]]]
+    controls: Optional[List[Dict[str, Any]]]
+    controlled_by: Optional[List[Dict[str, Any]]]

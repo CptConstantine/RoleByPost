@@ -209,13 +209,13 @@ class LinkCommands(commands.Cog):
             await interaction.response.send_message(f"❌ Entity '{entity_name}' not found.", ephemeral=True)
             return
         
-        # Get all links involving this entity
-        links = repositories.link.get_links_for_entity(str(interaction.guild.id), entity.id)
+        # Get all links involving this entity using the view
+        entity_details = repositories.entity_details.get_by_id(entity.id)
         
-        if not links:
-            await interaction.response.send_message(f"**{entity_name}** has no links.", ephemeral=True)
-            return
-        
+        if not entity_details:
+             await interaction.response.send_message(f"**{entity_name}** has no links.", ephemeral=True)
+             return
+
         embed = discord.Embed(
             title=f"🔗 Links for {entity_name}",
             color=discord.Color.blue()
@@ -223,29 +223,21 @@ class LinkCommands(commands.Cog):
         
         outgoing_links = []
         incoming_links = []
+
+        # Add pre-aggregated links from the view
+        if entity_details.possessed_items:
+            outgoing_links.extend([f"• **Possesses** {entity['name']}" for entity in entity_details.possessed_items])
+        if entity_details.controls:
+            outgoing_links.extend([f"• **Controls** {entity['name']}" for entity in entity_details.controls])
+        if entity_details.possessed_by:
+            incoming_links.extend([f"• **{entity['name']}** possesses this entity" for entity in entity_details.possessed_by])
+        if entity_details.controlled_by:
+            incoming_links.extend([f"• **{entity['name']}** controls this entity" for entity in entity_details.controlled_by])
         
-        for rel in links:
-            if rel.from_entity_id == entity.id:
-                # This entity has a link TO another entity
-                target_entity = self._find_entity_by_id(rel.to_entity_id)
-                if target_entity:
-                    rel_name = rel.link_type.replace("_", " ").title()
-                    description = rel.metadata.get("description", "") if rel.metadata else ""
-                    line = f"• **{rel_name}** {target_entity.name}"
-                    if description:
-                        line += f" - *{description}*"
-                    outgoing_links.append(line)
-            else:
-                # Another entity has a link TO this entity
-                source_entity = self._find_entity_by_id(rel.from_entity_id)
-                if source_entity:
-                    rel_name = rel.link_type.replace("_", " ").title()
-                    description = rel.metadata.get("description", "") if rel.metadata else ""
-                    line = f"• **{source_entity.name}** {rel_name.lower()} this entity"
-                    if description:
-                        line += f" - *{description}*"
-                    incoming_links.append(line)
-        
+        if not outgoing_links and not incoming_links:
+            await interaction.response.send_message(f"**{entity_name}** has no links.", ephemeral=True)
+            return
+
         if outgoing_links:
             embed.add_field(
                 name="Links To Others",

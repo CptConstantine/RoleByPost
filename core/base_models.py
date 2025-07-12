@@ -279,81 +279,35 @@ class EntityLinkType(Enum):
         from data.repositories.repository_factory import repositories
         links_dict = {}
         
-        # Entities this entity owns
-        possessed_entities = repositories.link.get_children(
-            guild_id, 
-            entity.id, 
-            EntityLinkType.POSSESSES.value
-        )
-        if possessed_entities:
-            possessed_names = [e.name for e in possessed_entities[:5]]  # Show first 5
-            possessed_text = ", ".join(possessed_names)
-            if len(possessed_entities) > 5:
-                possessed_text += f" (+{len(possessed_entities) - 5} more)"
-            links_dict[f"📦 Possesses ({len(possessed_entities)})"] = possessed_text
-        
-        # Entities that own this entity
-        possessors = repositories.link.get_parents(
-            guild_id,
-            entity.id, 
-            EntityLinkType.POSSESSES.value
-        )
-        if possessors:
-            possessor_names = [e.name for e in possessors]
-            links_dict["📦 Possessed By"] = ", ".join(possessor_names)
+        # Use the new view to get aggregated link data
+        entity_details = repositories.vw_entity_details.get_by_id(entity.id)
 
-        # Control links
-        controlled_entities = repositories.link.get_children(
-            guild_id, 
-            entity.id, 
-            EntityLinkType.CONTROLS.value
-        )
-        if controlled_entities:
-            controlled_names = [e.name for e in controlled_entities]
-            links_dict["🎮 Controls"] = ", ".join(controlled_names)
-        
-        controllers = repositories.link.get_parents(
-            guild_id, 
-            entity.id, 
-            EntityLinkType.CONTROLS.value
-        )
-        if controllers:
-            controller_names = [e.name for e in controllers]
-            links_dict["🎮 Controlled By"] = ", ".join(controller_names)
-        
-        # Get all other links
-        all_links = repositories.link.get_links_for_entity(
-            guild_id, 
-            entity.id
-        )
-        
-        # Filter out POSSESSES and CONTROLS links (already shown above)
-        other_links = [
-            rel for rel in all_links 
-            if rel.link_type not in [EntityLinkType.POSSESSES.value, EntityLinkType.CONTROLS.value]
-        ]
-        
-        if other_links:
-            rel_lines = []
-            for rel in other_links[:3]:  # Show first 3 other links
-                if rel.from_entity_id == entity.id:
-                    # This entity has a link TO another entity
-                    target_entity = repositories.entity.get_by_id(rel.to_entity_id)
-                    if target_entity:
-                        rel_name = rel.link_type.replace("_", " ").title()
-                        rel_lines.append(f"• {rel_name} **{target_entity.name}**")
-                else:
-                    # Another entity has a link TO this entity
-                    source_entity = repositories.entity.get_by_id(rel.from_entity_id)
-                    if source_entity:
-                        rel_name = rel.link_type.replace("_", " ").title()
-                        rel_lines.append(f"• **{source_entity.name}** {rel_name.lower()} this entity")
+        if entity_details:
+            # Entities this entity owns
+            if entity_details.possessed_items:
+                possessed_entities = entity_details.possessed_items
+                possessed_names = [e['name'] for e in possessed_entities[:5]]
+                possessed_text = ", ".join(possessed_names)
+                if len(possessed_entities) > 5:
+                    possessed_text += f" (+{len(possessed_entities) - 5} more)"
+                links_dict[f"📦 Possesses ({len(possessed_entities)})"] = possessed_text
+
+            # Entities that own this entity
+            if entity_details.possessed_by:
+                possessors = entity_details.possessed_by
+                possessor_names = [e['name'] for e in possessors]
+                links_dict["📦 Possessed By"] = ", ".join(possessor_names)
+
+            # Control links
+            if entity_details.controls:
+                controlled_entities = entity_details.controls
+                controlled_names = [e['name'] for e in controlled_entities]
+                links_dict["🎮 Controls"] = ", ".join(controlled_names)
             
-            if rel_lines:
-                rel_text = "\n".join(rel_lines)
-                if len(other_links) > 3:
-                    rel_text += f"\n(+{len(other_links) - 3} more links)"
-                links_dict["🔗 Other Links"] = rel_text
+            if entity_details.controlled_by:
+                controllers = entity_details.controlled_by
+                controller_names = [e['name'] for e in controllers]
+                links_dict["🎮 Controlled By"] = ", ".join(controller_names)
         
         return links_dict
 

@@ -1,5 +1,6 @@
 from data.repositories.entity_repository import EntityRepository
 from data.repositories.entity_link_repository import EntityLinkRepository
+from data.repositories.vw_entity_details_repository import EntityDetailsRepository
 from .channel_permission_repository import ChannelPermissionRepository
 from .server_repository import ServerRepository
 from .homebrew_repository import HomebrewRepository
@@ -62,6 +63,9 @@ class RepositoryFactory:
         
         # EntityLink repository
         self._link_repo = None
+
+        # Entity details view repository
+        self._entity_details_repo = None
 
     # Core repositories
     @property
@@ -222,6 +226,13 @@ class RepositoryFactory:
         if self._link_repo is None:
             self._link_repo = EntityLinkRepository()
         return self._link_repo
+
+    # EntityDetails repository
+    @property
+    def entity_details(self) -> EntityDetailsRepository:
+        if self._entity_details_repo is None:
+            self._entity_details_repo = EntityDetailsRepository()
+        return self._entity_details_repo
 
 # Global repository factory instance
 repositories = RepositoryFactory()
