@@ -4,7 +4,7 @@ import dotenv
 import discord
 from discord.ext import commands
 from commands.narration import process_narration
-from commands import character_commands, entity_commands, initiative_commands, link_commands, reminder_commands, roll_commands, scene_commands, setup_commands, recap_commands, rules_commands
+from commands import character_commands, entity_commands, help_commands, initiative_commands, link_commands, reminder_commands, roll_commands, scene_commands, setup_commands, recap_commands, rules_commands
 from rpg_systems.fate import fate_commands
 from core.initiative_views import GenericInitiativeView, PopcornInitiativeView
 from core.scene_views import GenericSceneView
@@ -49,6 +49,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 async def setup_hook():
     """Setup hook runs before the bot connects to Discord"""
     # Register command trees
+    await help_commands.setup_help_commands(bot)
     await setup_commands.setup_setup_commands(bot)
     await character_commands.setup_character_commands(bot)
     await scene_commands.setup_scene_commands(bot)
