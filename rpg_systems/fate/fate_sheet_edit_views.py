@@ -22,7 +22,7 @@ class FateSheetEditView(ui.View):
 
     @ui.button(label="Edit Stress", style=discord.ButtonStyle.primary, row=1)
     async def edit_stress(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.edit_message(content="Editing stress tracks:", view=EditStressTracksView(interaction.guild.id, self.editor_id, self.char_id))
+        await interaction.response.edit_message(content="Editing stress tracks:", view=EditStressTracksView(interaction.guild.id, self.editor_id, self.char_id, 0))
 
     @ui.button(label="Edit Consequences", style=discord.ButtonStyle.primary, row=1)
     async def edit_consequences(self, interaction: discord.Interaction, button: ui.Button):
@@ -179,18 +179,15 @@ class EditAspectsView(ui.View):
         return callback
     
 class EditStressTracksView(ui.View):
-    def __init__(self, guild_id: int, user_id: int, char_id: str):
+    def __init__(self, guild_id: int, user_id: int, char_id: str, track_index: int):
         super().__init__(timeout=120)
         self.guild_id = guild_id
         self.user_id = user_id
         self.char_id = char_id
-        self.current_track_index = 0
+        self.current_track_index = track_index
         
         self.char = get_character(self.char_id)
         self.stress_tracks = self.char.stress_tracks if self.char else []
-        
-        if self.stress_tracks:
-            self.current_track_index = 0
         
         self.render()
 
@@ -362,7 +359,7 @@ class RemoveStressBoxModal(ui.Modal, title="Remove Stress Box"):
         
         await interaction.response.edit_message(
             content=f"✅ Removed stress box with value {removed_box.value} from {track.track_name}.", 
-            view=EditStressTracksView(interaction.guild.id, interaction.user.id, self.char_id)
+            view=EditStressTracksView(interaction.guild.id, interaction.user.id, self.char_id, self.track_index)
         )
 
 class AddStressBoxModal(ui.Modal, title="Add Stress Box"):
@@ -406,7 +403,7 @@ class AddStressBoxModal(ui.Modal, title="Add Stress Box"):
         
         await interaction.response.edit_message(
             content=f"✅ Added stress box with value {value} to {track.track_name}.", 
-            view=EditStressTracksView(interaction.guild.id, interaction.user.id, self.char_id)
+            view=EditStressTracksView(interaction.guild.id, interaction.user.id, self.char_id, self.track_index)
         )
 
 class AddStressTrackModal(ui.Modal, title="Add New Stress Track"):
@@ -476,7 +473,7 @@ class AddStressTrackModal(ui.Modal, title="Add New Stress Track"):
         
         await interaction.response.edit_message(
             content=f"✅ Added new stress track: '{track_name}' with {num_boxes} boxes.", 
-            view=EditStressTracksView(interaction.guild.id, interaction.user.id, self.char_id)
+            view=EditStressTracksView(interaction.guild.id, interaction.user.id, self.char_id, len(character.stress_tracks) - 1)
         )
 
 class EditConsequencesView(ui.View):
@@ -668,7 +665,7 @@ class EditConsequenceModal(ui.Modal, title="Edit Consequence"):
                 description="",
                 is_hidden=False,
                 free_invokes=free_invokes,
-                owner_id=character.owner_id
+                attached_to_id=character.id if character else None
             )
         else:
             # Clear the consequence
