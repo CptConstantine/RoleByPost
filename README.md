@@ -91,27 +91,27 @@ The following are the commands that are currently available.
   Show a guide to all help topics and commands.
 - `/help getting-started`  
   General help for starting out with the bot.
-- `/help characters` or `/help-characters`  
+- `/help characters`
   Help for character management commands.
-- `/help entities` or `/help-entities`  
+- `/help entities`
   Help for entity management commands.
-- `/help rolling` or `/help-rolling`  
+- `/help rolling`
   Help for rolling commands for dice and checks.
-- `/help scenes` or `/help-scenes`  
+- `/help scenes` 
   Help for scene management commands.
-- `/help initiative` or `/help-initiative`  
+- `/help initiative`
   Help for initiative management commands.
-- `/help recaps` or `/help-recaps`  
+- `/help recaps`
   Help for recap generation and management.
-- `/help reminders` or `/help-reminders`  
+- `/help reminders` 
   Help for reminder setup and management.
-- `/help rules` or `/help-rules`  
+- `/help rules`
   Help for rules questions and homebrew management.
-- `/help setup` or `/help-setup`  
+- `/help setup` 
   Help for setup and configuration commands.
-- `/help narration` or `/help-narration`  
+- `/help narration` 
   Help for character speech and narration commands.
-- `/help ai` or `/help-ai`  
+- `/help ai`
   Help for AI-powered commands and features.
 
 ### Setup
