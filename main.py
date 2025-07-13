@@ -83,7 +83,10 @@ async def on_guild_join(guild):
         await guild.owner.send(
             f"👋 Thanks for adding me to **{guild.name}**!\n"
             "Please set up your server with:\n"
-            "`/setup` commands"
+            "`/setup` commands\n"
+            "or use `/help`\n\n"
+            "**Links**\n"
+            "[Documentation](https://github.com/CptConstantine/RoleByPost)\n"
         )
     except Exception:
         # If DM fails, send to first text channel
@@ -103,7 +106,7 @@ async def on_message(message: discord.Message):
     # Update the last message time for the user
     if message.guild:
         if message.author.id != bot.user.id:
-            repositories.last_message_time.update_last_message_time(message.guild.id, message.author.id, message.created_at.timestamp())
+            repositories.last_message_time.update_last_message_time(str(message.guild.id), str(message.author.id), message.created_at.timestamp())
     
     # Handle mentions for automatic reminders (only for non-narration messages)
     if message.guild and message.mentions:
@@ -127,7 +130,7 @@ async def on_message(message: discord.Message):
     await bot.process_commands(message)
 
 @bot.command()
-async def myguild(ctx):
+async def myguild(ctx: commands.Context):
     await ctx.send(f"This server's guild_id is {ctx.guild.id}")
 
 is_deployment = os.getenv("RAILWAY_ENVIRONMENT") is not None
