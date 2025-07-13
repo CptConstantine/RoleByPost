@@ -2,6 +2,8 @@
 
 A Discord bot for running play-by-post tabletop RPGs, supporting multiple systems (currently Generic, Fate and Mongoose Traveller 2e). RoleByPost helps manage character sheets, NPCs, scenes, dice rolls, and inventory management, making it easy to run and play pbp games on Discord.
 
+Discord server **invite link**: https://discord.com/oauth2/authorize?client_id=1379606934470135998&permissions=398291364880&scope=bot%20applications.commands
+
 ---
 
 ## Features
@@ -420,3 +422,11 @@ This project is licensed under the MIT License.
 ## Disclaimer
 
 This bot is not affiliated with any RPG publisher. Please respect the licenses and copyrights of the games you use.
+
+## Private Policy
+
+https://github.com/CptConstantine/RoleByPost/blob/main/PRIVACY.md
+
+## Terms of Service
+
+https://github.com/CptConstantine/RoleByPost/blob/main/TERMS.md
