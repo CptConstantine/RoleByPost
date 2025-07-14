@@ -11,3 +11,4 @@ character/__pycache__/
 *.pyo
 *.pyd
 .github/
+.vscode/

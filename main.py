@@ -75,7 +75,7 @@ async def setup_hook():
 
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user}!')
+    print(f'Logged in as {bot.user} ({bot.user.name})!')
 
 @bot.event
 async def on_guild_join(guild):

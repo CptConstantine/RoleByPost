@@ -1,11 +1,11 @@
 from typing import Any, ClassVar, Dict, List
 import discord
 from discord import ui
-from core.base_models import AccessType, BaseCharacter, BaseEntity, EntityDefaults, EntityType, EntityLinkType, AccessLevel, SystemType
-from core.inventory_views import EditInventoryView
-from core.shared_views import EditNameModal, EditNotesModal, FinalizeRollButton, RollFormulaView
-from core.roll_formula import RollFormula
-from data.models import EntityLink
+from .base_models import AccessType, BaseCharacter, BaseEntity, EntityDefaults, EntityType, EntityLinkType, SystemType
+from .inventory_views import EditInventoryView
+from .shared_views import EditNameModal, EditNotesModal, FinalizeRollButton, RollFormulaView
+from .roll_formula import RollFormula
+
 
 class GenericEntity(BaseEntity):
     """Generic system entity - simple entity with basic properties"""
@@ -24,7 +24,6 @@ class GenericEntity(BaseEntity):
         return cls(data)
     
     def get_sheet_edit_view(self, editor_id: int, is_gm: bool) -> ui.View:
-        from core.generic_entities import GenericSheetEditView
         return GenericSheetEditView(editor_id=editor_id, char_id=self.id, system=self.system)
     
     def apply_defaults(self, entity_type: EntityType = None, guild_id: str = None):
@@ -55,7 +54,6 @@ class GenericCharacter(BaseCharacter):
                 self._apply_default_field(key, value, guild_id) 
     
     def get_sheet_edit_view(self, editor_id: int, is_gm: bool) -> ui.View:
-        from core.generic_entities import GenericSheetEditView
         return GenericSheetEditView(editor_id=editor_id, char_id=self.id, system=self.system)
 
     def format_full_sheet(self, guild_id: int, is_gm: bool = False) -> discord.Embed:
