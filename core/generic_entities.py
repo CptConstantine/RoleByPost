@@ -9,15 +9,17 @@ from .roll_formula import RollFormula
 
 class GenericEntity(BaseEntity):
     """Generic system entity - simple entity with basic properties"""
+    SUPPORTED_ENTITY_TYPES: ClassVar[List[EntityType]] = [EntityType.GENERIC, EntityType.ITEM]
     
     ENTITY_DEFAULTS = EntityDefaults({
         EntityType.GENERIC: {
+        },
+        EntityType.ITEM: {
         }
     })
     
     def __init__(self, data: Dict[str, Any]):
         super().__init__(data)
-        self.entity_type = EntityType.GENERIC
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "GenericEntity":
@@ -62,9 +64,29 @@ class GenericCharacter(BaseCharacter):
             title=f"{self.name or 'Character'}",
             color=discord.Color.greyple()
         )
+
+        # --- Inventory ---
+        items = self.get_inventory(guild_id=guild_id)
+        if items:
+            # Group items by entity type and count them
+            item_counts = {}
+            for item in items:
+                entity_type = item.entity_type
+                if entity_type in item_counts:
+                    item_counts[entity_type] += 1
+                else:
+                    item_counts[entity_type] = 1
+            
+            # Format the display
+            item_lines = [f"• {entity_type.value}(s): {count}" for entity_type, count in item_counts.items()]
+            embed.add_field(name="__Inventory__", value="\n".join(item_lines), inline=False)
+        else:
+            embed.add_field(name="__Inventory__", value="None", inline=False)
+
         notes = self.notes
         notes_display = "\n".join(notes) if notes else "_No notes_"
         embed.add_field(name="Notes", value=notes_display, inline=False)
+
         return embed
 
     def format_npc_scene_entry(self, is_gm: bool) -> str:
