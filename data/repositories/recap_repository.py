@@ -81,14 +81,19 @@ class ApiKeyRepository(BaseRepository[ApiKey]):
     
     def get_openai_key(self, guild_id: str) -> Optional[str]:
         """Get OpenAI API key for a guild"""
-        api_key = self.find_by_id('guild_id', str(guild_id))
-        return api_key.openai_key if api_key else None
-    
+        from data.encryption import decrypt_api_key
+        api_key_entity = self.find_by_id('guild_id', str(guild_id))
+        if api_key_entity and api_key_entity.openai_key:
+            return decrypt_api_key(api_key_entity.openai_key)
+        return None
+
     def set_openai_key(self, guild_id: str, api_key: str) -> None:
-        """Set OpenAI API key for a guild"""
+        """Set OpenAI API key for a guild, encrypting it before storage using cryptography"""
+        from data.encryption import encrypt_api_key
+        encrypted_key = encrypt_api_key(api_key)
         key_entity = ApiKey(
             guild_id=str(guild_id),
-            openai_key=api_key
+            openai_key=encrypted_key
         )
         self.save(key_entity, conflict_columns=['guild_id'])
     
