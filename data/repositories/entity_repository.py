@@ -96,7 +96,7 @@ class EntityRepository(BaseRepository[Entity]):
         entity = self.execute_query(query, (str(guild_id), name), fetch_one=True)
         return self._convert_to_base_entity(entity)
     
-    def get_all_by_guild(self, guild_id: str, entity_type: str = None) -> List[BaseEntity]:
+    def get_all_by_guild(self, guild_id: str, entity_type: EntityType = None) -> List[BaseEntity]:
         """Get all entities for a guild, optionally filtered by type"""
         if entity_type:
             query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND entity_type = %s ORDER BY name"
@@ -111,6 +111,12 @@ class EntityRepository(BaseRepository[Entity]):
         """Get all entities owned by a user"""
         query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND owner_id = %s ORDER BY name"
         entities = self.execute_query(query, (str(guild_id), str(owner_id)))
+        return self._convert_list_to_base_entities(entities)
+    
+    def get_all_by_type(self, guild_id: str, entity_type: EntityType) -> List[BaseEntity]:
+        """Get all entities of a specific type in a guild"""
+        query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND entity_type = %s ORDER BY name"
+        entities = self.execute_query(query, (str(guild_id), entity_type.value))
         return self._convert_list_to_base_entities(entities)
     
     def get_all_accessible(self, guild_id: str, user_id: str, is_gm: bool) -> List[BaseEntity]:

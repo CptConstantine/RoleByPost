@@ -347,7 +347,7 @@ class GenericContainer(BaseEntity):
 
     def reveal_to_players(self) -> None:
         """Set container access to public (reveal to all players)"""
-        self.set_access_type("public")
+        self.set_access_type(AccessType.PUBLIC)
     
     def apply_defaults(self, entity_type: EntityType = None, guild_id: str = None):
         """Apply defaults for containers"""

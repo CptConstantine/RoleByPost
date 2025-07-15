@@ -103,12 +103,26 @@ class CharacterRepository(BaseRepository[Character]):
     def get_user_characters(self, guild_id: int, user_id: int, include_npcs: bool = False) -> List[BaseCharacter]:
         """Get all characters owned by a user"""
         if include_npcs:
-            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND owner_id = %s ORDER BY name"
+            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND owner_id = %s AND entity_type in ('pc', 'npc', 'companion') ORDER BY name"
         else:
-            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND owner_id = %s AND entity_type = 'pc' ORDER BY name"
+            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND owner_id = %s AND entity_type in ('pc', 'companion') ORDER BY name"
         
         characters = self.execute_query(query, (str(guild_id), str(user_id)))
         return self._convert_list_to_base_characters(characters)
+    
+    def get_accessible_characters(self, guild_id: int, user_id: int) -> List[BaseCharacter]:
+        """Get all characters accessible to a user, including public and owned characters"""
+        # Get all characters and companions that are public or in the scene
+        all_chars = self.get_all_by_guild(str(guild_id))
+        public_chars = [char for char in all_chars if char.access_type == AccessType.PUBLIC]
+
+        # Get user's own characters
+        user_chars = self.get_user_characters(guild_id, user_id, include_npcs=True)
+        
+        # Combine and remove duplicates
+        accessible_chars = {char.id: char for char in public_chars + user_chars}
+        
+        return list(accessible_chars.values())
 
     def get_npcs(self, guild_id: int) -> List[BaseCharacter]:
         """Get all NPCs in a guild"""

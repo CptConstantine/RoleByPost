@@ -613,7 +613,7 @@ class BaseEntity(BaseRpgObj):
             link.metadata["quantity"] = current_quantity + quantity
             
             from data.repositories.repository_factory import repositories
-            repositories.link.save(link)
+            repositories.link.update_metadata(link)
             return True
         else:
             # Check if container has space for new unique item
@@ -658,7 +658,7 @@ class BaseEntity(BaseRpgObj):
             # Update quantity
             from data.repositories.repository_factory import repositories
             link.metadata["quantity"] = current_quantity - quantity
-            repositories.link.save(link)
+            repositories.link.update_metadata(link)
             return True
 
 class BaseCharacter(BaseEntity):

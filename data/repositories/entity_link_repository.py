@@ -138,3 +138,24 @@ class EntityLinkRepository(BaseRepository[EntityLink]):
         query = f"DELETE FROM {self.table_name} WHERE guild_id = %s AND (from_entity_id = %s OR to_entity_id = %s)"
         self.execute_query(query, (str(guild_id), str(entity_id), str(entity_id)))
         return True
+    
+    def get_possessed_quantity(self, guild_id: str, parent_id: str, item_id: str) -> int:
+        """Get the quantity of a specific item possessed by an entity"""
+        # Grab the quantity from the metadata if it exists. Default to 1
+        query = f"""
+            SELECT * 
+            FROM {self.table_name} 
+            WHERE guild_id = %s AND from_entity_id = %s AND to_entity_id = %s AND link_type = 'possesses'
+        """
+        link = self.execute_query(query, (str(guild_id), str(parent_id), str(item_id)), fetch_one=True)
+        return link.metadata.get('quantity', 1) if link else 1
+    
+    def update_metadata(self, link: EntityLink) -> EntityLink:
+        """Update the metadata of an existing link"""
+        query = f"""
+            UPDATE {self.table_name} 
+            SET metadata = %s 
+            WHERE id = %s
+        """
+        self.execute_query(query, (json.dumps(link.metadata), link.id))
+        return link
