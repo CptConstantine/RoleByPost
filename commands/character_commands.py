@@ -624,7 +624,8 @@ class CharacterCommands(commands.Cog):
             system=system,
             entity_type=EntityType.COMPANION,
             name=companion_name,
-            owner_id=str(owner_char.owner_id)
+            owner_id=str(owner_char.owner_id),
+            guild_id=str(interaction.guild.id),
         )
 
         # Create CONTROLS link
@@ -775,7 +776,10 @@ class CharacterCommands(commands.Cog):
         )
         
         # Set access to public if transferring to a PC (player character)
-        new_owner_is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), new_controller_char.owner_id)
+        new_owner_member = interaction.guild.get_member(int(new_controller_char.owner_id))
+        new_owner_is_gm = False
+        if new_owner_member:
+            new_owner_is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), new_owner_member)
         if new_controller_char.entity_type == EntityType.PC and not new_owner_is_gm:
             companion.set_access_type(AccessType.PUBLIC)
             system = repositories.server.get_system(str(interaction.guild.id))
