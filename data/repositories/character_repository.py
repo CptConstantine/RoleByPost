@@ -130,34 +130,6 @@ class CharacterRepository(BaseRepository[Character]):
         characters = self.execute_query(query, (str(guild_id),))
         return self._convert_list_to_base_characters(characters)
 
-    def upsert_character(self, guild_id, character: BaseCharacter, system: SystemType) -> None:
-        """Save or update a BaseCharacter by converting it to Character first"""
-        CharacterClass = factories.get_specific_character(system, character.entity_type)
-
-        # Use the system's defined fields
-        system_fields = CharacterClass.ENTITY_DEFAULTS.get_defaults(character.entity_type)
-
-        system_specific_data = {}
-        for key in system_fields:
-            system_specific_data[key] = character.data.get(key)
-
-        notes = character.notes or []
-        
-        # Create Character entity from BaseCharacter
-        storage_character = Character(
-            id=character.id,
-            guild_id=str(guild_id),
-            name=character.name,
-            owner_id=character.owner_id,
-            entity_type='npc' if character.is_npc else 'pc',
-            system=system,
-            system_specific_data=system_specific_data,
-            notes=notes,
-            avatar_url=character.avatar_url
-        )
-        
-        self.save(storage_character, conflict_columns=['id'])
-
     def delete_character(self, guild_id: str, character_id: str) -> None:
         """Delete a character and all its links"""
         # Get the character to find its guild_id

@@ -782,7 +782,7 @@ class CharacterCommands(commands.Cog):
             new_owner_is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), new_owner_member)
         if new_controller_char.entity_type == EntityType.PC and not new_owner_is_gm:
             companion.set_access_type(AccessType.PUBLIC)
-            system = repositories.server.get_system(str(interaction.guild.id))
+            system = repositories.server.get_system(interaction.guild.id)
             repositories.entity.upsert_entity(str(interaction.guild.id), companion, system)
             
             await interaction.followup.send(

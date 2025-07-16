@@ -3,6 +3,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from commands.character_commands import multi_character_autocomplete
+from core.base_models import SystemType
 from core.roll_formula import RollFormula
 from core.shared_views import RequestRollView
 import core.factories as factories

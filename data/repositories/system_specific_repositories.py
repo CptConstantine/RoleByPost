@@ -177,7 +177,7 @@ class DefaultSkillsRepository(BaseRepository[DefaultSkills]):
     def get_default_skills(self, guild_id: str, system: SystemType) -> Optional[Dict[str, Any]]:
         """Get default skills for a guild and system"""
         query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND system = %s"
-        result = self.execute_query(query, (str(guild_id), system), fetch_one=True)
+        result = self.execute_query(query, (str(guild_id), system.value), fetch_one=True)
         return result.skills_json if result else None
     
     def set_default_skills(self, guild_id: str, system: SystemType, skills: Dict[str, Any]) -> None:
