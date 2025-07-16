@@ -175,11 +175,8 @@ The following are the commands that are currently available.
 - `/char switch [char_name]`  
   Set your active character (PC) for this server.
 
-- `/char set-avatar [avatar_url] [file] [char_name]`  
+- `/char set-avatar [char_name] [avatar_url] [file]`  
   Set your character's avatar image with either a url OR a file upload.
-
-- `/char narration-help`  
-  Get help with character narration formatting and channel restrictions.
 
 ### Entities
 
@@ -266,7 +263,7 @@ The following are the commands that are currently available.
 - `/scene pin`  
   (GM only) Pin the current scene to the channel for easy reference. The pin automatically updates when scenes change.
 
-- `/scene off`  
+- `/scene unpin`  
   (GM only) Disable scene pinning and remove all pinned scene messages.
 
 ### Initiative
@@ -335,6 +332,9 @@ The following are the commands that are currently available.
 
 This bot provides special message prefixes that transform regular text messages into formatted character speech or GM narration:
 
+- **Editing narration posts**
+  `right-click message -> Edit Narration`
+
 - **Speaking as Your Character**  
   `pc::Your character's message here`  
   Displays a message as your currently active character, with their avatar if set.
@@ -359,11 +359,11 @@ This bot provides special message prefixes that transform regular text messages 
   Creates a purple-bordered embed with the GM's avatar for scene descriptions and narration.
 
 - **Character Avatars**  
-  Set your character's avatar with `/char set-avatar [url]` to enhance the immersion.
+  Set your character's avatar with `/char set-avatar [char_name] [url] [file]` to enhance the immersion.
 
 **Channel Restrictions:** Narration commands (`pc::`, `npc::`, `gm::`) are automatically blocked in **Out-of-Character (OOC)** channels to maintain immersion. Use them in **In-Character (IC)** or **Unrestricted** channels.
 
-For more detailed help, use `/char narration-help`.
+For more detailed help, use `/help narration`.
 
 ### Fate System Commands
 
@@ -384,7 +384,7 @@ All aspect editing supports:
 
 ## Features Planned
 
-- Iron out any leftover bugs with the access level system
+- Convert some commands to context menu commands
 - System specific features
   - Traveller: starships, travel, and maintenance cost calculations
   - Container management features (weight/bulk, item type filtering, etc.)
