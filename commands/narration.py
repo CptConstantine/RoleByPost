@@ -184,6 +184,15 @@ async def process_gm_narration(message: discord.Message, narration_content: str)
     """Process GM narration messages."""
     target_channel = message.channel
     
+    # Check permissions first
+    me = target_channel.guild.me
+    if not target_channel.permissions_for(me).manage_webhooks:
+        await message.channel.send("❌ I need 'Manage Webhooks' permission to send GM narration.", delete_after=10)
+        return
+    
+    # Get or create the webhook
+    webhook = next((wh for wh in await target_channel.webhooks() if wh.name == "RoleByPostCharacters"), None) or await target_channel.create_webhook(name="RoleByPostCharacters")
+    
     # Create GM narration embed
     embed = discord.Embed(
         description=narration_content,
@@ -195,9 +204,21 @@ async def process_gm_narration(message: discord.Message, narration_content: str)
         icon_url=message.author.display_avatar.url  # Use the GM's avatar
     )
     
-    # Send the GM narration
+    # Disable ALL mentions - users, roles, everyone, here
+    allowed_mentions = discord.AllowedMentions(
+        users=False,
+        roles=False,
+        everyone=False
+    )
+    
+    # Send the GM narration using webhook
     try:
-        await target_channel.send(embed=embed)
+        await webhook.send(
+            embeds=[embed],
+            username="GM",
+            avatar_url=message.author.display_avatar.url,
+            allowed_mentions=allowed_mentions
+        )
         try:
             await message.delete()
         except:
