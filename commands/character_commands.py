@@ -274,7 +274,7 @@ class CharacterCommands(commands.Cog):
         system = repositories.server.get_system(interaction.guild.id)
         
         # Get characters based on filters
-        characters = repositories.character.get_all_pcs_and_npcs_by_guild(interaction.guild.id, system)
+        characters = repositories.character.get_all_by_guild(interaction.guild.id, system)
         title = "Characters"
         
         # Filter by user's permissions
@@ -282,8 +282,28 @@ class CharacterCommands(commands.Cog):
             if show_npcs:
                 await interaction.followup.send("❌ Only GMs can view NPCs.", ephemeral=True)
                 return
-            # Show only user's characters
-            characters = [char for char in characters if char.owner_id == str(interaction.user.id)]
+            # Show only user's characters and companions they control
+            user_characters = []
+            for char in characters:
+                if char.owner_id == str(interaction.user.id):
+                    user_characters.append(char)
+                elif char.entity_type == EntityType.COMPANION:
+                    # Check if user owns any characters that control this companion
+                    controlling_chars = repositories.link.get_parents(
+                        str(interaction.guild.id),
+                        char.id,
+                        EntityLinkType.CONTROLS.value
+                    )
+                    
+                    user_controls_companion = any(
+                        str(controller.owner_id) == str(interaction.user.id) 
+                        for controller in controlling_chars
+                    )
+                    
+                    if user_controls_companion:
+                        user_characters.append(char)
+            
+            characters = user_characters
         else:
             # GM can see all, but filter NPCs if requested
             if not show_npcs:
@@ -315,7 +335,7 @@ class CharacterCommands(commands.Cog):
                     EntityLinkType.CONTROLS.value
                 )
                 
-                info = f"**{char.name}** ({'NPC' if char.is_npc else 'PC'})"
+                info = f"**{char.name}** ({char.entity_type.value.upper()})"
                 if controlled_by:
                     info += f"\n  *Controlled by: {', '.join([c.name for c in controlled_by])}*"
                 if controls_entities:
@@ -326,8 +346,9 @@ class CharacterCommands(commands.Cog):
             embed.description = "\n\n".join(character_info)
         else:
             # Simple list grouped by type
-            pcs = [char for char in characters if not char.is_npc]
-            npcs = [char for char in characters if char.is_npc]
+            pcs = [char for char in characters if char.entity_type == EntityType.PC]
+            npcs = [char for char in characters if char.entity_type == EntityType.NPC]
+            companions = [char for char in characters if char.entity_type == EntityType.COMPANION]
             
             if pcs:
                 pc_lines = []
@@ -337,6 +358,28 @@ class CharacterCommands(commands.Cog):
                 embed.add_field(
                     name=f"Player Characters ({len(pcs)})",
                     value="\n".join(pc_lines)[:1024],
+                    inline=False
+                )
+            
+            if companions:
+                companion_lines = []
+                for char in companions:
+                    # Get who controls this companion
+                    controlling_chars = repositories.link.get_parents(
+                        str(interaction.guild.id),
+                        char.id,
+                        EntityLinkType.CONTROLS.value
+                    )
+                    
+                    if controlling_chars:
+                        controller_names = [c.name for c in controlling_chars]
+                        companion_lines.append(f"• {char.name} (controlled by {', '.join(controller_names)})")
+                    else:
+                        companion_lines.append(f"• {char.name} (no controller)")
+
+                embed.add_field(
+                    name=f"Companions ({len(companions)})",
+                    value="\n".join(companion_lines)[:1024],
                     inline=False
                 )
             
