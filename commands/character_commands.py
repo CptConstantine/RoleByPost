@@ -4,6 +4,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from core.base_models import AccessType, BaseCharacter, BaseEntity, EntityType, EntityLinkType
+from core.utils import _can_user_edit_character, _can_user_view_character, _check_character_possessions, _resolve_character, _set_character_avatar
 from data.repositories.repository_factory import repositories
 import core.factories as factories
 import json
@@ -363,22 +364,13 @@ class CharacterCommands(commands.Cog):
             await interaction.response.send_message("❌ Character not found.", ephemeral=True)
             return
 
-        # Check permissions
-        if character.is_npc and not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
-            await interaction.response.send_message("❌ Only GMs can delete NPCs.", ephemeral=True)
+        # Use utility method for permission checking
+        if not await _can_user_edit_character(str(interaction.guild.id), interaction.user, character):
+            await interaction.response.send_message("❌ You don't have permission to delete this character.", ephemeral=True)
             return
-        
-        if not character.is_npc and character.owner_id != str(interaction.user.id):
-            if not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
-                await interaction.response.send_message("❌ You can only delete your own characters.", ephemeral=True)
-                return
 
-        # Check if this character possesses other entities
-        possessed_entities = repositories.link.get_children(
-            str(interaction.guild.id), 
-            character.id, 
-            EntityLinkType.POSSESSES.value
-        )
+        # Check if this character possesses other entities (extract to utility method)
+        possessed_entities = _check_character_possessions(str(interaction.guild.id), character, transfer_inventory)
         
         if possessed_entities and not transfer_inventory:
             entity_names = [entity.name for entity in possessed_entities]
@@ -410,58 +402,23 @@ class CharacterCommands(commands.Cog):
     @app_commands.describe(char_name="Leave blank to view your active character, or enter a character/NPC/companion name")
     @app_commands.autocomplete(char_name=character_or_npc_autocomplete)
     async def sheet(self, interaction: discord.Interaction, char_name: str = None):
-        character = None
-        if not char_name:
-            character = repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id)
-            if not character:
-                await interaction.response.send_message("❌ No active character set. Use `/character switch` to choose one.", ephemeral=True)
+        try:
+            character = await _resolve_character(str(interaction.guild.id), str(interaction.user.id), char_name)
+            
+            if not await _can_user_edit_character(str(interaction.guild.id), interaction.user, character):
+                await interaction.response.send_message("❌ You don't have permission to edit this character.", ephemeral=True)
                 return
-        else:
-            character = repositories.character.get_character_by_name(interaction.guild.id, char_name)
-            if not character:
-                await interaction.response.send_message("❌ Character not found.", ephemeral=True)
-                return
-
-        # Check permissions based on entity type
-        is_gm = await repositories.server.has_gm_permission(interaction.guild.id, interaction.user)
-        
-        if character.entity_type == EntityType.NPC:
-            # NPCs can only be viewed by GMs
-            if not is_gm:
-                await interaction.response.send_message("❌ Only the GM can view NPCs.", ephemeral=True)
-                return
-        elif character.entity_type == EntityType.COMPANION:
-            # Companions can be viewed by their owner or by the owner of characters that control them
-            if str(character.owner_id) != str(interaction.user.id) and not is_gm:
-                # Check if user owns any characters that control this companion
-                controlling_chars = repositories.link.get_parents(
-                    str(interaction.guild.id),
-                    character.id,
-                    EntityLinkType.CONTROLS.value
-                )
-                
-                user_controls_companion = any(
-                    str(controller.owner_id) == str(interaction.user.id) 
-                    for controller in controlling_chars
-                )
-                
-                if not user_controls_companion:
-                    await interaction.response.send_message(
-                        "❌ You can only view companions you own or that are controlled by your characters.", 
-                        ephemeral=True
-                    )
-                    return
-        elif character.entity_type == EntityType.PC:
-            # PCs can be viewed by their owner or GM
-            if str(character.owner_id) != str(interaction.user.id) and not is_gm:
-                await interaction.response.send_message("❌ You can only view your own characters.", ephemeral=True)
-                return
-
-        # Get appropriate sheet view based on entity type
-        sheet_view = character.get_sheet_edit_view(interaction.user.id, is_gm=is_gm)
-        
-        embed = character.format_full_sheet(interaction.guild.id)
-        await interaction.response.send_message(embed=embed, view=sheet_view, ephemeral=True)
+            
+            is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+            sheet_view = character.get_sheet_edit_view(interaction.user.id, is_gm=is_gm)
+            embed = character.format_full_sheet(interaction.guild.id)
+            
+            await interaction.response.send_message(embed=embed, view=sheet_view, ephemeral=True)
+            
+        except ValueError as e:
+            await interaction.response.send_message(f"❌ {str(e)}", ephemeral=True)
+        except PermissionError as e:
+            await interaction.response.send_message(f"❌ {str(e)}", ephemeral=True)
 
     @character_group.command(name="transfer", description="GM: Transfer a PC to another player")
     @app_commands.describe(
@@ -524,64 +481,31 @@ class CharacterCommands(commands.Cog):
             await interaction.response.send_message("❌ Please provide either an avatar URL or upload a file, but not both.", ephemeral=True)
             return
         
-        # Determine which character to set avatar for
-        character = None
-        if char_name:
-            # User specified a character name
-            character = repositories.character.get_character_by_name(interaction.guild.id, char_name)
-            if not character:
-                await interaction.response.send_message(f"❌ Character '{char_name}' not found.", ephemeral=True)
+        try:
+            character = await _resolve_character(str(interaction.guild.id), str(interaction.user.id), char_name)
+            
+            if not await _can_user_edit_character(str(interaction.guild.id), interaction.user, character):
+                await interaction.response.send_message("❌ You don't have permission to set this character's avatar.", ephemeral=True)
                 return
                 
-            # Check permissions
-            if character.is_npc:
-                # Only GMs can set NPC avatars
-                if not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
-                    await interaction.response.send_message("❌ Only GMs can set NPC avatars.", ephemeral=True)
+            if file:
+                if not file.content_type or not file.content_type.startswith('image/'):
+                    await interaction.response.send_message("❌ Please upload a valid image file.", ephemeral=True)
                     return
+                final_avatar_url = file.url
             else:
-                # Only the owner can set PC avatars (unless GM)
-                is_gm = await repositories.server.has_gm_permission(interaction.guild.id, interaction.user)
-                if str(character.owner_id) != str(interaction.user.id) and not is_gm:
-                    await interaction.response.send_message("❌ You can only set avatars for your own characters.", ephemeral=True)
+                if not avatar_url.startswith(("http://", "https://")):
+                    await interaction.response.send_message("❌ Please provide a valid image URL starting with http:// or https://", ephemeral=True)
                     return
-        else:
-            # No character specified, use active character
-            character = repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id)
-            if not character:
-                await interaction.response.send_message("❌ You don't have an active character set. Use `/character switch` to choose one or specify a character name.", ephemeral=True)
-                return
-        
-        # Handle file upload
-        if file:
-            # Validate file type
-            if not file.content_type or not file.content_type.startswith('image/'):
-                await interaction.response.send_message("❌ Please upload a valid image file.", ephemeral=True)
-                return
+                final_avatar_url = avatar_url
             
-            # Use the Discord CDN URL of the uploaded file
-            final_avatar_url = file.url
-        else:
-            # Handle URL input
-            if not avatar_url.startswith(("http://", "https://")):
-                await interaction.response.send_message("❌ Please provide a valid image URL starting with http:// or https://", ephemeral=True)
-                return
-            final_avatar_url = avatar_url
-        
-        # Save the avatar URL to the character
-        character.avatar_url = final_avatar_url
-        system = repositories.server.get_system(interaction.guild.id)
-        repositories.entity.upsert_entity(interaction.guild.id, character, system=system)
-
-        # Show a preview
-        embed = discord.Embed(
-            title="Avatar Updated",
-            description=f"Avatar for **{character.name}** has been set.",
-            color=discord.Color.green()
-        )
-        embed.set_image(url=final_avatar_url)
-        
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+            embed = await _set_character_avatar(character, final_avatar_url, str(interaction.guild.id))
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            
+        except ValueError as e:
+            await interaction.response.send_message(f"❌ {str(e)}", ephemeral=True)
+        except PermissionError as e:
+            await interaction.response.send_message(f"❌ {str(e)}", ephemeral=True)
     
     @create_group.command(name="companion", description="Create a companion for your character")
     @app_commands.describe(
@@ -593,54 +517,54 @@ class CharacterCommands(commands.Cog):
         """Create a companion controlled by a character"""
         await interaction.response.defer(ephemeral=True)
         
-        # Determine the owner character
-        if owner_character:
-            owner_char = repositories.character.get_character_by_name(str(interaction.guild.id), owner_character)
-            if not owner_char:
-                await interaction.followup.send(f"❌ Character '{owner_character}' not found.", ephemeral=True)
+        try:
+            # Determine the owner character
+            if owner_character:
+                owner_char = _resolve_character(str(interaction.guild.id), str(interaction.user.id), owner_character)
+                
+                # Check if user owns this character or is GM
+                if not _can_user_edit_character(str(interaction.guild.id), interaction.user, owner_char):
+                    await interaction.followup.send("❌ You can only create companions for characters you own.", ephemeral=True)
+                    return
+            else:
+                # Use active character
+                owner_char = repositories.active_character.get_active_character(str(interaction.guild.id), str(interaction.user.id))
+                if not owner_char:
+                    await interaction.followup.send("❌ No active character found. Use `/char switch` or specify an owner character.", ephemeral=True)
+                    return
+            
+            # Check if companion name already exists
+            existing = repositories.character.get_character_by_name(str(interaction.guild.id), companion_name)
+            if existing:
+                await interaction.followup.send(f"❌ A character named '{companion_name}' already exists.", ephemeral=True)
                 return
             
-            # Check if user owns this character or is GM
-            is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
-            if not is_gm and str(owner_char.owner_id) != str(interaction.user.id):
-                await interaction.followup.send("❌ You can only create companions for characters you own.", ephemeral=True)
-                return
-        else:
-            # Use active character
-            owner_char = repositories.active_character.get_active_character(str(interaction.guild.id), str(interaction.user.id))
-            if not owner_char:
-                await interaction.followup.send("❌ No active character found. Use `/character switch` or specify an owner character.", ephemeral=True)
-                return
-        
-        # Check if companion name already exists
-        existing = repositories.character.get_character_by_name(str(interaction.guild.id), companion_name)
-        if existing:
-            await interaction.followup.send(f"❌ A character named '{companion_name}' already exists.", ephemeral=True)
-            return
-        
-        # Get system and companion class
-        system = repositories.server.get_system(str(interaction.guild.id))
-        companion = factories.build_and_save_entity(
-            system=system,
-            entity_type=EntityType.COMPANION,
-            name=companion_name,
-            owner_id=str(owner_char.owner_id),
-            guild_id=str(interaction.guild.id),
-        )
+            system = repositories.server.get_system(str(interaction.guild.id))
+            companion = factories.build_and_save_entity(
+                system=system,
+                entity_type=EntityType.COMPANION,
+                name=companion_name,
+                owner_id=str(owner_char.owner_id),
+                guild_id=str(interaction.guild.id),
+            )
 
-        # Create CONTROLS link
-        repositories.link.create_link(
-            str(interaction.guild.id),
-            owner_char.id,
-            companion.id,
-            EntityLinkType.CONTROLS.value,
-            {"created_by": str(interaction.user.id)}
-        )
-        
-        await interaction.followup.send(
-            f"🐾 Created companion: **{companion_name}** controlled by **{owner_char.name}**",
-            ephemeral=True
-        )
+            # Create CONTROLS link
+            repositories.link.create_link(
+                str(interaction.guild.id),
+                owner_char.id,
+                companion.id,
+                EntityLinkType.CONTROLS.value,
+                {"created_by": str(interaction.user.id)}
+            )
+            
+            await interaction.followup.send(
+                f"🐾 Created companion: **{companion_name}** controlled by **{owner_char.name}**",
+                ephemeral=True
+            )
+        except ValueError as e:
+            await interaction.response.send_message(f"❌ {str(e)}", ephemeral=True)
+        except PermissionError as e:
+            await interaction.response.send_message(f"❌ {str(e)}", ephemeral=True)
 
     @companion_group.command(name="list", description="List companions controlled by your characters")
     @app_commands.describe(character_name="Optional: Show companions for a specific character")

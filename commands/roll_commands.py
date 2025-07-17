@@ -296,7 +296,7 @@ class RollCommands(commands.Cog):
         """Open a fully interactive UI for rolling dice with your character"""
         character = repositories.active_character.get_active_character(str(interaction.guild.id), str(interaction.user.id))
         if not character:
-            await interaction.response.send_message("❌ No active character set. Use `/character switch` to choose one.", ephemeral=True)
+            await interaction.response.send_message("❌ No active character set. Use `/char switch` to choose one.", ephemeral=True)
             return
         
         system = repositories.server.get_system(str(interaction.guild.id))

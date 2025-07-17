@@ -119,7 +119,8 @@ async def on_message(message: discord.Message):
                 await reminder_cog.handle_mention(message, user)
 
     # Process narration
-    if message.author.id != bot.user.id and (message.content.startswith("gm::") or message.content.startswith("pc::") or message.content.startswith("npc::")):
+    content_lower = message.content.lower()
+    if message.author.id != bot.user.id and content_lower.startswith(("pc::", "npc::", "gm::")):
         try:
             await process_narration(message)
         except Exception as e:
@@ -131,6 +132,46 @@ async def on_message(message: discord.Message):
         return
 
     await bot.process_commands(message)
+
+@bot.event
+async def on_raw_message_edit(payload: discord.RawMessageUpdateEvent):
+    """Handle raw message edits to catch edits on uncached messages."""
+    # Don't process edits from bots
+    if payload.cached_message and payload.cached_message.author.bot:
+        return
+        
+    try:
+        channel = await bot.fetch_channel(payload.channel_id)
+        after = await channel.fetch_message(payload.message_id)
+    except (discord.NotFound, discord.Forbidden):
+        return
+
+    # Ignore edits from the bot itself
+    if after.author.id == bot.user.id:
+        return
+
+    # This logic assumes we only care about edits that *result* in a narration command.
+    after_content_lower = after.content.lower()
+    if after_content_lower.startswith(("pc::", "npc::", "gm::")):
+        try:
+            await process_narration(after)
+        except Exception as e:
+            print(f"Error processing narration from edit: {e}")
+            try:
+                await after.reply(f"❌ Error processing character speech from edit: {str(e)}", delete_after=10)
+            except:
+                pass
+        return
+    
+    # Handle mentions for automatic reminders on edits
+    if after.guild and after.mentions:
+        reminder_cog = bot.get_cog("ReminderCommands")
+        if reminder_cog:
+            for user in after.mentions:
+                await reminder_cog.handle_mention(after, user)
+
+    # If you want to process commands on edit, you can do so here.
+    await bot.process_commands(after)
 
 @bot.command()
 async def myguild(ctx: commands.Context):

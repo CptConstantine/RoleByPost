@@ -159,7 +159,7 @@ class ManageNPCsButton(ui.Button):
             )
         else:
             await interaction.response.send_message(
-                "❌ No NPCs found. Create some with `/character create npc`.", 
+                "❌ No NPCs found. Create some with `/char create npc`.", 
                 ephemeral=True
             )
 

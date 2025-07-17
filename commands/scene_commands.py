@@ -282,7 +282,7 @@ class SceneCommands(commands.Cog):
         # Get the NPC
         npc = repositories.character.get_character_by_name(str(interaction.guild.id), npc_name)
         if not npc:
-            await interaction.response.send_message("❌ NPC not found. Did you create it with `/character create npc`?", ephemeral=True)
+            await interaction.response.send_message("❌ NPC not found. Did you create it with `/char create npc`?", ephemeral=True)
             return
             
         # Check if the NPC is already in the scene

@@ -219,7 +219,7 @@ class HelpCommands(commands.Cog):
             name="Speaking as Your Character",
             value=(
                 "**Basic Format:** `pc::Your character's message here`\n"
-                "Uses your currently active character. Set with `/character switch`.\n\n"
+                "Uses your currently active character. Set with `/char switch`.\n\n"
                 "**Speaking as a Specific Character/Companion:**\n"
                 "`pc::Character Name::Message content`\n"
                 "Example: `pc::Fluffy::*growls menacingly at the stranger*`\n\n"
@@ -253,6 +253,18 @@ class HelpCommands(commands.Cog):
                 "`gm::Your narration text here`\n"
                 "Example: `gm::The ground trembles as thunder rumbles overhead. The storm is getting closer.`\n\n"
                 "GM narration appears with a purple embed and your avatar as the GM."
+            ),
+            inline=False
+        )
+
+        embed.add_field(
+            name="✨ Editing & Managing Narrated Messages",
+            value=(
+                "**Edit Narration:** Right-click any narrated message → `Edit Narration`\n"
+                "• Edit your own character messages and GM narration\n"
+                "• Leave content blank to delete the message\n\n"
+                "**Edit via Text:** You can also edit a regular message to add narration prefixes (e.g., `pc::`). "
+                "The bot will automatically convert it!"
             ),
             inline=False
         )

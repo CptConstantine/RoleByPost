@@ -30,7 +30,7 @@ async def process_narration(message: discord.Message):
     user_id = message.author.id
     
     # Check for GM narration first
-    if content.startswith("gm::"):
+    if content.lower().startswith("gm::"):
         # Make sure user is a GM
         if not await repositories.server.has_gm_permission(guild_id, message.author):
             await message.channel.send("❌ Only GMs can use GM narration.", delete_after=10)
@@ -45,9 +45,9 @@ async def process_narration(message: discord.Message):
         return
     
     # Extract type and content from message format for PC/NPC speech
-    if content.startswith("pc::"):
+    if content.lower().startswith("pc::"):
         # Check if this is a companion speech (pc::Companion Name::message)
-        match = re.match(r"pc::([^:]+)::(.*)", content)
+        match = re.match(r"pc::([^:]+)::(.*)", content, re.IGNORECASE | re.DOTALL)
         if match:
             # Format: pc::Character Name::Message content
             character_name = match.group(1).strip()
@@ -79,7 +79,7 @@ async def process_narration(message: discord.Message):
             # Standard format: pc::message (use active character)
             character = repositories.active_character.get_active_character(guild_id, user_id)
             if not character:
-                await message.channel.send("❌ You don't have an active character set. Use `/character switch` first or specify a character name with `pc::Character Name::message`.", delete_after=10)
+                await message.channel.send("❌ You don't have an active character set. Use `/char switch` first or specify a character name with `pc::Character Name::message`.", delete_after=10)
                 try:
                     await message.delete()
                 except:
@@ -90,7 +90,7 @@ async def process_narration(message: discord.Message):
             speech_content = content[4:].strip()
             alias = None  # No alias for PC speech
             
-    elif content.startswith("npc::"):
+    elif content.lower().startswith("npc::"):
         # Make sure user is a GM
         if not await repositories.server.has_gm_permission(guild_id, message.author):
             await message.channel.send("❌ Only GMs can speak as NPCs.", delete_after=10)
@@ -102,7 +102,7 @@ async def process_narration(message: discord.Message):
         
         # Parse format: npc::Character Name::Message content
         # Or extended format: npc::Character Name::Alias::Message content
-        match = re.match(r"npc::([^:]+)::([^:]+)::(.*)", content)
+        match = re.match(r"npc::([^:]+)::([^:]+)::(.*)", content, re.IGNORECASE | re.DOTALL)
         if match:
             # Extended format with alias
             npc_name = match.group(1).strip()
@@ -110,7 +110,7 @@ async def process_narration(message: discord.Message):
             speech_content = match.group(3).strip()
         else:
             # Standard format without alias
-            match = re.match(r"npc::([^:]+)::(.*)", content)
+            match = re.match(r"npc::([^:]+)::(.*)", content, re.IGNORECASE | re.DOTALL)
             if not match:
                 await message.channel.send("❌ Format for NPC speech is: `npc::Character Name::Message content` or `npc::Character Name::Alias::Message content`", delete_after=10)
                 try:
@@ -141,13 +141,11 @@ async def process_narration(message: discord.Message):
     else:
         return  # Not a narration command
     
-    target_channel = message.channel
-    
     # Try to send the character message
     try:
         # Send using webhook to have proper avatar/username
-        await send_character_webhook(target_channel, character, speech_content, alias)
-        
+        await send_narration_webhook(message, character, speech_content, alias)
+
         # Delete the original message if we have permission
         try:
             await message.delete()
@@ -156,7 +154,7 @@ async def process_narration(message: discord.Message):
     except discord.Forbidden:
         await message.channel.send("❌ I need 'Manage Webhooks' permission to send character messages.", delete_after=10)
     except Exception as e:
-        await message.channel.send(f"❌ Error sending message: {str(e)}", delete_after=10)
+        await message.channel.send(f"❌ Error editing narration message: {str(e)}", delete_after=10)
 
 async def can_user_speak_as_character(guild_id: int, user_id: int, character: BaseCharacter) -> bool:
     """Check if a user can speak as a character (PC or companion)."""
@@ -226,19 +224,19 @@ async def process_gm_narration(message: discord.Message, narration_content: str)
     except Exception as e:
         await message.channel.send(f"❌ Error sending GM narration: {str(e)}", delete_after=10)
 
-async def send_character_webhook(channel: discord.TextChannel, character: BaseCharacter, content, alias=None):
-    """Send a message using a webhook to make it appear as the character with their avatar."""
-    
+async def send_narration_webhook(message: discord.Message, character: BaseCharacter, content, alias=None):
+    """Edit a message using a webhook to make it appear as the character with their avatar."""
+
     # Check permissions first
-    me = channel.guild.me
-    if not channel.permissions_for(me).manage_webhooks:
+    me = message.guild.me
+    if not message.channel.permissions_for(me).manage_webhooks:
         raise discord.Forbidden("Bot doesn't have manage_webhooks permission")
     
     # Determine display name (use alias if provided)
     display_name = alias if alias else character.name
     
     # Get or create the first webhook with the name "RoleByPostCharacters"
-    webhook = next((wh for wh in await channel.webhooks() if wh.name == "RoleByPostCharacters"), None) or await channel.create_webhook(name="RoleByPostCharacters")
+    webhook = next((wh for wh in await message.channel.webhooks() if wh.name == "RoleByPostCharacters"), None) or await message.channel.create_webhook(name="RoleByPostCharacters")
     embed = discord.Embed(
         description=content,
         color=get_character_color(character)
@@ -260,27 +258,17 @@ async def send_character_webhook(channel: discord.TextChannel, character: BaseCh
             allowed_mentions=allowed_mentions
         )
     else:
-        # Use a default avatar if character has no avatar
-        #url=get_default_avatar(character)
-        #embed.set_thumbnail(url=url)
         await webhook.send(
             embeds=[embed],
             username=display_name,
-            #avatar_url=url,
             allowed_mentions=allowed_mentions
         )
 
 def get_character_color(character):
     """Return a color for the character based on system and character type."""
     if character.entity_type == EntityType.NPC:
-        return discord.Color.orange()  # NPCs get orange
+        return discord.Color.orange()
     elif character.entity_type == EntityType.COMPANION:
-        return discord.Color.blue()    # Companions get blue
+        return discord.Color.blue()
     else:
-        return discord.Color.green()   # PCs get green
-
-def get_default_avatar(character):
-    """Return a default avatar URL based on character's system or type."""
-    # This could be expanded to return different default avatars
-    # based on character system, type, etc.
-    return "https://cdn.discordapp.com/embed/avatars/0.png"
+        return discord.Color.green()
