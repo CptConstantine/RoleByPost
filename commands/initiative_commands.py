@@ -102,7 +102,7 @@ class InitiativeCommands(commands.Cog):
         if not type:
             type = repositories.server_initiative_defaults.get_default_type(str(guild_id))
             if not type:
-                await interaction.followup.send("❌ No default initiative type set. Please set it with `/initiative default`.", ephemeral=True)
+                await interaction.followup.send("❌ No default initiative type set. Please set it with `/init set-default`.", ephemeral=True)
                 return
 
         InitiativeClass = factories.get_specific_initiative(type)
@@ -111,7 +111,10 @@ class InitiativeCommands(commands.Cog):
         all_chars = repositories.character.get_all_by_guild(str(guild_id))
         non_gm_pcs = [c for c in all_chars if not c.is_npc and not repositories.server.has_gm_permission(str(guild_id), c.owner_id)]
         scene = repositories.scene.get_active_scene(str(guild_id))
-        npcs = repositories.scene_npc.get_scene_npcs(str(guild_id), scene.name)
+        if not scene:
+            npcs = []
+        else:
+            npcs = repositories.scene_npc.get_scene_npcs(str(guild_id), scene.name)
         participants = [
             InitiativeParticipant(
                 id=str(c.id),
