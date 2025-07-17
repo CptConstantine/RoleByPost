@@ -261,7 +261,7 @@ class HelpCommands(commands.Cog):
             name="✨ Editing & Managing Narrated Messages",
             value=(
                 "**Edit Narration:** Right-click any narrated message → `Edit Narration`\n"
-                "• Edit your own character messages and GM narration\n"
+                "• Edit your own character messages (or any if you are a GM)\n"
                 "• Leave content blank to delete the message\n\n"
                 "**Edit via Text:** You can also edit a regular message to add narration prefixes (e.g., `pc::`). "
                 "The bot will automatically convert it!"
@@ -296,8 +296,8 @@ class HelpCommands(commands.Cog):
         embed.add_field(
             name="Character Avatars",
             value=(
-                "Set your character's avatar with the command:\n"
-                "`/char set-avatar [url]`\n\n"
+                "Set a character's avatar with the command:\n"
+                "`/char set-avatar [char_name] [url] [file]`\n\n"
                 "This avatar will appear with your character's messages."
             ),
             inline=False
