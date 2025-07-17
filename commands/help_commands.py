@@ -216,17 +216,21 @@ class HelpCommands(commands.Cog):
         )
 
         embed.add_field(
-            name="Speaking as Your Character",
+            name="Speaking as a Character",
             value=(
-                "**Basic Format:** `pc::Your character's message here`\n"
+                "**Simple Format:** `Character Name::Your message here`\n"
+                "Use the character's full name or any nickname they have.\n"
+                "Example: `Bob the Brave::I'll take the first watch.`\n"
+                "Example: `BraveBob::I'll take the first watch.`\n\n"
+                "**With Display Alias:** `Character Name::Display Name::Your message here`\n"
+                "Use a custom display name for the message.\n"
+                "Example: `Bob the Brave::Bobby::Hey everyone!`\n\n"
+                "**Speaking as Your Active Character:**\n"
+                "`pc::Your message here`\n"
                 "Uses your currently active character. Set with `/char switch`.\n\n"
-                "**Speaking as a Specific Character/Companion:**\n"
-                "`pc::Character Name::Message content`\n"
-                "Example: `pc::Fluffy::*growls menacingly at the stranger*`\n\n"
                 "You can speak as:\n"
                 "• Your own player characters\n"
-                "• Companions you own\n"
-                "• Companions controlled by your characters"
+                "• Companions you own or that your characters control"
             ),
             inline=False
         )
@@ -234,14 +238,32 @@ class HelpCommands(commands.Cog):
         embed.add_field(
             name="For GMs: Speaking as NPCs",
             value=(
-                "**Basic Format**\n"
-                "`npc::Character Name::Message content`\n"
+                "**Simple Format:** `NPC Name::Message content`\n"
+                "Example: `Bartender::What'll it be, stranger?`\n"
+                "⚠️ The NPC must already exist.\n\n"
+                "**With Display Alias:** `NPC Name::Display Name::Message content`\n"
+                "Example: `Bartender::Barkeep::What'll it be, stranger?`\n\n"
+                "**Traditional Format:** `npc::NPC Name::Message content`\n"
                 "Example: `npc::Bartender::What'll it be, stranger?`\n\n"
-                "**With Custom Display Name**\n"
-                "`npc::Character Name::Display Name::Message content`\n"
-                "Example: `npc::Mysterious Figure::Hooded Stranger::Keep your voice down!`\n\n"
-                "**On-the-fly NPCs**\n"
-                "If you use a name that doesn't exist in the database, the bot will still create a temporary character to display the message."
+                "**Traditional with Alias:** `npc::NPC Name::Display Name::Message content`\n"
+                "Example: `npc::Bartender::Barkeep::What'll it be, stranger?`\n\n"
+                "**On-the-fly NPCs (GM Only)**\n"
+                "Only works with the `npc::` prefix format. If you use a name that doesn't exist, "
+                "the bot will create a temporary character for the message.\n"
+                "Example: `npc::Random Guard::Halt! Who goes there?`"
+            ),
+            inline=False
+        )
+
+        embed.add_field(
+            name="Character Nicknames",
+            value=(
+                "Set up nicknames for easier narration:\n"
+                "• `/char set-nickname [character] [nickname]` - Add a nickname\n"
+                "• `/char set-nickname [character]` - Remove all nicknames\n"
+                "• `/char nickname-list [character]` - List all nicknames\n\n"
+                "Once set, you can use nicknames in any narration format:\n"
+                "Example: `Bobby::Hello there!` (if \"Bobby\" is Bob's nickname)"
             ),
             inline=False
         )

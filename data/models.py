@@ -230,3 +230,10 @@ class EntityDetails:
     possessed_by: Optional[List[Dict[str, Any]]]
     controls: Optional[List[Dict[str, Any]]]
     controlled_by: Optional[List[Dict[str, Any]]]
+
+@dataclass
+class CharacterNickname:
+    """Represents a single nickname entry in the database."""
+    guild_id: str
+    character_id: str
+    nickname: str

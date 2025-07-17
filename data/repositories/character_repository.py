@@ -1,6 +1,6 @@
 from typing import List, Optional
 from .base_repository import BaseRepository
-from data.models import Character, ActiveCharacter
+from data.models import Character, ActiveCharacter, CharacterNickname
 from core.base_models import AccessType, BaseCharacter, BaseEntity, EntityJSONEncoder, EntityType, SystemType
 import json
 import core.factories as factories
@@ -90,13 +90,29 @@ class CharacterRepository(BaseRepository[Character]):
         character = self.execute_query(query, (str(guild_id), name), fetch_one=True)
         return self._convert_to_base_character(character)
 
-    def get_all_by_guild(self, guild_id: str, system: SystemType = None) -> List[BaseCharacter]:
+    def get_by_nickname(self, guild_id: str, nickname: str) -> Optional[BaseCharacter]:
+        """Get character by nickname within a guild"""
+        query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND nickname = %s"
+        character = self.execute_query(query, (str(guild_id), nickname), fetch_one=True)
+        return self._convert_to_base_character(character)
+
+    def get_all_pcs_and_npcs_by_guild(self, guild_id: str, system: SystemType = None) -> List[BaseCharacter]:
         """Get all characters for a guild, optionally filtered by system"""
         if system:
             query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND system = %s AND entity_type in ('pc', 'npc') ORDER BY name"
             characters = self.execute_query(query, (str(guild_id), system.value))
         else:
             query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND entity_type in ('pc', 'npc') ORDER BY name"
+            characters = self.execute_query(query, (str(guild_id),))
+        return self._convert_list_to_base_characters(characters)
+    
+    def get_all_by_guild(self, guild_id: str, system: SystemType = None) -> List[BaseCharacter]:
+        """Get all characters for a guild, optionally filtered by system"""
+        if system:
+            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND system = %s AND entity_type in ('pc', 'npc', 'companion') ORDER BY name"
+            characters = self.execute_query(query, (str(guild_id), system.value))
+        else:
+            query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND entity_type in ('pc', 'npc', 'companion') ORDER BY name"
             characters = self.execute_query(query, (str(guild_id),))
         return self._convert_list_to_base_characters(characters)
 
@@ -113,7 +129,7 @@ class CharacterRepository(BaseRepository[Character]):
     def get_accessible_characters(self, guild_id: int, user_id: int) -> List[BaseCharacter]:
         """Get all characters accessible to a user, including public and owned characters"""
         # Get all characters and companions that are public or in the scene
-        all_chars = self.get_all_by_guild(str(guild_id))
+        all_chars = self.get_all_pcs_and_npcs_by_guild(str(guild_id))
         public_chars = [char for char in all_chars if char.access_type == AccessType.PUBLIC]
 
         # Get user's own characters
@@ -231,3 +247,55 @@ class ActiveCharacterRepository(BaseRepository[ActiveCharacter]):
         """Clear a user's active character"""
         query = f"DELETE FROM {self.table_name} WHERE guild_id = %s AND user_id = %s"
         self.execute_query(query, (str(guild_id), str(user_id)))
+
+class CharacterNicknameRepository(BaseRepository[CharacterNickname]):
+    def __init__(self):
+        super().__init__('character_nicknames')
+
+    def to_dict(self, entity: CharacterNickname) -> dict:
+        return {
+            'guild_id': entity.guild_id,
+            'character_id': entity.character_id,
+            'nickname': entity.nickname
+        }
+
+    def from_dict(self, data: dict) -> CharacterNickname:
+        return CharacterNickname(
+            guild_id=data['guild_id'],
+            character_id=data['character_id'],
+            nickname=data['nickname']
+        )
+    
+    def get_character_by_nickname(self, guild_id: str, nickname: str) -> Optional[BaseCharacter]:
+        """Get a character by its nickname within a guild."""
+        from .repository_factory import repositories
+        
+        nickname_record = self.get_by_nickname(guild_id, nickname)
+        if nickname_record:
+            return repositories.entity.get_by_id(nickname_record.character_id)
+        return None
+
+    def get_by_nickname(self, guild_id: str, nickname: str) -> Optional[CharacterNickname]:
+        """Get a nickname record by the nickname string."""
+        query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND nickname = %s"
+        return self.execute_query(query, (str(guild_id), nickname), fetch_one=True)
+
+    def get_all_for_character(self, guild_id: str, character_id: str) -> List[CharacterNickname]:
+        """Get all nicknames for a specific character."""
+        query = f"SELECT * FROM {self.table_name} WHERE guild_id = %s AND character_id = %s"
+        return self.execute_query(query, (str(guild_id), str(character_id)))
+
+    def add_nickname(self, guild_id: str, character_id: str, nickname: str):
+        """Add a new nickname for a character."""
+        record = CharacterNickname(guild_id, character_id, nickname)
+        self.save(record, conflict_columns=['guild_id', 'nickname'])
+
+    def remove_nickname(self, guild_id: str, nickname: str):
+        """Remove a specific nickname."""
+        query = f"DELETE FROM {self.table_name} WHERE guild_id = %s AND nickname = %s"
+        self.execute_query(query, (str(guild_id), nickname))
+
+    def remove_all_for_character(self, guild_id: str, character_id: str):
+        """Remove all nicknames for a character."""
+        query = f"DELETE FROM {self.table_name} WHERE guild_id = %s AND character_id = %s"
+        self.execute_query(query, (str(guild_id), str(character_id)))

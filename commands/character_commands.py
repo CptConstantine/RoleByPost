@@ -4,13 +4,14 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from core.base_models import AccessType, BaseCharacter, BaseEntity, EntityType, EntityLinkType
-from core.utils import _can_user_edit_character, _can_user_view_character, _check_character_possessions, _resolve_character, _set_character_avatar
+from core.utils import _can_user_edit_character, _can_user_view_character, _check_character_possessions, _get_character_by_name_or_nickname, _resolve_character, _set_character_avatar
+from data.models import CharacterNickname
 from data.repositories.repository_factory import repositories
 import core.factories as factories
 import json
 
 async def pc_switch_name_autocomplete(interaction: discord.Interaction, current: str):
-    all_chars = repositories.character.get_all_by_guild(interaction.guild.id)
+    all_chars = repositories.character.get_all_pcs_and_npcs_by_guild(interaction.guild.id)
     pcs = [
         c for c in all_chars
         if not c.is_npc and str(c.owner_id) == str(interaction.user.id)
@@ -19,12 +20,12 @@ async def pc_switch_name_autocomplete(interaction: discord.Interaction, current:
     return [app_commands.Choice(name=name, value=name) for name in options[:25]]
 
 async def pc_name_gm_autocomplete(interaction: discord.Interaction, current: str):
-    all_chars = repositories.character.get_all_by_guild(interaction.guild.id)
+    all_chars = repositories.character.get_all_pcs_and_npcs_by_guild(interaction.guild.id)
     pcs = [c for c in all_chars if not c.is_npc]
     options = [c.name for c in pcs if current.lower() in c.name.lower()]
     return [app_commands.Choice(name=name, value=name) for name in options[:25]]
 
-async def character_or_npc_autocomplete(interaction: discord.Interaction, current: str):
+async def character_npc_or_companion_autocomplete(interaction: discord.Interaction, current: str):
     """Autocomplete for commands that can target PCs, NPCs, and companions"""
     all_chars = repositories.character.get_all_by_guild(interaction.guild.id)
     
@@ -32,7 +33,7 @@ async def character_or_npc_autocomplete(interaction: discord.Interaction, curren
     is_gm = await repositories.server.has_gm_permission(interaction.guild.id, interaction.user)
     
     # Filter characters based on permissions
-    options = []
+    options = list[str]()
     for c in all_chars:
         if c.entity_type == EntityType.NPC and is_gm:
             # GMs can see all NPCs
@@ -61,7 +62,7 @@ async def character_or_npc_autocomplete(interaction: discord.Interaction, curren
                     options.append(c.name)
     
     # Filter by current input
-    filtered_options = [name for name in options if current.lower() in name.lower()]
+    filtered_options = [n for n in options if current.lower() in n.lower()]
     return [app_commands.Choice(name=name, value=name) for name in filtered_options[:25]]
 
 async def companion_autocomplete(interaction: discord.Interaction, current: str):
@@ -104,7 +105,7 @@ async def owner_characters_autocomplete(interaction: discord.Interaction, curren
     
     if is_gm:
         # GMs can see all entities as potential owners
-        characters = repositories.character.get_all_by_guild(str(interaction.guild.id))
+        characters = repositories.character.get_all_pcs_and_npcs_by_guild(str(interaction.guild.id))
     else:
         # Users can only use their own entities as owners
         characters = repositories.character.get_user_characters(str(interaction.guild.id), str(interaction.user.id))
@@ -128,7 +129,7 @@ async def multi_character_autocomplete(interaction: discord.Interaction, current
     already_selected = [part.strip() for part in parts[:-1]] if len(parts) > 1 else []
     
     # Get available characters (excluding already selected)
-    all_chars = repositories.character.get_all_by_guild(str(interaction.guild.id))
+    all_chars = repositories.character.get_all_pcs_and_npcs_by_guild(str(interaction.guild.id))
     is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
     
     available_chars = []
@@ -273,7 +274,7 @@ class CharacterCommands(commands.Cog):
         system = repositories.server.get_system(interaction.guild.id)
         
         # Get characters based on filters
-        characters = repositories.character.get_all_by_guild(interaction.guild.id, system)
+        characters = repositories.character.get_all_pcs_and_npcs_by_guild(interaction.guild.id, system)
         title = "Characters"
         
         # Filter by user's permissions
@@ -357,7 +358,7 @@ class CharacterCommands(commands.Cog):
         char_name="Name of the character/NPC to delete",
         transfer_inventory="If true, releases possessed items instead of blocking deletion"
     )
-    @app_commands.autocomplete(char_name=character_or_npc_autocomplete)
+    @app_commands.autocomplete(char_name=character_npc_or_companion_autocomplete)
     async def delete_character(self, interaction: discord.Interaction, char_name: str, transfer_inventory: bool = False):
         character = repositories.character.get_character_by_name(interaction.guild.id, char_name)
         if not character:
@@ -400,7 +401,7 @@ class CharacterCommands(commands.Cog):
 
     @character_group.command(name="sheet", description="View a character, NPC, or companion's full sheet")
     @app_commands.describe(char_name="Leave blank to view your active character, or enter a character/NPC/companion name")
-    @app_commands.autocomplete(char_name=character_or_npc_autocomplete)
+    @app_commands.autocomplete(char_name=character_npc_or_companion_autocomplete)
     async def sheet(self, interaction: discord.Interaction, char_name: str = None):
         try:
             character = await _resolve_character(str(interaction.guild.id), str(interaction.user.id), char_name)
@@ -466,13 +467,89 @@ class CharacterCommands(commands.Cog):
         repositories.active_character.set_active_character(str(interaction.guild.id), str(interaction.user.id), character.id)
         await interaction.response.send_message(f"✅ `{char_name}` is now your active character.", ephemeral=True)
 
+    @character_group.command(name="set-nickname", description="Set or remove a nickname for a character.")
+    @app_commands.describe(
+        full_char_name="The character to set the nickname for.",
+        nickname="The nickname to add. Leave blank to remove all nicknames."
+    )
+    @app_commands.autocomplete(full_char_name=character_npc_or_companion_autocomplete)
+    async def set_nickname(self, interaction: discord.Interaction, full_char_name: str, nickname: str = None):
+        """Add or remove nicknames for a character."""
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            character = await _resolve_character(str(interaction.guild.id), str(interaction.user.id), full_char_name)
+            
+            if not await _can_user_edit_character(str(interaction.guild.id), interaction.user, character):
+                await interaction.followup.send("❌ You don't have permission to set this character's nickname.", ephemeral=True)
+                return
+
+            if nickname:
+                nickname = nickname.strip()
+                # Check for conflicts
+                existing_char = await _get_character_by_name_or_nickname(str(interaction.guild.id), nickname)
+                if existing_char and existing_char.id != character.id:
+                    await interaction.followup.send(f"❌ The name or nickname `{nickname}` is already in use by **{existing_char.name}**.", ephemeral=True)
+                    return
+
+                repositories.character_nickname.add_nickname(str(interaction.guild.id), character.id, nickname)
+                nicknames = repositories.character_nickname.get_all_for_character(str(interaction.guild.id), character.id)
+                nicknames = [n.nickname for n in nicknames]
+                await interaction.followup.send(f"✅ Set a nickname for **{character.name}** to `{nickname}`.\nNicknames for **{character.name}**: {', '.join(nicknames)}", ephemeral=True)
+            else:
+                # Remove nickname
+                system = repositories.character_nickname.remove_all_for_character(str(interaction.guild.id), character.id)
+                await interaction.followup.send(f"✅ Removed all nicknames for **{character.name}**.", ephemeral=True)
+
+        except ValueError as e:
+            await interaction.followup.send(f"❌ {str(e)}", ephemeral=True)
+        except PermissionError as e:
+            await interaction.followup.send(f"❌ {str(e)}", ephemeral=True)
+
+    @character_group.command(name="nickname-list", description="List all nicknames for a character.")
+    @app_commands.describe(
+        full_char_name="The character to list nicknames for."
+    )
+    @app_commands.autocomplete(full_char_name=character_npc_or_companion_autocomplete)
+    async def nickname_list(self, interaction: discord.Interaction, full_char_name: str):
+        """List all nicknames for a character."""
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            character = await _resolve_character(str(interaction.guild.id), str(interaction.user.id), full_char_name)
+            
+            if not await _can_user_view_character(str(interaction.guild.id), interaction.user, character):
+                await interaction.followup.send("❌ You don't have permission to view this character's nicknames.", ephemeral=True)
+                return
+
+            nicknames = repositories.character_nickname.get_all_for_character(str(interaction.guild.id), character.id)
+            
+            if not nicknames:
+                await interaction.followup.send(f"**{character.name}** has no nicknames.", ephemeral=True)
+                return
+            
+            nickname_list = [f"• `{n.nickname}`" for n in nicknames]
+            
+            embed = discord.Embed(
+                title=f"📝 Nicknames for {character.name}",
+                description="\n".join(nickname_list),
+                color=discord.Color.blue()
+            )
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            
+        except ValueError as e:
+            await interaction.followup.send(f"❌ {str(e)}", ephemeral=True)
+        except PermissionError as e:
+            await interaction.followup.send(f"❌ {str(e)}", ephemeral=True)
+
     @character_group.command(name="set-avatar", description="Set a character's avatar via file upload or URL (Defaults to active character if no name given)")
     @app_commands.describe(
         char_name="Optional: Character/NPC name (defaults to your active character)",
         avatar_url="Optional: URL to an image for your character's avatar",
         file="Optional: Upload an image file instead of providing a URL"
     )
-    @app_commands.autocomplete(char_name=character_or_npc_autocomplete)
+    @app_commands.autocomplete(char_name=character_npc_or_companion_autocomplete)
     async def character_setavatar(self, interaction: discord.Interaction, char_name: str = None, avatar_url: str = None, file: discord.Attachment = None):
         """Set an avatar image for your character or an NPC (if GM)"""
         
@@ -573,6 +650,8 @@ class CharacterCommands(commands.Cog):
         """List companions controlled by user's characters"""
         await interaction.response.defer(ephemeral=True)
         
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        
         if character_name:
             # List companions for specific character
             character = repositories.character.get_character_by_name(str(interaction.guild.id), character_name)
@@ -581,7 +660,6 @@ class CharacterCommands(commands.Cog):
                 return
             
             # Check permissions
-            is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
             if not is_gm and str(character.owner_id) != str(interaction.user.id):
                 await interaction.followup.send("❌ You can only view companions for characters you own.", ephemeral=True)
                 return
@@ -607,7 +685,7 @@ class CharacterCommands(commands.Cog):
             
         else:
             # List all companions controlled by user's characters
-            user_chars = repositories.character.get_user_characters(str(interaction.guild.id), str(interaction.user.id))
+            user_chars = repositories.character.get_user_characters(str(interaction.guild.id), str(interaction.user.id), include_npcs=is_gm)
             
             all_companions = []
             for char in user_chars:
@@ -652,7 +730,7 @@ class CharacterCommands(commands.Cog):
         new_controller="The character that will control the companion"
     )
     @app_commands.autocomplete(companion_name=companion_autocomplete)
-    @app_commands.autocomplete(new_controller=character_or_npc_autocomplete)
+    @app_commands.autocomplete(new_controller=character_npc_or_companion_autocomplete)
     async def transfer_companion(self, interaction: discord.Interaction, companion_name: str, new_controller: str):
         """Transfer control of a companion to another character"""
         await interaction.response.defer(ephemeral=True)

@@ -218,6 +218,15 @@ CREATE TABLE IF NOT EXISTS entity_links (
     UNIQUE(guild_id, from_entity_id, to_entity_id, link_type)
 );
 
+-- Character Nicknames
+CREATE TABLE IF NOT EXISTS character_nicknames (
+    guild_id TEXT NOT NULL,
+    character_id TEXT NOT NULL,
+    nickname TEXT NOT NULL,
+    PRIMARY KEY (guild_id, nickname),
+    FOREIGN KEY (character_id) REFERENCES entities(id) ON DELETE CASCADE
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_scenes_guild_active ON scenes(guild_id, is_active);
 
@@ -242,3 +251,5 @@ CREATE INDEX IF NOT EXISTS idx_entity_links_to ON entity_links(to_entity_id);
 CREATE INDEX IF NOT EXISTS idx_entity_links_link_type ON entity_links(link_type);
 CREATE INDEX IF NOT EXISTS idx_entity_links_guild_from ON entity_links(guild_id, from_entity_id);
 CREATE INDEX IF NOT EXISTS idx_entity_links_guild_to ON entity_links(guild_id, to_entity_id);
+
+CREATE INDEX IF NOT EXISTS idx_character_nicknames_character_id ON character_nicknames(guild_id, character_id);

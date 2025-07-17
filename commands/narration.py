@@ -3,6 +3,7 @@ import discord
 from core.base_models import BaseCharacter, BaseEntity, EntityType, SystemType
 import core.factories as factories
 from data.repositories.repository_factory import repositories
+from core.utils import _get_character_by_name_or_nickname
 
 async def process_narration(message: discord.Message):
     """Process messages with special prefixes for character speech and GM narration."""
@@ -26,8 +27,8 @@ async def process_narration(message: discord.Message):
         return
         
     content = message.content
-    guild_id = message.guild.id
-    user_id = message.author.id
+    guild_id = str(message.guild.id)
+    user_id = str(message.author.id)
     
     # Check for GM narration first
     if content.lower().startswith("gm::"):
@@ -44,102 +45,113 @@ async def process_narration(message: discord.Message):
         await process_gm_narration(message, narration_content)
         return
     
-    # Extract type and content from message format for PC/NPC speech
-    if content.lower().startswith("pc::"):
-        # Check if this is a companion speech (pc::Companion Name::message)
-        match = re.match(r"pc::([^:]+)::(.*)", content, re.IGNORECASE | re.DOTALL)
-        if match:
-            # Format: pc::Character Name::Message content
-            character_name = match.group(1).strip()
-            speech_content = match.group(2).strip()
-            
-            # Try to find the named character
-            character = repositories.character.get_character_by_name(guild_id, character_name)
-            
-            if not character:
-                await message.channel.send(f"❌ Character '{character_name}' not found.", delete_after=10)
-                try:
-                    await message.delete()
-                except:
-                    pass
-                return
-            
-            # Check if user can speak as this character
-            if not await can_user_speak_as_character(guild_id, user_id, character):
-                await message.channel.send(f"❌ You cannot speak as '{character_name}'. You can only speak as your own characters or companions controlled by your characters.", delete_after=10)
-                try:
-                    await message.delete()
-                except:
-                    pass
-                return
-            
-            alias = None  # No alias for direct character speech
-            
-        else:
-            # Standard format: pc::message (use active character)
-            character = repositories.active_character.get_active_character(guild_id, user_id)
-            if not character:
-                await message.channel.send("❌ You don't have an active character set. Use `/char switch` first or specify a character name with `pc::Character Name::message`.", delete_after=10)
-                try:
-                    await message.delete()
-                except:
-                    pass
-                return
-            
-            # Extract the actual message
-            speech_content = content[4:].strip()
-            alias = None  # No alias for PC speech
-            
-    elif content.lower().startswith("npc::"):
-        # Make sure user is a GM
-        if not await repositories.server.has_gm_permission(guild_id, message.author):
-            await message.channel.send("❌ Only GMs can speak as NPCs.", delete_after=10)
+    # New unified parsing logic for name/nickname based narration with alias support
+    match = re.match(r"([^:]+)::(.*)", content, re.DOTALL)
+    if not match:
+        return  # Not a narration message
+
+    first_part = match.group(1).strip()
+    remaining_content = match.group(2).strip()
+    
+    character_identifier = None
+    speech_content = None
+    alias = None
+
+    # Handle special cases first
+    if first_part.lower() == 'pc':
+        # pc::message format - use active character
+        character = repositories.active_character.get_active_character(guild_id, user_id)
+        if not character:
+            await message.channel.send("❌ You don't have an active character set. Use `/char switch` first.", delete_after=10)
+            try:
+                await message.delete()
+            except:
+                pass
+            return
+        speech_content = remaining_content
+        character_identifier = 'pc'
+    elif first_part.lower() == 'npc':
+        # npc::name::message or npc::name::alias::message format
+        npc_match = re.match(r"([^:]+)::(.*)", remaining_content, re.DOTALL)
+        if not npc_match:
+            await message.channel.send("❌ Format for NPC speech is: `npc::NPC Name::Message content` or `npc::NPC Name::Alias::Message content`", delete_after=10)
             try:
                 await message.delete()
             except:
                 pass
             return
         
-        # Parse format: npc::Character Name::Message content
-        # Or extended format: npc::Character Name::Alias::Message content
-        match = re.match(r"npc::([^:]+)::([^:]+)::(.*)", content, re.IGNORECASE | re.DOTALL)
-        if match:
-            # Extended format with alias
-            npc_name = match.group(1).strip()
-            alias = match.group(2).strip()
-            speech_content = match.group(3).strip()
+        npc_name = npc_match.group(1).strip()
+        npc_remaining = npc_match.group(2).strip()
+        
+        # Check if there's another :: indicating an alias
+        alias_match = re.match(r"([^:]+)::(.*)", npc_remaining, re.DOTALL)
+        if alias_match:
+            # npc::name::alias::message format
+            alias = alias_match.group(1).strip()
+            speech_content = alias_match.group(2).strip()
         else:
-            # Standard format without alias
-            match = re.match(r"npc::([^:]+)::(.*)", content, re.IGNORECASE | re.DOTALL)
-            if not match:
-                await message.channel.send("❌ Format for NPC speech is: `npc::Character Name::Message content` or `npc::Character Name::Alias::Message content`", delete_after=10)
+            # npc::name::message format
+            speech_content = npc_remaining
+        
+        character_identifier = npc_name
+    else:
+        # name::message or name::alias::message format
+        alias_match = re.match(r"([^:]+)::(.*)", remaining_content, re.DOTALL)
+        if alias_match:
+            # name::alias::message format
+            alias = alias_match.group(1).strip()
+            speech_content = alias_match.group(2).strip()
+        else:
+            # name::message format
+            speech_content = remaining_content
+        
+        character_identifier = first_part
+
+    # Now resolve the character (except for pc case which is already handled)
+    if character_identifier != 'pc':
+        character = await _get_character_by_name_or_nickname(guild_id, character_identifier)
+
+    # Check permissions based on what we found
+    is_gm = await repositories.server.has_gm_permission(guild_id, message.author)
+    
+    if character:
+        # Character exists - check appropriate permissions
+        if character.entity_type == EntityType.NPC:
+            if not is_gm:
+                await message.channel.send("❌ Only GMs can speak as NPCs.", delete_after=10)
                 try:
                     await message.delete()
                 except:
                     pass
                 return
-                
-            npc_name = match.group(1).strip()
-            speech_content = match.group(2).strip()
-            alias = None
-        
-        # Find the NPC
-        character = repositories.character.get_character_by_name(guild_id, npc_name)
-        
-        # Handle case where NPC doesn't exist - create a temporary character object
-        if not character:
-            # If we have an alias, we'll use the NPC name as a temporary character
-            if not alias:
-                alias = npc_name  # Use the NPC name as an alias if no alias was provided
-            
+        else:
+            # PC or Companion - check if user can speak as this character
+            if not await can_user_speak_as_character(guild_id, user_id, character):
+                await message.channel.send(f"❌ You cannot speak as '{character.name}'. You can only speak as your own characters or companions controlled by your characters.", delete_after=10)
+                try:
+                    await message.delete()
+                except:
+                    pass
+                return
+    else:
+        # Character not found - only allow on-the-fly NPCs if using npc:: prefix
+        if first_part.lower() == 'npc' and is_gm:
+            # Create temporary NPC for GM using npc:: format
             character = factories.build_entity(
-                name=npc_name,
-                owner_id=str(message.author.id),
-                system=SystemType.GENERIC,  # Use generic system for temporary NPCs
+                name=character_identifier,
+                owner_id=user_id,
+                system=SystemType.GENERIC,
                 entity_type=EntityType.NPC
             )
-    else:
-        return  # Not a narration command
+        else:
+            # Character doesn't exist and not using npc:: format - error
+            await message.channel.send(f"❌ Character or nickname '{character_identifier}' not found.", delete_after=10)
+            try:
+                await message.delete()
+            except:
+                pass
+            return
     
     # Try to send the character message
     try:
@@ -154,7 +166,7 @@ async def process_narration(message: discord.Message):
     except discord.Forbidden:
         await message.channel.send("❌ I need 'Manage Webhooks' permission to send character messages.", delete_after=10)
     except Exception as e:
-        await message.channel.send(f"❌ Error editing narration message: {str(e)}", delete_after=10)
+        await message.channel.send(f"❌ Error sending narration message: {str(e)}", delete_after=10)
 
 async def can_user_speak_as_character(guild_id: int, user_id: int, character: BaseCharacter) -> bool:
     """Check if a user can speak as a character (PC or companion)."""

@@ -73,6 +73,17 @@ async def _get_owner_character(guild_id: str, user_id: str, owner_character: str
         if not owner_char:
             raise ValueError("No active character found. Use `/char switch` or specify an owner character.")
         return owner_char
+
+async def _get_character_by_name_or_nickname(guild_id: str, char_name: str) -> BaseCharacter:
+    """Get character by name or nickname"""
+    character = repositories.character.get_character_by_name(guild_id, char_name)
+    if not character:
+        character = repositories.character_nickname.get_character_by_nickname(guild_id, char_name)
+    
+    if not character:
+        return None
+    
+    return character
     
 async def _set_character_avatar(character: BaseCharacter, avatar_url: str, guild_id: str) -> discord.Embed:
     """Set character avatar and return preview embed"""

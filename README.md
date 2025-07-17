@@ -175,6 +175,12 @@ The following are the commands that are currently available.
 - `/char switch [char_name]`  
   Set your active character (PC) for this server.
 
+- `/char set-nickname [full_char_name] [nickname]`  
+  Set or remove a nickname for a character. Leave nickname blank to remove all nicknames.
+
+- `/char nickname-list [full_char_name]`  
+  List all nicknames for a character.
+
 - `/char set-avatar [char_name] [avatar_url] [file]`  
   Set your character's avatar image with either a url OR a file upload.
 
@@ -332,34 +338,49 @@ The following are the commands that are currently available.
 
 This bot provides special message prefixes that transform regular text messages into formatted character speech or GM narration:
 
+- **Character Nicknames**  
+  Set up nicknames for easier narration with `/char set-nickname [full_char_name] [nickname]`.
+  Once set, you can use nicknames in place of the character's full name.
+
+- **Character Avatars**  
+  Set your character's avatar with `/char set-avatar [char_name] [url] [file]` to enhance the immersion.
+  This shows up in any narration message for the character.
+
 - **Editing narration posts**
-  `right-click message -> Edit Narration`
+  `right-click message -> Apps -> Edit Narration`
+  Fix typos or leave it blank to delete it altogether.
 
 - **Speaking as Your Character**  
   `pc::Your character's message here`  
   Displays a message as your currently active character, with their avatar if set.
 
 - **Speaking as a Specific Character/Companion**  
-  `pc::Character Name::Message content`  
-  Displays a message as the specified character or companion you control.
+  `Character Name::Message content`  
+  Use the character's full name or any nickname they have.
+  Example: `Bob the Brave::I'll take the first watch.`
+  Example: `Bobby::I'll take the first watch.` (if "Bobby" is Bob the Brave's nickname)
+
+- **Using Aliases for Characters/Companions**  
+  `Character Name::Display Name::Message content`  
+  Use a custom display name for the message.
+  Example: `Bob the Brave::The Brave One::Ready for action!`
 
 - **GM: Speaking as NPCs**  
-  `npc::NPC Name::Message content`  
+  `NPC Name::Message content`  
   Displays a message as the specified NPC, with their avatar if available.
+  Example: `Bartender::What'll it be, stranger?`
 
-- **GM: Using Aliases**  
-  `npc::NPC Name::Alias::Message content`  
+- **GM: Using Aliases for NPCs**  
+  `NPC Name::Alias::Message content` or `npc::NPC Name::Alias::Message content`  
   Lets GMs use an alias for the NPC in this specific message.
+  Example: `Bartender::Barkeep::What'll it be?`
 
 - **GM: On-the-fly NPCs**  
-  Even if the NPC doesn't exist in the database, the bot creates a temporary character for the message.
+  If `npc::` is at the beginning of the message, the bot creates a temporary character for the message even if the NPC doesn't exist in the database.
 
 - **GM Narration**  
   `gm::Your narration text here`  
   Creates a purple-bordered embed with the GM's avatar for scene descriptions and narration.
-
-- **Character Avatars**  
-  Set your character's avatar with `/char set-avatar [char_name] [url] [file]` to enhance the immersion.
 
 **Channel Restrictions:** Narration commands (`pc::`, `npc::`, `gm::`) are automatically blocked in **Out-of-Character (OOC)** channels to maintain immersion. Use them in **In-Character (IC)** or **Unrestricted** channels.
 

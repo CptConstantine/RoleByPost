@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 import dotenv
 import discord
 from discord.ext import commands
@@ -120,7 +121,10 @@ async def on_message(message: discord.Message):
 
     # Process narration
     content_lower = message.content.lower()
-    if message.author.id != bot.user.id and content_lower.startswith(("pc::", "npc::", "gm::")):
+    if message.author.id != bot.user.id and (
+        content_lower.startswith(("pc::", "npc::", "gm::")) or
+        re.match(r"[^:]+::", message.content)  # Any identifier::message format
+    ):
         try:
             await process_narration(message)
         except Exception as e:

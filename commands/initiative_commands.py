@@ -30,7 +30,7 @@ async def initiative_addable_name_autocomplete(interaction: discord.Interaction,
         return []
 
     # Get all PCs and NPCs in the guild
-    all_chars = repositories.character.get_all_by_guild(guild_id)
+    all_chars = repositories.character.get_all_pcs_and_npcs_by_guild(guild_id)
     # Names already in initiative (case-insensitive)
     in_initiative = {p.name.lower() for p in initiative.participants}
 
@@ -108,7 +108,7 @@ class InitiativeCommands(commands.Cog):
         InitiativeClass = factories.get_specific_initiative(type)
 
         # Gather participants: PCs and scene NPCs
-        all_chars = repositories.character.get_all_by_guild(str(guild_id))
+        all_chars = repositories.character.get_all_pcs_and_npcs_by_guild(str(guild_id))
         non_gm_pcs = [c for c in all_chars if not c.is_npc and not repositories.server.has_gm_permission(str(guild_id), c.owner_id)]
         scene = repositories.scene.get_active_scene(str(guild_id))
         if not scene:

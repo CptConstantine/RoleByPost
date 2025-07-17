@@ -4,7 +4,7 @@ from data.repositories.vw_entity_details_repository import EntityDetailsReposito
 from .channel_permission_repository import ChannelPermissionRepository
 from .server_repository import ServerRepository
 from .homebrew_repository import HomebrewRepository
-from .character_repository import CharacterRepository, ActiveCharacterRepository
+from .character_repository import CharacterNicknameRepository, CharacterRepository, ActiveCharacterRepository
 from .scene_repository import SceneNotesRepository, SceneRepository, SceneNPCRepository, PinnedSceneMessageRepository
 from .initiative_repository import InitiativeRepository, ServerInitiativeDefaultsRepository
 from .reminder_repository import (
@@ -26,6 +26,7 @@ class RepositoryFactory:
         # Character repositories
         self._character_repo = None
         self._active_character_repo = None
+        self._character_nickname_repo = None
         
         # Scene repositories
         self._scene_repo = None
@@ -92,6 +93,12 @@ class RepositoryFactory:
         if self._active_character_repo is None:
             self._active_character_repo = ActiveCharacterRepository()
         return self._active_character_repo
+    
+    @property
+    def character_nickname(self) -> "CharacterNicknameRepository":
+        if self._character_nickname_repo is None:
+            self._character_nickname_repo = CharacterNicknameRepository()
+        return self._character_nickname_repo
     
     # Scene repositories
     @property

@@ -331,7 +331,7 @@ class RollCommands(commands.Cog):
             return
 
         system = repositories.server.get_system(str(interaction.guild.id))
-        all_chars = repositories.character.get_all_by_guild(str(interaction.guild.id))
+        all_chars = repositories.character.get_all_pcs_and_npcs_by_guild(str(interaction.guild.id))
         char_names = [name.strip() for name in chars_to_roll.split(",") if name.strip()]
         chars = [c for c in all_chars if c.name in char_names]
         if not chars:
