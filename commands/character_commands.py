@@ -466,14 +466,14 @@ class CharacterCommands(commands.Cog):
         repositories.active_character.set_active_character(str(interaction.guild.id), str(interaction.user.id), character.id)
         await interaction.response.send_message(f"✅ `{char_name}` is now your active character.", ephemeral=True)
 
-    @character_group.command(name="set-avatar", description="Set your character's avatar image")
+    @character_group.command(name="set-avatar", description="Set a character's avatar via file upload or URL (Defaults to active character if no name given)")
     @app_commands.describe(
+        char_name="Optional: Character/NPC name (defaults to your active character)",
         avatar_url="Optional: URL to an image for your character's avatar",
-        file="Optional: Upload an image file instead of providing a URL",
-        char_name="Optional: Character/NPC name (defaults to your active character)"
+        file="Optional: Upload an image file instead of providing a URL"
     )
     @app_commands.autocomplete(char_name=character_or_npc_autocomplete)
-    async def character_setavatar(self, interaction: discord.Interaction, avatar_url: str = None, file: discord.Attachment = None, char_name: str = None):
+    async def character_setavatar(self, interaction: discord.Interaction, char_name: str = None, avatar_url: str = None, file: discord.Attachment = None):
         """Set an avatar image for your character or an NPC (if GM)"""
         
         # Must provide either URL or file, but not both
