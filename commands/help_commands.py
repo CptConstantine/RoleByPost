@@ -2,6 +2,8 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 
+from core.command_decorators import no_ic_channels
+
 class HelpCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -9,6 +11,7 @@ class HelpCommands(commands.Cog):
     help_command = app_commands.Group(name="help", description="Help commands for the bot")
 
     @help_command.command(name="guide", description="Show a guide to the help commands")
+    @no_ic_channels()
     async def help(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="📖 Help Commands Guide",
@@ -32,6 +35,7 @@ class HelpCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
     
     @help_command.command(name="getting-started", description="Show help for getting started with the bot")
+    @no_ic_channels()
     async def help_getting_started(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="🚀 Getting Started with RoleByPost",
@@ -61,6 +65,7 @@ class HelpCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @help_command.command(name="characters", description="Show help for character commands")
+    @no_ic_channels()
     async def help_characters(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="🧑‍🎤 Character Commands Help",
@@ -78,6 +83,7 @@ class HelpCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @help_command.command(name="entities", description="Show help for entity commands")
+    @no_ic_channels()
     async def help_entities(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="📦 Entity Commands Help",
@@ -95,6 +101,7 @@ class HelpCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @help_command.command(name="rolling", description="Show help for rolling commands")
+    @no_ic_channels()
     async def help_rolling(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="🎲 Rolling Commands Help",
@@ -110,6 +117,7 @@ class HelpCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @help_command.command(name="scenes", description="Show help for scene management commands")
+    @no_ic_channels()
     async def help_scenes(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="🎬 Scene Management Help",
@@ -127,6 +135,7 @@ class HelpCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @help_command.command(name="initiative", description="Show help for initiative commands")
+    @no_ic_channels()
     async def help_initiative(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="⚔️ Initiative Commands Help",
@@ -143,6 +152,7 @@ class HelpCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @help_command.command(name="recaps", description="Show help for recap commands")
+    @no_ic_channels()
     async def help_recaps(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="📝 Recap Commands Help",
@@ -158,6 +168,7 @@ class HelpCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @help_command.command(name="reminders", description="Show help for reminder commands")
+    @no_ic_channels()
     async def help_reminders(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="⏰ Reminder Commands Help",
@@ -174,6 +185,7 @@ class HelpCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @help_command.command(name="rules", description="Show help for rules commands")
+    @no_ic_channels()
     async def help_rules(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="📚 Rules Commands Help",
@@ -190,6 +202,7 @@ class HelpCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @help_command.command(name="setup", description="Show help for setup and configuration commands")
+    @no_ic_channels()
     async def help_setup(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="⚙️ Setup & Configuration Help",
@@ -208,6 +221,7 @@ class HelpCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @help_command.command(name="narration", description="Show help for character speech and narration")
+    @no_ic_channels()
     async def help_narration(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="📢 Character Speech & Narration Help",
@@ -328,6 +342,7 @@ class HelpCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @help_command.command(name="ai", description="Show help for AI-powered commands and features")
+    @no_ic_channels()
     async def help_ai(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="🤖 AI Features & Commands Help",

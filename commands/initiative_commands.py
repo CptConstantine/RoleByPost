@@ -3,9 +3,28 @@ from discord.ext import commands
 from discord import app_commands
 from typing import List
 from core.base_models import EntityType
+from core.command_decorators import gm_role_required, no_ic_channels
 from core.initiative_types import InitiativeParticipant
 from data.repositories.repository_factory import repositories
 import core.factories as factories
+
+async def initiative_type_autocomplete(
+        interaction: discord.Interaction,
+        current: str,
+    ) -> List[app_commands.Choice[str]]:
+        """Autocomplete for initiative types"""
+        initiative_types = ["popcorn", "generic"]
+        
+        # Filter based on what the user has typed so far
+        filtered_types = [
+            init_type for init_type in initiative_types 
+            if current.lower() in init_type.lower()
+        ]
+        
+        return [
+            app_commands.Choice(name=init_type.capitalize(), value=init_type)
+            for init_type in filtered_types
+        ]
 
 async def initiative_participant_name_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
     """Autocomplete for participants in the current initiative."""
@@ -51,30 +70,13 @@ class InitiativeCommands(commands.Cog):
 
     initiative_group = app_commands.Group(name="init", description="Initiative management commands")
 
-    async def initiative_type_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str,
-    ) -> List[app_commands.Choice[str]]:
-        """Autocomplete for initiative types"""
-        initiative_types = ["popcorn", "generic"]
-        
-        # Filter based on what the user has typed so far
-        filtered_types = [
-            init_type for init_type in initiative_types 
-            if current.lower() in init_type.lower()
-        ]
-        
-        return [
-            app_commands.Choice(name=init_type.capitalize(), value=init_type)
-            for init_type in filtered_types
-        ]
-
     @initiative_group.command(name="start", description="Start initiative in this channel.")
     @app_commands.describe(
         type="Type of initiative (e.g. popcorn, generic). Leave blank for server default."
     )
     @app_commands.autocomplete(type=initiative_type_autocomplete)
+    @gm_role_required()
+    @no_ic_channels()
     async def initiative_start(self, interaction: discord.Interaction, type: str = None):
         # Check GM permissions
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
@@ -140,6 +142,8 @@ class InitiativeCommands(commands.Cog):
         await interaction.followup.send("🚦 Initiative started and pinned!", ephemeral=True)
 
     @initiative_group.command(name="end", description="End initiative in this channel.")
+    @gm_role_required()
+    @no_ic_channels()
     async def initiative_end(self, interaction: discord.Interaction):
         # Check GM permissions
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
@@ -164,6 +168,8 @@ class InitiativeCommands(commands.Cog):
     @initiative_group.command(name="add-char", description="Add a PC or NPC to the current initiative.")
     @app_commands.describe(name="Name of the PC or NPC to add")
     @app_commands.autocomplete(name=initiative_addable_name_autocomplete)
+    @gm_role_required()
+    @no_ic_channels()
     async def initiative_add_char(self, interaction: discord.Interaction, name: str, position: int = None):
         # Check GM permissions
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
@@ -209,6 +215,8 @@ class InitiativeCommands(commands.Cog):
     @initiative_group.command(name="remove-char", description="Remove a PC or NPC from the current initiative.")
     @app_commands.describe(name="Name of the PC or NPC to remove")
     @app_commands.autocomplete(name=initiative_participant_name_autocomplete)
+    @gm_role_required()
+    @no_ic_channels()
     async def initiative_remove_char(self, interaction: discord.Interaction, name: str):
         # Check GM permissions
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
@@ -249,6 +257,8 @@ class InitiativeCommands(commands.Cog):
     @initiative_group.command(name="set-default", description="Set the default initiative type for this server.")
     @app_commands.describe(type="Type of initiative (e.g., popcorn, generic)")
     @app_commands.autocomplete(type=initiative_type_autocomplete)
+    @gm_role_required()
+    @no_ic_channels()
     async def set_default_initiative(self, interaction: discord.Interaction, type: str):
         # Check GM permissions
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):

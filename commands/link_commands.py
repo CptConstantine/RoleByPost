@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from core.command_decorators import gm_role_required, no_ic_channels, player_or_gm_role_required
 from data.repositories.repository_factory import repositories
 from core.base_models import AccessType, EntityLinkType, EntityType
 from core.base_models import BaseEntity
@@ -52,6 +53,8 @@ class LinkCommands(commands.Cog):
     @app_commands.autocomplete(from_entity=entity_autocomplete)
     @app_commands.autocomplete(link_type=link_type_autocomplete)
     @app_commands.autocomplete(to_entity=entity_autocomplete)
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def create_link(self, interaction: discord.Interaction, from_entity: str, link_type: str, to_entity: str, description: str = None):
         """Create a link between two entities"""
         # Check GM permissions for certain link types
@@ -106,6 +109,8 @@ class LinkCommands(commands.Cog):
     @app_commands.autocomplete(from_entity=entity_autocomplete)
     @app_commands.autocomplete(to_entity=entity_autocomplete)
     @app_commands.autocomplete(link_type=link_type_autocomplete)
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def remove_link(self, interaction: discord.Interaction, from_entity: str, to_entity: str, link_type: str = None):
         """Remove a link between two entities"""
         
@@ -146,6 +151,8 @@ class LinkCommands(commands.Cog):
     @link_group.command(name="remove-all", description="Remove all links to and from an entity")
     @app_commands.describe(entity_name="The entity to remove all links for")
     @app_commands.autocomplete(entity_name=entity_autocomplete)
+    @gm_role_required()
+    @no_ic_channels()
     async def remove_all_links(self, interaction: discord.Interaction, entity_name: str):
         """Remove all links involving an entity"""
         # Get the entity
@@ -201,6 +208,8 @@ class LinkCommands(commands.Cog):
     @link_group.command(name="list", description="List all links for an entity")
     @app_commands.describe(entity_name="The entity to show links for")
     @app_commands.autocomplete(entity_name=entity_autocomplete)
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def list_links(self, interaction: discord.Interaction, entity_name: str):
         """List all links for an entity"""
         # Get the entity - try both character and entity repositories
@@ -262,6 +271,8 @@ class LinkCommands(commands.Cog):
     )
     @app_commands.autocomplete(possessed_entity=entity_autocomplete)
     @app_commands.autocomplete(new_owner=entity_autocomplete)
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def transfer_possession(self, interaction: discord.Interaction, possessed_entity: str, new_owner: str, quantity: int = None):
         """Transfer possession of an entity to another entity (GM only)"""
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):

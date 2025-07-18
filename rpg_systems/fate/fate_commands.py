@@ -4,7 +4,7 @@ from discord.ext import commands
 from discord import app_commands
 from typing import List
 from data.repositories.repository_factory import repositories
-from core import channel_restriction
+from core import command_decorators
 from core.base_models import BaseEntity, EntityType, EntityLinkType, SystemType
 import core.factories as factories
 

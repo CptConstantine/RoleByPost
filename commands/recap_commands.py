@@ -7,7 +7,7 @@ import json
 import openai
 import time
 import logging
-from core import channel_restriction
+from core.command_decorators import gm_role_required, ic_channel_only, no_ic_channels, player_or_gm_role_required
 from data.repositories.repository_factory import repositories
 
 class RecapCommands(commands.Cog):
@@ -32,6 +32,8 @@ class RecapCommands(commands.Cog):
         days="Number of days to include in the recap (default: 7)",
         private="Whether to show the recap only to you (default: False)"
     )
+    @player_or_gm_role_required()
+    @ic_channel_only()
     async def recap_generate(
         self, 
         interaction: discord.Interaction, 
@@ -78,7 +80,8 @@ class RecapCommands(commands.Cog):
         days_interval="How often to post recaps (in days, default: 7)",
         days_to_include="How many days of history to include (default: 7)"
     )
-    @channel_restriction.no_ic_channels()
+    @gm_role_required()
+    @no_ic_channels()
     async def recap_setauto(
         self,
         interaction: discord.Interaction,
@@ -164,7 +167,8 @@ class RecapCommands(commands.Cog):
         name="auto-now",
         description="GM: Force an automatic recap to be generated now"
     )
-    @channel_restriction.no_ic_channels()
+    @gm_role_required()
+    @ic_channel_only()
     async def auto_recap_now(self, interaction: discord.Interaction):
         # Check if user has GM permissions
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
@@ -206,7 +210,8 @@ class RecapCommands(commands.Cog):
         name="auto-status",
         description="Check the status of automatic story recaps for this server"
     )
-    @channel_restriction.no_ic_channels()
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def recap_auto_status(self, interaction: discord.Interaction):
         """Show the current automatic recap settings for this server"""
         settings = repositories.auto_recap.get_settings(str(interaction.guild.id))

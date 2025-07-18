@@ -3,8 +3,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from typing import List, Optional
-from core import channel_restriction
 from core.base_models import AccessType, BaseEntity, EntityType, EntityLinkType
+from core.command_decorators import gm_role_required, no_ic_channels, player_or_gm_role_required
 from data.repositories.repository_factory import repositories
 import core.factories as factories
 
@@ -132,7 +132,8 @@ class EntityCommands(commands.Cog):
     @app_commands.autocomplete(
         entity_type=entity_type_autocomplete
     )
-    @channel_restriction.no_ic_channels()
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def entity_create(
         self, 
         interaction: discord.Interaction, 
@@ -179,7 +180,8 @@ class EntityCommands(commands.Cog):
         transfer_inventory="If true, releases possessed items instead of blocking deletion"
     )
     @app_commands.autocomplete(entity_name=entity_autocomplete)
-    @channel_restriction.no_ic_channels()
+    @gm_role_required()
+    @no_ic_channels()
     async def entity_delete(self, interaction: discord.Interaction, entity_name: str, transfer_inventory: bool = False):
         """Delete an entity with confirmation"""
         entity = repositories.entity.get_by_name(str(interaction.guild.id), entity_name)
@@ -235,7 +237,8 @@ class EntityCommands(commands.Cog):
         owner_entity=top_level_entity_autocomplete,
         entity_type=entity_type_autocomplete
     )
-    @channel_restriction.no_ic_channels()
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def entity_list(
         self, 
         interaction: discord.Interaction, 
@@ -347,7 +350,8 @@ class EntityCommands(commands.Cog):
         show_links="Show detailed link information"
     )
     @app_commands.autocomplete(entity_name=entity_autocomplete)
-    @channel_restriction.no_ic_channels()
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def entity_view(self, interaction: discord.Interaction, entity_name: str, show_links: bool = False):
         """View detailed information about an entity with edit interface"""
         entity = repositories.entity.get_by_name(str(interaction.guild.id), entity_name)
@@ -387,7 +391,8 @@ class EntityCommands(commands.Cog):
         new_name="New name for the entity"
     )
     @app_commands.autocomplete(entity_name=entity_autocomplete)
-    @channel_restriction.no_ic_channels()
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def entity_rename(self, interaction: discord.Interaction, entity_name: str, new_name: str):
         """Rename an entity"""
         entity = repositories.entity.get_by_name(str(interaction.guild.id), entity_name)
@@ -421,7 +426,8 @@ class EntityCommands(commands.Cog):
         confirm="Type 'DELETE' to confirm this destructive action"
     )
     @app_commands.autocomplete(entity_type=entity_type_autocomplete)
-    @channel_restriction.no_ic_channels()
+    @gm_role_required()
+    @no_ic_channels()
     async def entity_delete_all(
         self, 
         interaction: discord.Interaction, 
@@ -528,7 +534,8 @@ class EntityCommands(commands.Cog):
         app_commands.Choice(name="Public", value="public"),
         app_commands.Choice(name="GM Only", value="gm_only")
     ])
-    @channel_restriction.no_ic_channels()
+    @gm_role_required()
+    @no_ic_channels()
     async def entity_set_access(
         self, 
         interaction: discord.Interaction, 

@@ -1,6 +1,6 @@
 import logging
 from functools import wraps
-from typing import List, Callable
+from typing import List, Callable, Union
 import discord
 from data.repositories.repository_factory import repositories
 
@@ -78,3 +78,64 @@ def no_ic_channels():
     Decorator shortcut for commands that should NOT work in IC channels.
     """
     return channel_restricted(['ooc', 'gm', 'unrestricted'])
+
+def gm_role_required():
+    """
+    Decorator shortcut for commands that require GM role.
+    Uses the server's configured GM role.
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(self, interaction: discord.Interaction, *args, **kwargs):
+            # Check if user has GM permissions using existing system
+            if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
+                await interaction.response.send_message(
+                    "❌ This command requires GM permissions.",
+                    ephemeral=True
+                )
+                return
+            
+            return await func(self, interaction, *args, **kwargs)
+        
+        return wrapper
+    return decorator
+
+def admin_required():
+    """
+    Decorator shortcut for commands that require administrator permissions.
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(self, interaction: discord.Interaction, *args, **kwargs):
+            if not interaction.user.guild_permissions.administrator:
+                await interaction.response.send_message(
+                    "❌ This command requires administrator permissions.",
+                    ephemeral=True
+                )
+                return
+            
+            return await func(self, interaction, *args, **kwargs)
+        
+        return wrapper
+    return decorator
+
+def player_or_gm_role_required():
+    """
+    Decorator shortcut for commands that require player role.
+    Uses the server's configured player role.
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(self, interaction: discord.Interaction, *args, **kwargs):
+            # Check if user has player permissions using existing system
+            if not await repositories.server.has_player_or_gm_permission(str(interaction.guild.id), interaction.user):
+                await interaction.response.send_message(
+                    "❌ This command requires player or GM permissions.",
+                    ephemeral=True
+                )
+                return
+            
+            return await func(self, interaction, *args, **kwargs)
+        
+        return wrapper
+    return decorator

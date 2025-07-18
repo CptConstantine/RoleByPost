@@ -1,8 +1,8 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from core import channel_restriction
 from core.base_models import SystemType
+from core.command_decorators import gm_role_required, no_ic_channels, player_or_gm_role_required
 import core.factories as factories
 from data.repositories.repository_factory import repositories
 
@@ -19,7 +19,8 @@ class SetupCommands(commands.Cog):
         description="Set a Discord role as the GM role for the server. You must be an Admin."
     )
     @app_commands.describe(role="The Discord role to set as the GM role")
-    @channel_restriction.no_ic_channels()
+    @gm_role_required()
+    @no_ic_channels()
     async def setup_gmrole(self, interaction: discord.Interaction, role: discord.Role):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Only admins can set the GM role.", ephemeral=True)
@@ -37,7 +38,8 @@ class SetupCommands(commands.Cog):
         description="Set a Discord role as the player role for the server. You must be an Admin."
     )
     @app_commands.describe(role="The Discord role to set as the player role")
-    @channel_restriction.no_ic_channels()
+    @gm_role_required()
+    @no_ic_channels()
     async def setup_playerrole(self, interaction: discord.Interaction, role: discord.Role):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Only admins can set the player role.", ephemeral=True)
@@ -57,7 +59,8 @@ class SetupCommands(commands.Cog):
         app_commands.Choice(name="Mongoose Traveller 2nd Edition", value=SystemType.MGT2E.value),
         app_commands.Choice(name="Generic System", value=SystemType.GENERIC.value),
     ])
-    @channel_restriction.no_ic_channels()
+    @gm_role_required()
+    @no_ic_channels()
     async def setup_system(self, interaction: discord.Interaction, system: str):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Only admins can set the system.", ephemeral=True)
@@ -71,7 +74,8 @@ class SetupCommands(commands.Cog):
 
     @setup_group.command(name="default-skills-file", description="Set default skills for this server's system with a .txt file (one skill per line).")
     @app_commands.describe(file="A .txt file with skills, one per line or Skill:Value per line")
-    @channel_restriction.no_ic_channels()
+    @gm_role_required()
+    @no_ic_channels()
     async def setup_default_skills_file(self, interaction: discord.Interaction, file: discord.Attachment):
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can set default skills.", ephemeral=True)
@@ -115,7 +119,8 @@ class SetupCommands(commands.Cog):
 
     @setup_group.command(name="default-skills", description="Set default skills for this server's system via text.")
     @app_commands.describe(skills="Skill list, e.g. Admin:0, Gun Combat:1, Pilot:2")
-    @channel_restriction.no_ic_channels()
+    @gm_role_required()
+    @no_ic_channels()
     async def setup_default_skills(self, interaction: discord.Interaction, skills: str):
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can set default skills.", ephemeral=True)
@@ -157,7 +162,8 @@ class SetupCommands(commands.Cog):
         description="GM: Set the OpenAI API key used for generating recaps and other AI features"
     )
     @app_commands.describe(api_key="Your OpenAI API key (will be stored securely)")
-    @channel_restriction.no_ic_channels()
+    @gm_role_required()
+    @no_ic_channels()
     async def openai_set_key(self, interaction: discord.Interaction, api_key: str):
         """Set the OpenAI API key for this server"""
         # Check if user has GM permissions
@@ -179,7 +185,8 @@ class SetupCommands(commands.Cog):
         name="remove-api-key",
         description="GM: Remove the OpenAI API key and disable AI features"
     )
-    @channel_restriction.no_ic_channels()
+    @gm_role_required()
+    @no_ic_channels()
     async def openai_remove_key(self, interaction: discord.Interaction):
         """Remove the OpenAI API key for this server"""
         # Check if user has GM permissions
@@ -195,7 +202,8 @@ class SetupCommands(commands.Cog):
         name="status",
         description="Check if an OpenAI API key is configured for this server"
     )
-    @channel_restriction.no_ic_channels()
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def openai_status(self, interaction: discord.Interaction):
         """Check the status of the OpenAI API key for this server"""
         api_key_set = repositories.api_key.get_openai_key(str(interaction.guild.id)) is not None
@@ -252,7 +260,8 @@ class SetupCommands(commands.Cog):
         app_commands.Choice(name="GM Only", value="gm"),
         app_commands.Choice(name="Unrestricted", value="unrestricted")
     ])
-    @channel_restriction.no_ic_channels()
+    @gm_role_required()
+    @no_ic_channels()
     async def setup_channel_type(
         self, 
         interaction: discord.Interaction, 
@@ -290,7 +299,8 @@ class SetupCommands(commands.Cog):
         name="status",
         description="GM: View channel permission configuration for this server"
     )
-    @channel_restriction.no_ic_channels()
+    @gm_role_required()
+    @no_ic_channels()
     async def setup_channel_status(self, interaction: discord.Interaction):
         """View all channel permissions for this server"""
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
@@ -349,7 +359,8 @@ class SetupCommands(commands.Cog):
     @app_commands.describe(
         base_dice="Dice formula like 1d20, 2d6, 3d6, 1d100, etc."
     )
-    @channel_restriction.no_ic_channels()
+    @gm_role_required()
+    @no_ic_channels()
     async def setup_generic_dice(self, interaction: discord.Interaction, base_dice: str):
         """Set the base dice formula for the Generic system"""
         import re
@@ -389,7 +400,8 @@ class SetupCommands(commands.Cog):
         name="status",
         description="GM: View comprehensive server bot configuration and statistics"
     )
-    @channel_restriction.no_ic_channels()
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def setup_status(self, interaction: discord.Interaction):
         """Display comprehensive server bot settings and statistics"""
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):

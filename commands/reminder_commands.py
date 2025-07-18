@@ -4,7 +4,7 @@ import datetime
 import discord
 from discord.ext import commands
 from discord import app_commands
-from core import channel_restriction
+from core.command_decorators import gm_role_required, no_ic_channels, player_or_gm_role_required
 from data.repositories.repository_factory import repositories
 
 
@@ -26,7 +26,8 @@ class ReminderCommands(commands.Cog):
         message="Optional custom reminder message",
         delay="How long to wait before DMing (e.g. '24h', '2d', '90m'). Default: 24h"
     )
-    @channel_restriction.no_ic_channels()
+    @gm_role_required()
+    @no_ic_channels()
     async def send_reminder(
         self,
         interaction: discord.Interaction,
@@ -87,7 +88,8 @@ class ReminderCommands(commands.Cog):
         time="The time for the reminder (e.g. '15 minutes', '2 hours', '1 day')",
         message="The reminder message"
     )
-    @channel_restriction.no_ic_channels()
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def set_reminder(
         self,
         interaction: discord.Interaction,
@@ -129,7 +131,8 @@ class ReminderCommands(commands.Cog):
         enabled="Whether automatic reminders are enabled",
         delay="How long to wait before sending reminders (e.g. '24h', '2d', '90m')"
     )
-    @channel_restriction.no_ic_channels()
+    @gm_role_required()
+    @no_ic_channels()
     async def set_auto_reminders(
         self, 
         interaction: discord.Interaction, 
@@ -212,7 +215,8 @@ class ReminderCommands(commands.Cog):
     @app_commands.describe(
         opt_out="Whether to opt out of automatic reminders"
     )
-    @channel_restriction.no_ic_channels()
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def auto_optout(self, interaction: discord.Interaction, opt_out: bool = True):
         repositories.auto_reminder_optout.set_user_optout(str(interaction.guild.id), str(interaction.user.id), opt_out)
         status = "opted out of" if opt_out else "opted into"
@@ -222,7 +226,8 @@ class ReminderCommands(commands.Cog):
         name="auto-status", 
         description="Check the current automatic reminder settings"
     )
-    @channel_restriction.no_ic_channels()
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def auto_status(self, interaction: discord.Interaction):
         settings = repositories.auto_reminder_settings.get_settings(str(interaction.guild.id))
         is_opted_out = repositories.auto_reminder_optout.is_user_opted_out(str(interaction.guild.id), str(interaction.user.id))
@@ -264,7 +269,6 @@ class ReminderCommands(commands.Cog):
             
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    # Helper methods
     def _parse_time_argument(self, time_str):
         """Parse a time argument in the format '15 minutes', '2 hours', or '1 day'."""
         time_str = time_str.lower()
@@ -296,7 +300,6 @@ class ReminderCommands(commands.Cog):
             except Exception as e:
                 print(f"Error sending reminder to {user}: {e}")
 
-    # New method for handling automatic mention reminders
     async def handle_mention(self, message, mentioned_user):
         """Handle automatic reminders for user mentions"""
         guild_id = message.guild.id
@@ -360,7 +363,6 @@ class ReminderCommands(commands.Cog):
             # Remove the reminder from the active list
             if reminder_key in self.active_mention_reminders:
                 del self.active_mention_reminders[reminder_key]
-
 
 async def setup_reminder_commands(bot: commands.Bot):
     await bot.add_cog(ReminderCommands(bot))

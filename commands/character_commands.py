@@ -4,6 +4,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from core.base_models import AccessType, BaseCharacter, BaseEntity, EntityType, EntityLinkType
+from core.command_decorators import gm_role_required, no_ic_channels, player_or_gm_role_required
 from core.utils import _can_user_edit_character, _can_user_view_character, _check_character_possessions, _get_character_by_name_or_nickname, _resolve_character, _set_character_avatar
 from data.models import CharacterNickname
 from data.repositories.repository_factory import repositories
@@ -210,6 +211,8 @@ class CharacterCommands(commands.Cog):
     @app_commands.describe(
         char_name="The name of your new character"
     )
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def create_pc(self, interaction: discord.Interaction, char_name: str):
         await interaction.response.defer(ephemeral=True)
         
@@ -240,6 +243,8 @@ class CharacterCommands(commands.Cog):
     @app_commands.describe(
         npc_name="The name of the new NPC"
     )
+    @gm_role_required()
+    @no_ic_channels()
     async def create_npc(self, interaction: discord.Interaction, npc_name: str, owner: str = None):
         await interaction.response.defer(ephemeral=True)
         if not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
@@ -268,6 +273,8 @@ class CharacterCommands(commands.Cog):
         show_npcs="Show NPCs (GM only)",
         show_links="Show ownership links"
     )
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def list_characters(self, interaction: discord.Interaction, show_npcs: bool = False, show_links: bool = False):
         await interaction.response.defer(ephemeral=True)
         
@@ -402,6 +409,8 @@ class CharacterCommands(commands.Cog):
         transfer_inventory="If true, releases possessed items instead of blocking deletion"
     )
     @app_commands.autocomplete(char_name=character_npc_or_companion_autocomplete)
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def delete_character(self, interaction: discord.Interaction, char_name: str, transfer_inventory: bool = False):
         character = repositories.character.get_character_by_name(interaction.guild.id, char_name)
         if not character:
@@ -445,6 +454,8 @@ class CharacterCommands(commands.Cog):
     @character_group.command(name="sheet", description="View a character, NPC, or companion's full sheet")
     @app_commands.describe(char_name="Leave blank to view your active character, or enter a character/NPC/companion name")
     @app_commands.autocomplete(char_name=character_npc_or_companion_autocomplete)
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def sheet(self, interaction: discord.Interaction, char_name: str = None):
         try:
             character = await _resolve_character(str(interaction.guild.id), str(interaction.user.id), char_name)
@@ -470,6 +481,8 @@ class CharacterCommands(commands.Cog):
         new_owner="The user to transfer ownership to"
     )
     @app_commands.autocomplete(char_name=pc_name_gm_autocomplete)
+    @gm_role_required()
+    @no_ic_channels()
     async def transfer(self, interaction: discord.Interaction, char_name: str, new_owner: discord.Member):
         if not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
             await interaction.response.send_message("❌ Only GMs can transfer characters.", ephemeral=True)
@@ -497,6 +510,8 @@ class CharacterCommands(commands.Cog):
     @character_group.command(name="switch", description="Set your active character (PC) for this server")
     @app_commands.describe(char_name="The name of your character to set as active")
     @app_commands.autocomplete(char_name=pc_switch_name_autocomplete)
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def switch(self, interaction: discord.Interaction, char_name: str):
         user_chars = repositories.character.get_user_characters(interaction.guild.id, interaction.user.id)
         character = next(
@@ -516,6 +531,8 @@ class CharacterCommands(commands.Cog):
         nickname="The nickname to add. Leave blank to remove all nicknames."
     )
     @app_commands.autocomplete(full_char_name=character_npc_or_companion_autocomplete)
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def set_nickname(self, interaction: discord.Interaction, full_char_name: str, nickname: str = None):
         """Add or remove nicknames for a character."""
         await interaction.response.defer(ephemeral=True)
@@ -554,6 +571,8 @@ class CharacterCommands(commands.Cog):
         full_char_name="The character to list nicknames for."
     )
     @app_commands.autocomplete(full_char_name=character_npc_or_companion_autocomplete)
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def nickname_list(self, interaction: discord.Interaction, full_char_name: str):
         """List all nicknames for a character."""
         await interaction.response.defer(ephemeral=True)
@@ -593,6 +612,8 @@ class CharacterCommands(commands.Cog):
         file="Optional: Upload an image file instead of providing a URL"
     )
     @app_commands.autocomplete(char_name=character_npc_or_companion_autocomplete)
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def character_setavatar(self, interaction: discord.Interaction, char_name: str = None, avatar_url: str = None, file: discord.Attachment = None):
         """Set an avatar image for your character or an NPC (if GM)"""
         
@@ -633,6 +654,8 @@ class CharacterCommands(commands.Cog):
         owner_character="The character that will control this companion (defaults to your active character)"
     )
     @app_commands.autocomplete(owner_character=pc_switch_name_autocomplete)
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def create_companion(self, interaction: discord.Interaction, companion_name: str, owner_character: str = None):
         """Create a companion controlled by a character"""
         await interaction.response.defer(ephemeral=True)
@@ -689,6 +712,8 @@ class CharacterCommands(commands.Cog):
     @companion_group.command(name="list", description="List companions controlled by your characters")
     @app_commands.describe(character_name="Optional: Show companions for a specific character")
     @app_commands.autocomplete(character_name=pc_switch_name_autocomplete)
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def list_companions(self, interaction: discord.Interaction, character_name: str = None):
         """List companions controlled by user's characters"""
         await interaction.response.defer(ephemeral=True)
@@ -774,6 +799,8 @@ class CharacterCommands(commands.Cog):
     )
     @app_commands.autocomplete(companion_name=companion_autocomplete)
     @app_commands.autocomplete(new_controller=character_npc_or_companion_autocomplete)
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def transfer_companion(self, interaction: discord.Interaction, companion_name: str, new_controller: str):
         """Transfer control of a companion to another character"""
         await interaction.response.defer(ephemeral=True)

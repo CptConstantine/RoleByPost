@@ -3,6 +3,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from core import shared_views
+from core.command_decorators import gm_role_required, no_ic_channels, player_or_gm_role_required
 from data.repositories.repository_factory import repositories
 
 import core.factories as factories
@@ -48,6 +49,8 @@ class SceneCommands(commands.Cog):
 
     @scene_group.command(name="create", description="Create a new scene")
     @app_commands.describe(name="Name for the new scene")
+    @gm_role_required()
+    @no_ic_channels()
     async def scene_create(self, interaction: discord.Interaction, name: str):
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can create scenes.", ephemeral=True)
@@ -69,6 +72,8 @@ class SceneCommands(commands.Cog):
     @scene_group.command(name="switch", description="Switch to a different scene")
     @app_commands.describe(scene_name="Name of the scene to switch to")
     @app_commands.autocomplete(scene_name=scene_name_autocomplete)
+    @gm_role_required()
+    @no_ic_channels()
     async def scene_switch(self, interaction: discord.Interaction, scene_name: str):
         """Switch to a different scene"""
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
@@ -154,6 +159,8 @@ class SceneCommands(commands.Cog):
         await interaction.followup.send(response, ephemeral=True)
 
     @scene_group.command(name="list", description="List all scenes")
+    @gm_role_required()
+    @no_ic_channels()
     async def scene_list(self, interaction: discord.Interaction):
         is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
         if not is_gm:
@@ -189,6 +196,8 @@ class SceneCommands(commands.Cog):
     @scene_group.command(name="delete", description="Delete a scene")
     @app_commands.describe(scene_name="Name of the scene to delete")
     @app_commands.autocomplete(scene_name=scene_name_autocomplete)
+    @gm_role_required()
+    @no_ic_channels()
     async def scene_delete(self, interaction: discord.Interaction, scene_name: str):
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can delete scenes.", ephemeral=True)
@@ -213,6 +222,8 @@ class SceneCommands(commands.Cog):
         new_name="New name for the scene"
     )
     @app_commands.autocomplete(current_name=scene_name_autocomplete)
+    @gm_role_required()
+    @no_ic_channels()
     async def scene_rename(self, interaction: discord.Interaction, current_name: str, new_name: str):
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can rename scenes.", ephemeral=True)
@@ -253,6 +264,8 @@ class SceneCommands(commands.Cog):
         npc_name=npc_name_autocomplete,
         scene_name=scene_name_autocomplete
     )
+    @gm_role_required()
+    @no_ic_channels()
     async def scene_add_npc(self, interaction: discord.Interaction, npc_name: str, scene_name: str = None):
         """
         Add an NPC to a scene
@@ -312,6 +325,8 @@ class SceneCommands(commands.Cog):
         npc_name=npcs_in_scene_autocomplete,
         scene_name=scene_name_autocomplete
     )
+    @gm_role_required()
+    @no_ic_channels()
     async def scene_removenpc(self, interaction: discord.Interaction, npc_name: str, scene_name: str = None):
         """
         Remove an NPC from a scene
@@ -363,6 +378,8 @@ class SceneCommands(commands.Cog):
         )
 
     @scene_group.command(name="clear-npcs", description="Clear all NPCs from the current scene.")
+    @gm_role_required()
+    @no_ic_channels()
     async def scene_clear_npcs(self, interaction: discord.Interaction):
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
             await interaction.response.send_message("❌ Only GMs can manage the scene.", ephemeral=True)
@@ -386,6 +403,8 @@ class SceneCommands(commands.Cog):
     @scene_group.command(name="view", description="View a scene (defaults to current scene if not specified)")
     @app_commands.describe(scene_name="Optional: Name of the scene to view (defaults to active scene)")
     @app_commands.autocomplete(scene_name=scene_name_autocomplete)
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def scene_view(self, interaction: discord.Interaction, scene_name: str = None):
         """
         View a scene - can specify a specific scene or view the current active scene
@@ -461,6 +480,8 @@ class SceneCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     @scene_group.command(name="pin", description="Pin the current scene to this channel")
+    @gm_role_required()
+    @no_ic_channels()
     async def scene_pin(self, interaction: discord.Interaction):
         """Pin the current scene to the current channel"""
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
@@ -506,6 +527,8 @@ class SceneCommands(commands.Cog):
             await interaction.followup.send("❌ Failed to pin the scene. Check bot permissions.")
 
     @scene_group.command(name="unpin", description="Unpin pinned scenes and clear all pins")
+    @gm_role_required()
+    @no_ic_channels()
     async def scene_unpin(self, interaction: discord.Interaction):
         """Unpin pinned scenes and clear all pins"""
         if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
@@ -564,6 +587,8 @@ class SceneCommands(commands.Cog):
         file="Optional: Upload an image file for the scene"
     )
     @app_commands.autocomplete(scene_name=scene_name_autocomplete)
+    @gm_role_required()
+    @no_ic_channels()
     async def scene_set_image(self, interaction: discord.Interaction, scene_name: str = None, image_url: str = None, file: discord.Attachment = None):
         """Set an image for a scene using either a URL or uploaded file"""
 

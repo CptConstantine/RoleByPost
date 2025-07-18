@@ -47,6 +47,18 @@ class ServerRepository(BaseRepository[ServerSettings]):
         
         return False
     
+    async def has_player_or_gm_permission(self, guild_id: int, user: discord.Member) -> bool:
+        """Check if user has player or GM permissions"""
+        server_settings = self.get_by_guild_id(str(guild_id))
+        if server_settings:
+            player_role = user.guild.get_role(int(server_settings.player_role_id)) if server_settings.player_role_id else None
+            gm_role = user.guild.get_role(int(server_settings.gm_role_id)) if server_settings.gm_role_id else None
+            
+            if (player_role and player_role in user.roles) or (gm_role and gm_role in user.roles):
+                return True
+        
+        return False
+    
     def set_system(self, guild_id: str, system: SystemType) -> None:
         """Set the RPG system for a server"""
         server = self.get_by_guild_id(guild_id)

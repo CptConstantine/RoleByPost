@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from core.command_decorators import ic_channel_only, player_or_gm_role_required
 from data.repositories.repository_factory import repositories
 import re
 
@@ -27,6 +28,8 @@ async def can_user_edit_message(guild_id: int, user: discord.User, message: disc
     return await can_user_speak_as_character(guild_id, user.id, character)
 
 @app_commands.context_menu(name="Edit Narration")
+@player_or_gm_role_required()
+@ic_channel_only()
 async def edit_narration_context(interaction: discord.Interaction, message: discord.Message):
     """Context menu command to edit a narrated message."""
     

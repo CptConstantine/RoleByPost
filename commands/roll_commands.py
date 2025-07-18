@@ -4,6 +4,7 @@ from discord.ext import commands
 from discord import app_commands
 from commands.character_commands import multi_character_autocomplete
 from core.base_models import SystemType
+from core.command_decorators import no_ic_channels, player_or_gm_role_required
 from core.roll_formula import RollFormula
 from core.shared_views import RequestRollView
 import core.factories as factories
@@ -277,6 +278,8 @@ class RollCommands(commands.Cog):
         difficulty="Optional difficulty number to compare against (e.g. 15)"
     )
     @app_commands.autocomplete(roll_parameters=roll_parameters_autocomplete)
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def roll_check(self, interaction: discord.Interaction, roll_parameters: str = None, difficulty: int = None):
         character = repositories.active_character.get_active_character(str(interaction.guild.id), str(interaction.user.id))
         if not character:
@@ -292,6 +295,8 @@ class RollCommands(commands.Cog):
         name="custom",
         description="Open the custom roll interface for your character"
     )
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def roll_custom(self, interaction: discord.Interaction):
         """Open a fully interactive UI for rolling dice with your character"""
         character = repositories.active_character.get_active_character(str(interaction.guild.id), str(interaction.user.id))
@@ -319,6 +324,8 @@ class RollCommands(commands.Cog):
     )
     @app_commands.autocomplete(chars_to_roll=multi_character_autocomplete)
     @app_commands.autocomplete(roll_parameters=roll_parameters_autocomplete)
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def roll_request(
         self,
         interaction: discord.Interaction,

@@ -2,9 +2,9 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import openai
-from core import channel_restriction
+from core import command_decorators
 from core.base_models import SystemType
-from core.channel_restriction import channel_restricted
+from core.command_decorators import channel_restricted, gm_role_required, no_ic_channels, player_or_gm_role_required
 from data.repositories.repository_factory import repositories
 
 # Autocomplete function for homebrew rule names
@@ -44,7 +44,9 @@ class RulesCommands(commands.Cog):
     @app_commands.describe(
         prompt="Your rules question (e.g., 'How does combat initiative work?')"
     )
-    @channel_restriction.no_ic_channels()
+    @command_decorators.no_ic_channels()
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def rules_question(self, interaction: discord.Interaction, prompt: str):
         """
         Handle rules questions by querying OpenAI with system context and homebrew rules.
@@ -99,7 +101,9 @@ class RulesCommands(commands.Cog):
         rule_name="Short name for the rule (e.g., 'critical_hits')",
         rule_text="The homebrew rule text or clarification"
     )
-    @channel_restriction.no_ic_channels()
+    @command_decorators.no_ic_channels()
+    @gm_role_required()
+    @no_ic_channels()
     async def rules_homebrew(
         self, 
         interaction: discord.Interaction, 
@@ -149,7 +153,9 @@ class RulesCommands(commands.Cog):
         name="homebrew-list",
         description="View all homebrew rules for this server"
     )
-    @channel_restriction.no_ic_channels()
+    @command_decorators.no_ic_channels()
+    @player_or_gm_role_required()
+    @no_ic_channels()
     async def rules_homebrew_list(self, interaction: discord.Interaction):
         """
         Display all homebrew rules for the current server.
@@ -190,7 +196,8 @@ class RulesCommands(commands.Cog):
         rule_name="Name of the homebrew rule to remove"
     )
     @app_commands.autocomplete(rule_name=homebrew_rule_autocomplete)
-    @channel_restriction.no_ic_channels()
+    @gm_role_required()
+    @no_ic_channels()
     async def rules_homebrew_remove(self, interaction: discord.Interaction, rule_name: str):
         """
         Allow GMs to remove homebrew rules.
