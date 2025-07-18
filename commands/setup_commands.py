@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from core.base_models import SystemType
-from core.command_decorators import gm_role_required, no_ic_channels, player_or_gm_role_required
+from core.command_decorators import admin_required, gm_role_required, no_ic_channels, player_or_gm_role_required
 import core.factories as factories
 from data.repositories.repository_factory import repositories
 
@@ -19,7 +19,7 @@ class SetupCommands(commands.Cog):
         description="Set a Discord role as the GM role for the server. You must be an Admin."
     )
     @app_commands.describe(role="The Discord role to set as the GM role")
-    @gm_role_required()
+    @admin_required()
     @no_ic_channels()
     async def setup_gmrole(self, interaction: discord.Interaction, role: discord.Role):
         if not interaction.user.guild_permissions.administrator:
@@ -38,7 +38,7 @@ class SetupCommands(commands.Cog):
         description="Set a Discord role as the player role for the server. You must be an Admin."
     )
     @app_commands.describe(role="The Discord role to set as the player role")
-    @gm_role_required()
+    @admin_required()
     @no_ic_channels()
     async def setup_playerrole(self, interaction: discord.Interaction, role: discord.Role):
         if not interaction.user.guild_permissions.administrator:
