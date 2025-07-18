@@ -78,11 +78,6 @@ class InitiativeCommands(commands.Cog):
     @gm_role_required()
     @no_ic_channels()
     async def initiative_start(self, interaction: discord.Interaction, type: str = None):
-        # Check GM permissions
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can start initiative.", ephemeral=True)
-            return
-            
         await interaction.response.defer(ephemeral=True)
         guild_id = interaction.guild.id
         channel_id = interaction.channel.id
@@ -145,11 +140,6 @@ class InitiativeCommands(commands.Cog):
     @gm_role_required()
     @no_ic_channels()
     async def initiative_end(self, interaction: discord.Interaction):
-        # Check GM permissions
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can end initiative.", ephemeral=True)
-            return
-            
         guild_id = interaction.guild.id
         channel_id = interaction.channel.id
         
@@ -171,11 +161,6 @@ class InitiativeCommands(commands.Cog):
     @gm_role_required()
     @no_ic_channels()
     async def initiative_add_char(self, interaction: discord.Interaction, name: str, position: int = None):
-        # Check GM permissions
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can add participants to initiative.", ephemeral=True)
-            return
-            
         initiative = repositories.initiative.get_active_initiative(str(interaction.guild.id), str(interaction.channel.id))
         if not initiative:
             await interaction.response.send_message("❌ No active initiative.", ephemeral=True)
@@ -218,11 +203,6 @@ class InitiativeCommands(commands.Cog):
     @gm_role_required()
     @no_ic_channels()
     async def initiative_remove_char(self, interaction: discord.Interaction, name: str):
-        # Check GM permissions
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can remove participants from initiative.", ephemeral=True)
-            return
-            
         initiative = repositories.initiative.get_active_initiative(str(interaction.guild.id), str(interaction.channel.id))
         if not initiative:
             await interaction.response.send_message("❌ No active initiative.", ephemeral=True)
@@ -260,11 +240,6 @@ class InitiativeCommands(commands.Cog):
     @gm_role_required()
     @no_ic_channels()
     async def set_default_initiative(self, interaction: discord.Interaction, type: str):
-        # Check GM permissions
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can set the default initiative type.", ephemeral=True)
-            return
-            
         repositories.server_initiative_defaults.set_default_type(str(interaction.guild.id), type)
         await interaction.response.send_message(f"✅ Default initiative type set to {type}.", ephemeral=True)
 

@@ -151,7 +151,7 @@ class LinkCommands(commands.Cog):
     @link_group.command(name="remove-all", description="Remove all links to and from an entity")
     @app_commands.describe(entity_name="The entity to remove all links for")
     @app_commands.autocomplete(entity_name=entity_autocomplete)
-    @gm_role_required()
+    @player_or_gm_role_required()
     @no_ic_channels()
     async def remove_all_links(self, interaction: discord.Interaction, entity_name: str):
         """Remove all links involving an entity"""
@@ -275,10 +275,6 @@ class LinkCommands(commands.Cog):
     @no_ic_channels()
     async def transfer_possession(self, interaction: discord.Interaction, possessed_entity: str, new_owner: str, quantity: int = None):
         """Transfer possession of an entity to another entity (GM only)"""
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can transfer possession.", ephemeral=True)
-            return
-        
         # Get the entities
         possessed = self._find_entity_by_name(interaction.guild.id, possessed_entity)
         new_possessor = self._find_entity_by_name(interaction.guild.id, new_owner)

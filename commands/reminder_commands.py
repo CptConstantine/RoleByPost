@@ -36,10 +36,6 @@ class ReminderCommands(commands.Cog):
         message: str = "Please remember to post your actions!",
         delay: str = "24h"
     ):
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can send reminders.", ephemeral=True)
-            return
-            
         targets = set()
         if user:
             targets.add(user)
@@ -97,11 +93,6 @@ class ReminderCommands(commands.Cog):
         time: str = "15 minutes",
         message: str = "This is a reminder!"
     ):
-        # Check if the user has permission to use this command
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ You do not have permission to use this command.", ephemeral=True)
-            return
-        
         # If no user is specified, set the reminder for the command issuer
         if not user:
             user = interaction.user
@@ -139,10 +130,6 @@ class ReminderCommands(commands.Cog):
         enabled: bool = None, 
         delay: str = None
     ):
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can manage automatic reminders.", ephemeral=True)
-            return
-        
         # Get current settings
         settings = repositories.auto_reminder_settings.get_settings(str(interaction.guild.id))
         current_enabled = settings.enabled

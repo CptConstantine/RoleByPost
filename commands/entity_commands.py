@@ -180,7 +180,7 @@ class EntityCommands(commands.Cog):
         transfer_inventory="If true, releases possessed items instead of blocking deletion"
     )
     @app_commands.autocomplete(entity_name=entity_autocomplete)
-    @gm_role_required()
+    @player_or_gm_role_required()
     @no_ic_channels()
     async def entity_delete(self, interaction: discord.Interaction, entity_name: str, transfer_inventory: bool = False):
         """Delete an entity with confirmation"""
@@ -435,12 +435,6 @@ class EntityCommands(commands.Cog):
         entity_type: str = None
     ):
         """Delete all entities with no links - GM only command"""
-        # Check GM permissions
-        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
-        if not is_gm:
-            await interaction.response.send_message("❌ Only GMs can use this command.", ephemeral=True)
-            return
-        
         # Require confirmation
         if confirm.upper() != "DELETE":
             await interaction.response.send_message(
@@ -534,7 +528,7 @@ class EntityCommands(commands.Cog):
         app_commands.Choice(name="Public", value="public"),
         app_commands.Choice(name="GM Only", value="gm_only")
     ])
-    @gm_role_required()
+    @player_or_gm_role_required()
     @no_ic_channels()
     async def entity_set_access(
         self, 

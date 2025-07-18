@@ -333,10 +333,6 @@ class RollCommands(commands.Cog):
         roll_parameters: str = None,
         difficulty: int = None
     ):
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can use this command.", ephemeral=True)
-            return
-
         system = repositories.server.get_system(str(interaction.guild.id))
         all_chars = repositories.character.get_all_pcs_and_npcs_by_guild(str(interaction.guild.id))
         char_names = [name.strip() for name in chars_to_roll.split(",") if name.strip()]

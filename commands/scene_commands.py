@@ -52,10 +52,6 @@ class SceneCommands(commands.Cog):
     @gm_role_required()
     @no_ic_channels()
     async def scene_create(self, interaction: discord.Interaction, name: str):
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can create scenes.", ephemeral=True)
-            return
-            
         if len(name) > 100:
             await interaction.response.send_message("❌ Scene name must be 100 characters or less.", ephemeral=True)
             return
@@ -76,10 +72,6 @@ class SceneCommands(commands.Cog):
     @no_ic_channels()
     async def scene_switch(self, interaction: discord.Interaction, scene_name: str):
         """Switch to a different scene"""
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can switch scenes.", ephemeral=True)
-            return
-            
         scene = repositories.scene.get_by_name(str(interaction.guild.id), scene_name)
         if not scene:
             await interaction.response.send_message(f"❌ Scene '{scene_name}' not found.", ephemeral=True)
@@ -163,10 +155,6 @@ class SceneCommands(commands.Cog):
     @no_ic_channels()
     async def scene_list(self, interaction: discord.Interaction):
         is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
-        if not is_gm:
-            await interaction.response.send_message("This command is only available to GMs.", ephemeral=True)
-            return
-        
         scenes = repositories.scene.get_all_scenes(str(interaction.guild.id))
 
         if not scenes:
@@ -199,10 +187,6 @@ class SceneCommands(commands.Cog):
     @gm_role_required()
     @no_ic_channels()
     async def scene_delete(self, interaction: discord.Interaction, scene_name: str):
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can delete scenes.", ephemeral=True)
-            return
-            
         scene = repositories.scene.get_by_name(str(interaction.guild.id), scene_name)
         if not scene:
             await interaction.response.send_message(f"❌ Scene '{scene_name}' not found.", ephemeral=True)
@@ -225,10 +209,6 @@ class SceneCommands(commands.Cog):
     @gm_role_required()
     @no_ic_channels()
     async def scene_rename(self, interaction: discord.Interaction, current_name: str, new_name: str):
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can rename scenes.", ephemeral=True)
-            return
-            
         if len(new_name) > 100:
             await interaction.response.send_message("❌ Scene name must be 100 characters or less.", ephemeral=True)
             return
@@ -275,10 +255,6 @@ class SceneCommands(commands.Cog):
         npc_name: The name of the NPC to add
         scene_name: Optional name of the scene to add to. If not provided, adds to the active scene.
         """
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can manage scenes.", ephemeral=True)
-            return
-            
         # Determine which scene to use
         scene = None
         if scene_name:
@@ -336,10 +312,6 @@ class SceneCommands(commands.Cog):
         npc_name: The name of the NPC to remove
         scene_name: Optional name of the scene to remove from. If not provided, removes from the active scene.
         """
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can manage scenes.", ephemeral=True)
-            return
-            
         # Determine which scene to use
         scene = None
         if scene_name:
@@ -381,10 +353,6 @@ class SceneCommands(commands.Cog):
     @gm_role_required()
     @no_ic_channels()
     async def scene_clear_npcs(self, interaction: discord.Interaction):
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can manage the scene.", ephemeral=True)
-            return
-            
         active_scene = repositories.scene.get_active_scene(str(interaction.guild.id))
         if not active_scene:
             await interaction.response.send_message("❌ No active scene. Create one with `/scene create` first.", ephemeral=True)
@@ -484,10 +452,6 @@ class SceneCommands(commands.Cog):
     @no_ic_channels()
     async def scene_pin(self, interaction: discord.Interaction):
         """Pin the current scene to the current channel"""
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can pin scenes.", ephemeral=True)
-            return
-            
         active_scene = repositories.scene.get_active_scene(str(interaction.guild.id))
         if not active_scene:
             await interaction.response.send_message("❌ No active scene. Create one with `/scene create` first.", ephemeral=True)
@@ -531,10 +495,6 @@ class SceneCommands(commands.Cog):
     @no_ic_channels()
     async def scene_unpin(self, interaction: discord.Interaction):
         """Unpin pinned scenes and clear all pins"""
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can unpin scenes.", ephemeral=True)
-            return
-            
         # Get all pinned messages for this guild
         pinned_messages = repositories.pinned_scene.get_all_pinned_messages(str(interaction.guild.id))
         
@@ -591,12 +551,6 @@ class SceneCommands(commands.Cog):
     @no_ic_channels()
     async def scene_set_image(self, interaction: discord.Interaction, scene_name: str = None, image_url: str = None, file: discord.Attachment = None):
         """Set an image for a scene using either a URL or uploaded file"""
-
-        # Only GMs can set scene images
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can set scene images.", ephemeral=True)
-            return
-        
         # Must provide either URL or file, but not both
         if (image_url and file) or (not image_url and not file):
             await interaction.response.send_message("❌ Please provide either an image URL or upload a file, but not both.", ephemeral=True)

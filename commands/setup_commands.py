@@ -22,10 +22,6 @@ class SetupCommands(commands.Cog):
     @admin_required()
     @no_ic_channels()
     async def setup_gmrole(self, interaction: discord.Interaction, role: discord.Role):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Only admins can set the GM role.", ephemeral=True)
-            return
-        
         repositories.server.set_gm_role(str(interaction.guild.id), str(role.id))
         
         await interaction.response.send_message(
@@ -41,10 +37,6 @@ class SetupCommands(commands.Cog):
     @admin_required()
     @no_ic_channels()
     async def setup_playerrole(self, interaction: discord.Interaction, role: discord.Role):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Only admins can set the player role.", ephemeral=True)
-            return
-        
         repositories.server.set_player_role(str(interaction.guild.id), str(role.id))
         
         await interaction.response.send_message(
@@ -62,9 +54,6 @@ class SetupCommands(commands.Cog):
     @gm_role_required()
     @no_ic_channels()
     async def setup_system(self, interaction: discord.Interaction, system: str):
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ Only admins can set the system.", ephemeral=True)
-            return
         valid_systems = [sys_type.value for sys_type in SystemType.get_all()]
         if system not in valid_systems:
             await interaction.response.send_message(f"❌ Invalid system. Valid options: {', '.join(valid_systems)}", ephemeral=True)
@@ -77,9 +66,6 @@ class SetupCommands(commands.Cog):
     @gm_role_required()
     @no_ic_channels()
     async def setup_default_skills_file(self, interaction: discord.Interaction, file: discord.Attachment):
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can set default skills.", ephemeral=True)
-            return
         if not file.filename.endswith('.txt'):
             await interaction.response.send_message("❌ Only .txt files are supported.", ephemeral=True)
             return
@@ -122,11 +108,7 @@ class SetupCommands(commands.Cog):
     @gm_role_required()
     @no_ic_channels()
     async def setup_default_skills(self, interaction: discord.Interaction, skills: str):
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can set default skills.", ephemeral=True)
-            return
-        
-        #Convert skills string to a dictionary
+        # Convert skills string to a dictionary
         skills = skills.strip()
         skills_dict = {}
         for entry in skills.split(","):
@@ -166,11 +148,6 @@ class SetupCommands(commands.Cog):
     @no_ic_channels()
     async def openai_set_key(self, interaction: discord.Interaction, api_key: str):
         """Set the OpenAI API key for this server"""
-        # Check if user has GM permissions
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can set the API key.", ephemeral=True)
-            return
-        
         # Simple validation - check if it starts with the usual pattern
         if not api_key.startswith(("sk-", "org-")):
             await interaction.response.send_message("❌ The API key format doesn't look right. It should start with 'sk-'.", ephemeral=True)
@@ -189,11 +166,6 @@ class SetupCommands(commands.Cog):
     @no_ic_channels()
     async def openai_remove_key(self, interaction: discord.Interaction):
         """Remove the OpenAI API key for this server"""
-        # Check if user has GM permissions
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can remove the API key.", ephemeral=True)
-            return
-
         repositories.api_key.remove_openai_key(str(interaction.guild.id))
 
         await interaction.response.send_message("✅ OpenAI API key removed successfully. AI features are now disabled.", ephemeral=True)
@@ -269,10 +241,6 @@ class SetupCommands(commands.Cog):
         channel_type: str
     ):
         """Configure channel permissions for command restrictions"""
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can configure channel permissions.", ephemeral=True)
-            return
-        
         if channel_type == "unrestricted":
             # Remove the channel permission entry to make it unrestricted
             repositories.channel_permissions.remove_channel_permission(str(interaction.guild.id), str(channel.id))
@@ -303,10 +271,6 @@ class SetupCommands(commands.Cog):
     @no_ic_channels()
     async def setup_channel_status(self, interaction: discord.Interaction):
         """View all channel permissions for this server"""
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can view channel configuration.", ephemeral=True)
-            return
-        
         permissions = repositories.channel_permissions.get_all_channel_permissions(str(interaction.guild.id))
         
         embed = discord.Embed(
@@ -365,11 +329,6 @@ class SetupCommands(commands.Cog):
         """Set the base dice formula for the Generic system"""
         import re
         
-        # Check GM permissions
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can use this command.", ephemeral=True)
-            return
-        
         # Check if server is using generic system
         system = repositories.server.get_system(str(interaction.guild.id))
         if system != SystemType.GENERIC:
@@ -404,10 +363,6 @@ class SetupCommands(commands.Cog):
     @no_ic_channels()
     async def setup_status(self, interaction: discord.Interaction):
         """Display comprehensive server bot settings and statistics"""
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can view server bot settings.", ephemeral=True)
-            return
-        
         guild = interaction.guild
         guild_id = str(guild.id)
         

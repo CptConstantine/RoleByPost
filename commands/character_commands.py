@@ -247,9 +247,6 @@ class CharacterCommands(commands.Cog):
     @no_ic_channels()
     async def create_npc(self, interaction: discord.Interaction, npc_name: str, owner: str = None):
         await interaction.response.defer(ephemeral=True)
-        if not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
-            await interaction.followup.send("❌ Only GMs can create NPCs.", ephemeral=True)
-            return
         
         existing = repositories.character.get_character_by_name(interaction.guild.id, npc_name)
         if existing:
@@ -484,10 +481,6 @@ class CharacterCommands(commands.Cog):
     @gm_role_required()
     @no_ic_channels()
     async def transfer(self, interaction: discord.Interaction, char_name: str, new_owner: discord.Member):
-        if not await repositories.server.has_gm_permission(interaction.guild.id, interaction.user):
-            await interaction.response.send_message("❌ Only GMs can transfer characters.", ephemeral=True)
-            return
-            
         character = repositories.character.get_character_by_name(interaction.guild.id, char_name)
         if not character or character.is_npc:
             await interaction.response.send_message("❌ PC not found.", ephemeral=True)

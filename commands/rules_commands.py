@@ -118,14 +118,6 @@ class RulesCommands(commands.Cog):
             rule_name: Identifier for the homebrew rule
             rule_text: The actual rule content
         """
-        # Check GM permissions
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message(
-                "❌ Only GMs can manage homebrew rules.", 
-                ephemeral=True
-            )
-            return
-        
         # Validate inputs
         if len(rule_name) > 100:
             await interaction.response.send_message(
@@ -206,14 +198,6 @@ class RulesCommands(commands.Cog):
             interaction: Discord interaction object
             rule_name: Name of the rule to remove
         """
-        # Check GM permissions
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message(
-                "❌ Only GMs can manage homebrew rules.", 
-                ephemeral=True
-            )
-            return
-        
         # Check if rule exists and remove it
         success = repositories.homebrew.remove_rule(str(interaction.guild.id), rule_name)
         if not success:

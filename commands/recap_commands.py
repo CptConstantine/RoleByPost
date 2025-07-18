@@ -90,11 +90,6 @@ class RecapCommands(commands.Cog):
         days_interval: int = 7,
         days_to_include: int = 7
     ):
-        # Check if user has GM permissions
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can configure automatic recaps.", ephemeral=True)
-            return
-        
         # Check if API key is configured
         api_key = repositories.api_key.get_openai_key(str(interaction.guild.id))
         if not api_key and enabled:
@@ -170,11 +165,6 @@ class RecapCommands(commands.Cog):
     @gm_role_required()
     @ic_channel_only()
     async def auto_recap_now(self, interaction: discord.Interaction):
-        # Check if user has GM permissions
-        if not await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user):
-            await interaction.response.send_message("❌ Only GMs can force recaps.", ephemeral=True)
-            return
-            
         # Check if auto recaps are enabled
         settings = repositories.auto_recap.get_settings(str(interaction.guild.id))
         if not settings or not settings.enabled:
