@@ -44,7 +44,8 @@ class HelpCommands(commands.Cog):
                 "Here's how to get your server up and running:\n\n"
                 "1. **Set Up Your Server**\n"
                 "   - Use `/setup` commands to configure your RPG system, GM and player roles, and channel types.\n"
-                "   - Example: `/setup system [system]`, `/setup gm-role [role]`, `/setup player-role [role]`\n\n"
+                "   - Example: `/setup gm-role [role]`, `/setup player-role [role]`, `/setup system [system]`\n"
+                "   - All commands require GM or Player permissions.\n\n"
                 "2. **Create Characters and NPCs**\n"
                 "   - Players: `/char create pc [name]`\n"
                 "   - GMs: `/char create npc [name]`\n"
@@ -289,6 +290,17 @@ class HelpCommands(commands.Cog):
                 "`gm::Your narration text here`\n"
                 "Example: `gm::The ground trembles as thunder rumbles overhead. The storm is getting closer.`\n\n"
                 "GM narration appears with a purple embed and your avatar as the GM."
+            ),
+            inline=False
+        )
+
+        embed.add_field(
+            name="Sticky Narration",
+            value=(
+                "Sticky narration allows you to default to a specific character's narration every time you post.\n"
+                "To use sticky narration, use the `/narration sticky` command:\n"
+                "Example: `/narration sticky [char_name] [channel]`\n\n"
+                "You must have an in-character (IC) channel set up for this to work.\n"
             ),
             inline=False
         )

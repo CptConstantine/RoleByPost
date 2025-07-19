@@ -1,5 +1,6 @@
 from data.repositories.entity_repository import EntityRepository
 from data.repositories.entity_link_repository import EntityLinkRepository
+from data.repositories.sticky_narration_repository import StickyNarrationRepository
 from data.repositories.vw_entity_details_repository import EntityDetailsRepository
 from .channel_permission_repository import ChannelPermissionRepository
 from .server_repository import ServerRepository
@@ -67,6 +68,9 @@ class RepositoryFactory:
 
         # Entity details view repository
         self._entity_details_repo = None
+
+        # Sticky narration repository
+        self._sticky_narration_repo = None
 
     # Core repositories
     @property
@@ -240,6 +244,13 @@ class RepositoryFactory:
         if self._entity_details_repo is None:
             self._entity_details_repo = EntityDetailsRepository()
         return self._entity_details_repo
+    
+    # Sticky narration repository
+    @property
+    def sticky_narration(self) -> "StickyNarrationRepository":
+        if self._sticky_narration_repo is None:
+            self._sticky_narration_repo = StickyNarrationRepository()
+        return self._sticky_narration_repo
 
 # Global repository factory instance
 repositories = RepositoryFactory()

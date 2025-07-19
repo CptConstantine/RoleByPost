@@ -227,6 +227,15 @@ CREATE TABLE IF NOT EXISTS character_nicknames (
     FOREIGN KEY (character_id) REFERENCES entities(id) ON DELETE CASCADE
 );
 
+-- Sticky narration settings
+CREATE TABLE IF NOT EXISTS sticky_narration (
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    character_id TEXT NOT NULL,
+    PRIMARY KEY (guild_id, user_id, channel_id)
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_scenes_guild_active ON scenes(guild_id, is_active);
 
@@ -253,3 +262,5 @@ CREATE INDEX IF NOT EXISTS idx_entity_links_guild_from ON entity_links(guild_id,
 CREATE INDEX IF NOT EXISTS idx_entity_links_guild_to ON entity_links(guild_id, to_entity_id);
 
 CREATE INDEX IF NOT EXISTS idx_character_nicknames_character_id ON character_nicknames(guild_id, character_id);
+
+CREATE INDEX IF NOT EXISTS idx_sticky_narration_lookup ON sticky_narration(guild_id, user_id, channel_id);

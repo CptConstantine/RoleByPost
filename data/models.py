@@ -237,3 +237,10 @@ class CharacterNickname:
     guild_id: str
     character_id: str
     nickname: str
+
+@dataclass
+class StickyNarration:
+    guild_id: str
+    user_id: str
+    channel_id: str
+    character_id: str

@@ -11,7 +11,6 @@ Discord server **invite link**: https://discord.com/oauth2/authorize?client_id=1
 - **Character Sheet Management**  
   - Create, edit, and view player characters and NPCs for supported systems. Users can set their "active" character, which is used by default for `/roll` and `/char sheet`.
   - System-specific fields and validation (e.g., Fate aspects, Traveller skills).
-  - Import/export characters as JSON files for easy transfer between servers.
 
 - **Entity Connections System**
   - Create links between characters, NPCs, and other entities.
@@ -219,7 +218,6 @@ The following are the commands that are currently available.
   (GM only) Transfer possession of an entity to another entity. Removes existing possession links and creates new ones.
 
 **Permissions:**
-- Only GMs can create/remove ownership and control links
 - Users can only create links involving entities they own
 - GMs can see all entities, users see only their own entities in autocomplete
 
@@ -346,6 +344,9 @@ This bot provides special message prefixes that transform regular text messages 
   Set your character's avatar with `/char set-avatar [char_name] [url] [file]` to enhance the immersion.
   This shows up in any narration message for the character.
 
+- **Sticky Narration**
+  Make each post default to a specific character by using `/narration sticky`
+
 - **Editing narration posts**
   `right-click message -> Apps -> Edit Narration`
   Fix typos or leave it blank to delete it altogether.
@@ -405,7 +406,8 @@ All aspect editing supports:
 
 ## Features Planned
 
-- Convert some commands to context menu commands
+- Context menu command for viewing character sheets
+- Add ability to create roll shortcuts for characters (mostly to let Generic system characters create shortcuts for skills)
 - System specific features
   - Traveller: starships, travel, and maintenance cost calculations
   - Container management features (weight/bulk, item type filtering, etc.)

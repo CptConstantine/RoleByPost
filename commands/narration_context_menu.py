@@ -28,8 +28,6 @@ async def can_user_edit_message(guild_id: int, user: discord.User, message: disc
     return await can_user_speak_as_character(guild_id, user.id, character)
 
 @app_commands.context_menu(name="Edit Narration")
-@player_or_gm_role_required()
-@ic_channel_only()
 async def edit_narration_context(interaction: discord.Interaction, message: discord.Message):
     """Context menu command to edit a narrated message."""
     
@@ -66,6 +64,9 @@ class NarrationEditModal(discord.ui.Modal):
         current_content = ""
         if message.embeds and message.embeds[0].description:
             current_content = message.embeds[0].description
+        else:
+            # Fallback to message content if no embed
+            current_content = message.content
             
         self.content_input = discord.ui.TextInput(
             label="Message Content (leave empty to delete)",
@@ -85,23 +86,32 @@ class NarrationEditModal(discord.ui.Modal):
             
             # Delete the old message if content is empty
             if not new_content:
-                await webhook.delete_message(self.message.id)
+                # For threads, we need to specify the thread when deleting
+                if isinstance(self.message.channel, discord.Thread):
+                    await webhook.delete_message(self.message.id, thread=self.message.channel)
+                else:
+                    await webhook.delete_message(self.message.id)
                 await interaction.response.send_message("❌ Message deleted.", ephemeral=True)
                 return
             
-            # Update the embed with new content
+            # Update the message with new content
+            edit_params = {}
+            
+            # Handle embed format (typical for character narration)
             if self.message.embeds:
                 embed = self.message.embeds[0].copy()
                 embed.description = new_content
-                
-                await webhook.edit_message(
-                    self.message.id,
-                    embeds=[embed]
-                )
-                
-                await interaction.response.send_message("✅ Narration updated successfully.", ephemeral=True)
+                edit_params['embeds'] = [embed]
             else:
-                await interaction.response.send_message("❌ Unable to update message format.", ephemeral=True)
+                # Fallback to content editing for non-embed messages
+                edit_params['content'] = new_content
+            
+            # For threads, specify the thread parameter
+            if isinstance(self.message.channel, discord.Thread):
+                edit_params['thread'] = self.message.channel
+            
+            await webhook.edit_message(self.message.id, **edit_params)
+            await interaction.response.send_message("✅ Narration updated successfully.", ephemeral=True)
                 
         except discord.NotFound:
             await interaction.response.send_message("❌ Message not found.", ephemeral=True)
@@ -110,6 +120,6 @@ class NarrationEditModal(discord.ui.Modal):
         except Exception as e:
             await interaction.response.send_message(f"❌ Error updating message: {str(e)}", ephemeral=True)
 
-async def setup_narration_commands(bot: commands.Bot):
+async def setup_narration_context_menu_commands(bot: commands.Bot):
     # Add context menus to the command tree
     bot.tree.add_command(edit_narration_context)

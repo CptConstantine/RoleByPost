@@ -4,9 +4,10 @@ import re
 import dotenv
 import discord
 from discord.ext import commands
-from commands import narration, narration_context_menu
-from commands.narration import process_narration
+from commands import narration, narration_commands, narration_context_menu
+from commands.narration import can_user_speak_as_character, process_narration, send_narration_webhook
 from commands import character_commands, entity_commands, help_commands, initiative_commands, link_commands, reminder_commands, roll_commands, scene_commands, setup_commands, recap_commands, rules_commands
+from core.utils import _get_character_by_name_or_nickname
 from rpg_systems.fate import fate_commands
 from core.initiative_views import GenericInitiativeView, PopcornInitiativeView
 from core.scene_views import GenericSceneView
@@ -62,7 +63,8 @@ async def setup_hook():
     await rules_commands.setup_rules_commands(bot)
     await entity_commands.setup_entity_commands(bot)
     await link_commands.setup_link_commands(bot)
-    await narration_context_menu.setup_narration_commands(bot)
+    await narration_context_menu.setup_narration_context_menu_commands(bot)
+    await narration_commands.setup_narration_commands(bot)
     # System-specific commands
     await fate_commands.setup_fate_commands(bot)
     
@@ -105,8 +107,10 @@ async def on_guild_join(guild):
 
 @bot.event
 async def on_message(message: discord.Message):
-    # Don't process commands here - we use the app_commands system
-    
+    # Skip processing webhook messages entirely
+    if message.webhook_id:
+        return
+
     # Update the last message time for the user
     if message.guild:
         if message.author.id != bot.user.id:
@@ -119,21 +123,38 @@ async def on_message(message: discord.Message):
             for user in message.mentions:
                 await reminder_cog.handle_mention(message, user)
 
-    # Process narration
-    content_lower = message.content.lower()
-    if message.author.id != bot.user.id and (
-        content_lower.startswith(("pc::", "npc::", "gm::")) or
-        re.match(r"[^:]+::", message.content)  # Any identifier::message format
-    ):
-        try:
-            await process_narration(message)
-        except Exception as e:
-            print(f"Error processing narration: {e}")
-            try:
-                await message.reply(f"❌ Error processing character speech: {str(e)}", delete_after=10)
-            except:
-                pass
-        return
+    if message.guild and message.author.id != bot.user.id:
+        # For threads, check the parent channel's type
+        channel_to_check = message.channel.parent if isinstance(message.channel, discord.Thread) else message.channel
+        channel_type = repositories.channel_permissions.get_channel_type(str(message.guild.id), str(channel_to_check.id))
+        
+        if channel_type == 'ic':
+            # Process narration
+            content_lower = message.content.lower()
+            if content_lower.startswith(("pc::", "npc::", "gm::")) or re.match(r"[^:]+::", message.content):
+                try:
+                    await process_narration(message)
+                except Exception as e:
+                    print(f"Error processing narration: {e}")
+                    try:
+                        await message.reply(f"❌ Error processing character speech: {str(e)}", delete_after=10)
+                    except:
+                        pass
+                return
+            else:
+                # Check for sticky character in this channel
+                sticky_char_id = repositories.sticky_narration.get_sticky_character(
+                    str(message.guild.id), 
+                    str(message.author.id), 
+                    str(channel_to_check.id) # Use the parent channel if we are in a thread
+                )
+                if sticky_char_id:
+                    # Get the character and process as normal narration
+                    char = repositories.character.get_by_id(sticky_char_id)
+                    if char and await can_user_speak_as_character(str(message.guild.id), message.author.id, char):
+                        await send_narration_webhook(message, char, message.content)
+                        await message.delete()
+                        return
 
     await bot.process_commands(message)
 

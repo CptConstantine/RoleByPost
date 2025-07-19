@@ -244,11 +244,15 @@ async def send_narration_webhook(message: discord.Message, character: BaseCharac
     if not message.channel.permissions_for(me).manage_webhooks:
         raise discord.Forbidden("Bot doesn't have manage_webhooks permission")
     
+    # Get the channel to create webhook on (parent channel if thread)
+    webhook_channel = message.channel.parent if isinstance(message.channel, discord.Thread) else message.channel
+        
     # Determine display name (use alias if provided)
     display_name = alias if alias else character.name
     
     # Get or create the first webhook with the name "RoleByPostCharacters"
-    webhook = next((wh for wh in await message.channel.webhooks() if wh.name == "RoleByPostCharacters"), None) or await message.channel.create_webhook(name="RoleByPostCharacters")
+    webhook = next((wh for wh in await webhook_channel.webhooks() if wh.name == "RoleByPostCharacters"), None) or await webhook_channel.create_webhook(name="RoleByPostCharacters")
+
     embed = discord.Embed(
         description=content,
         color=get_character_color(character)
@@ -263,18 +267,36 @@ async def send_narration_webhook(message: discord.Message, character: BaseCharac
 
     if character.avatar_url:
         embed.set_thumbnail(url=character.avatar_url)
-        await webhook.send(
-            embeds=[embed],
-            username=display_name,
-            avatar_url=character.avatar_url,
-            allowed_mentions=allowed_mentions
-        )
+        if isinstance(message.channel, discord.Thread):
+            # For threads, use the thread's webhook to maintain context
+            await webhook.send(
+                embeds=[embed],
+                username=display_name,
+                avatar_url=character.avatar_url,
+                allowed_mentions=allowed_mentions,
+                thread=message.channel
+            )
+        else:
+            await webhook.send(
+                embeds=[embed],
+                username=display_name,
+                avatar_url=character.avatar_url,
+                allowed_mentions=allowed_mentions
+            )
     else:
-        await webhook.send(
-            embeds=[embed],
-            username=display_name,
-            allowed_mentions=allowed_mentions
-        )
+        if isinstance(message.channel, discord.Thread):
+            await webhook.send(
+                embeds=[embed],
+                username=display_name,
+                allowed_mentions=allowed_mentions,
+                thread=message.channel
+            )
+        else:
+            await webhook.send(
+                embeds=[embed],
+                username=display_name,
+                allowed_mentions=allowed_mentions
+            )
 
 def get_character_color(character):
     """Return a color for the character based on system and character type."""
