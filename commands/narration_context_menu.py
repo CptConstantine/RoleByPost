@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from core.utils import _get_character_by_name_or_nickname
 from data.repositories.repository_factory import repositories
 
 async def can_user_edit_message(guild_id: int, user: discord.User, message: discord.Message) -> bool:
@@ -52,6 +53,42 @@ async def edit_narration_context(interaction: discord.Interaction, message: disc
     # Show edit modal
     modal = NarrationEditModal(message)
     await interaction.response.send_modal(modal)
+
+@app_commands.context_menu(name="View Character Sheet")
+async def view_character_sheet_from_narration_context(interaction: discord.Interaction, message: discord.Message):
+    """Context menu command to view a character sheet."""
+    # Check if this is a webhook message from our bot
+    if not message.webhook_id:
+        await interaction.response.send_message("❌ This is not a narrated message.", ephemeral=True)
+        return
+
+    # Get the webhook to verify it's ours
+    try:
+        webhook = await interaction.client.fetch_webhook(message.webhook_id)
+        if webhook.name != "RoleByPostCharacters":
+            await interaction.response.send_message("❌ This is not a narrated message from this bot.", ephemeral=True)
+            return
+    except:
+        await interaction.response.send_message("❌ Unable to verify message origin.", ephemeral=True)
+        return
+
+    # Check if user has permission to view this message
+    if not await can_user_edit_message(interaction.guild.id, interaction.user, message):
+        await interaction.response.send_message("❌ You can only view your own narrated messages.", ephemeral=True)
+        return
+
+    # Show character sheet
+    character_name = message.author.display_name if hasattr(message.author, 'display_name') else None
+    if character_name:
+        character = await _get_character_by_name_or_nickname(interaction.guild.id, character_name)
+        if character:
+            is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+            embed = character.format_full_sheet(interaction.guild.id, is_gm=is_gm)
+            view = character.get_sheet_edit_view(interaction.user.id, is_gm=is_gm)
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+            return
+
+    await interaction.response.send_message("❌ Character sheet not found.", ephemeral=True)
 
 class NarrationEditModal(discord.ui.Modal):
     def __init__(self, message: discord.Message):
@@ -121,3 +158,4 @@ class NarrationEditModal(discord.ui.Modal):
 async def setup_narration_context_menu_commands(bot: commands.Bot):
     # Add context menus to the command tree
     bot.tree.add_command(edit_narration_context)
+    bot.tree.add_command(view_character_sheet_from_narration_context)

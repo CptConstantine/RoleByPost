@@ -4,10 +4,9 @@ import re
 import dotenv
 import discord
 from discord.ext import commands
-from commands import narration, narration_commands, narration_context_menu
+from commands import narration_commands, narration_context_menu, user_context_menu
 from commands.narration import can_user_speak_as_character, process_narration, send_narration_webhook
 from commands import character_commands, entity_commands, help_commands, initiative_commands, link_commands, reminder_commands, roll_commands, scene_commands, setup_commands, recap_commands, rules_commands
-from core.utils import _get_character_by_name_or_nickname
 from rpg_systems.fate import fate_commands
 from core.initiative_views import GenericInitiativeView, PopcornInitiativeView
 from core.scene_views import GenericSceneView
@@ -63,8 +62,9 @@ async def setup_hook():
     await rules_commands.setup_rules_commands(bot)
     await entity_commands.setup_entity_commands(bot)
     await link_commands.setup_link_commands(bot)
-    await narration_context_menu.setup_narration_context_menu_commands(bot)
     await narration_commands.setup_narration_commands(bot)
+    await narration_context_menu.setup_narration_context_menu_commands(bot)
+    await user_context_menu.setup_user_context_menu_commands(bot)
     # System-specific commands
     await fate_commands.setup_fate_commands(bot)
     

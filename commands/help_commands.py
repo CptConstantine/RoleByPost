@@ -77,6 +77,10 @@ class HelpCommands(commands.Cog):
                 "• `/char list` - List your characters\n"
                 "• `/char sheet [name]` - View or edit a character sheet\n"
                 "• `/char delete [name]` - Delete a character or NPC\n"
+                "• `/char switch [name]` - Set your active character\n"
+                "• `/char set-nickname [character] [nickname]` - Add a nickname for easier narration\n"
+                "• `/char set-avatar [character] [url]` - Set a character's avatar\n"
+                "• `right-click a user or narration message -> Apps -> View Character Sheet` - Quick access to character sheets\n"
                 "See `/char ...` commands for more."
             ),
             color=discord.Color.blue()
