@@ -1,12 +1,13 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from core.command_decorators import gm_role_required, no_ic_channels, player_or_gm_role_required
+from commands.autocomplete import link_type_autocomplete
+from core.command_decorators import no_ic_channels, player_or_gm_role_required
 from data.repositories.repository_factory import repositories
 from core.base_models import AccessType, EntityLinkType, EntityType
 from core.base_models import BaseEntity
 from typing import Optional, List
-from .entity_commands import entity_autocomplete
+from .entity_commands import accessible_entities_autocomplete
 
 async def _transfer_requires_public_access(new_owner: BaseEntity, guild_id: str) -> bool:
     parent_entities = new_owner.get_parents(guild_id)
@@ -20,21 +21,6 @@ async def _transfer_requires_public_access(new_owner: BaseEntity, guild_id: str)
         requires_public = await repositories.server.has_gm_permission(guild_id, new_owner.owner_id)
 
     return requires_public
-
-async def link_type_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
-    """Autocomplete for link types"""
-    link_types = EntityLinkType.get_all_dict()
-    
-    # Filter based on current input
-    if current:
-        filtered_types = {name: value for name, value in link_types.items() if current.lower() in name.lower()}
-    else:
-        filtered_types = link_types
-    
-    return [
-        app_commands.Choice(name=name, value=value.value)
-        for name, value in filtered_types.items()
-    ]
 
 class LinkCommands(commands.Cog):
     def __init__(self, bot):
@@ -50,9 +36,9 @@ class LinkCommands(commands.Cog):
         to_entity="The entity that is the target of the link", 
         description="Optional description of the link"
     )
-    @app_commands.autocomplete(from_entity=entity_autocomplete)
+    @app_commands.autocomplete(from_entity=accessible_entities_autocomplete)
     @app_commands.autocomplete(link_type=link_type_autocomplete)
-    @app_commands.autocomplete(to_entity=entity_autocomplete)
+    @app_commands.autocomplete(to_entity=accessible_entities_autocomplete)
     @player_or_gm_role_required()
     @no_ic_channels()
     async def create_link(self, interaction: discord.Interaction, from_entity: str, link_type: str, to_entity: str, description: str = None):
@@ -106,8 +92,8 @@ class LinkCommands(commands.Cog):
         to_entity="The entity that is the target of the link",
         link_type="Type of link to remove (leave blank to remove all)"
     )
-    @app_commands.autocomplete(from_entity=entity_autocomplete)
-    @app_commands.autocomplete(to_entity=entity_autocomplete)
+    @app_commands.autocomplete(from_entity=accessible_entities_autocomplete)
+    @app_commands.autocomplete(to_entity=accessible_entities_autocomplete)
     @app_commands.autocomplete(link_type=link_type_autocomplete)
     @player_or_gm_role_required()
     @no_ic_channels()
@@ -150,7 +136,7 @@ class LinkCommands(commands.Cog):
 
     @link_group.command(name="remove-all", description="Remove all links to and from an entity")
     @app_commands.describe(entity_name="The entity to remove all links for")
-    @app_commands.autocomplete(entity_name=entity_autocomplete)
+    @app_commands.autocomplete(entity_name=accessible_entities_autocomplete)
     @player_or_gm_role_required()
     @no_ic_channels()
     async def remove_all_links(self, interaction: discord.Interaction, entity_name: str):
@@ -207,7 +193,7 @@ class LinkCommands(commands.Cog):
 
     @link_group.command(name="list", description="List all links for an entity")
     @app_commands.describe(entity_name="The entity to show links for")
-    @app_commands.autocomplete(entity_name=entity_autocomplete)
+    @app_commands.autocomplete(entity_name=accessible_entities_autocomplete)
     @player_or_gm_role_required()
     @no_ic_channels()
     async def list_links(self, interaction: discord.Interaction, entity_name: str):
@@ -269,8 +255,8 @@ class LinkCommands(commands.Cog):
         new_owner="The entity that will become the new owner",
         quantity="Quantity to transfer (for items only, leave blank for all)"
     )
-    @app_commands.autocomplete(possessed_entity=entity_autocomplete)
-    @app_commands.autocomplete(new_owner=entity_autocomplete)
+    @app_commands.autocomplete(possessed_entity=accessible_entities_autocomplete)
+    @app_commands.autocomplete(new_owner=accessible_entities_autocomplete)
     @player_or_gm_role_required()
     @no_ic_channels()
     async def transfer_possession(self, interaction: discord.Interaction, possessed_entity: str, new_owner: str, quantity: int = None):

@@ -1,6 +1,6 @@
 import re
 import discord
-from core.base_models import BaseCharacter, BaseEntity, EntityType, SystemType
+from core.base_models import BaseCharacter, EntityType, SystemType
 import core.factories as factories
 from data.repositories.repository_factory import repositories
 from core.utils import _get_character_by_name_or_nickname

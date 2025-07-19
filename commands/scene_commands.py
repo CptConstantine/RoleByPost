@@ -2,44 +2,11 @@ import logging
 import discord
 from discord.ext import commands
 from discord import app_commands
-from core import shared_views
+from commands.autocomplete import npcs_not_in_scene_autocomplete, npcs_in_scene_autocomplete, scene_names_autocomplete
 from core.command_decorators import gm_role_required, no_ic_channels, player_or_gm_role_required
 from data.repositories.repository_factory import repositories
 
 import core.factories as factories
-
-async def npc_name_autocomplete(interaction: discord.Interaction, current: str):
-    all_chars = repositories.character.get_all_pcs_and_npcs_by_guild(str(interaction.guild.id))
-    active_scene = repositories.scene.get_active_scene(str(interaction.guild.id))
-    
-    if not active_scene:
-        return []
-
-    scene_npcs = set(repositories.scene_npc.get_scene_npc_ids(str(interaction.guild.id), str(active_scene.scene_id)))
-    npcs = [
-        c for c in all_chars
-        if c.is_npc and c.id not in scene_npcs and current.lower() in c.name.lower()
-    ]
-    options = [c.name for c in npcs]
-    return [app_commands.Choice(name=name, value=name) for name in options[:25]]
-
-async def npcs_in_scene_autocomplete(interaction: discord.Interaction, current: str):
-    active_scene = repositories.scene.get_active_scene(str(interaction.guild.id))
-    if not active_scene:
-        return []
-    all_chars = repositories.scene_npc.get_scene_npcs(str(interaction.guild.id), active_scene.scene_id)
-    
-    npcs = [c for c in all_chars]
-    options = [c.name for c in npcs]
-    return [app_commands.Choice(name=name, value=name) for name in options[:25]]
-
-async def scene_name_autocomplete(interaction: discord.Interaction, current: str):
-    scenes = repositories.scene.get_all_scenes(str(interaction.guild.id))
-    return [
-        app_commands.Choice(name=f"{s.name}{'✓' if s.is_active else ''}", value=s.name)
-        for s in scenes
-        if current.lower() in s.name.lower()
-    ][:25]
 
 class SceneCommands(commands.Cog):
     def __init__(self, bot):
@@ -67,7 +34,7 @@ class SceneCommands(commands.Cog):
 
     @scene_group.command(name="switch", description="Switch to a different scene")
     @app_commands.describe(scene_name="Name of the scene to switch to")
-    @app_commands.autocomplete(scene_name=scene_name_autocomplete)
+    @app_commands.autocomplete(scene_name=scene_names_autocomplete)
     @gm_role_required()
     @no_ic_channels()
     async def scene_switch(self, interaction: discord.Interaction, scene_name: str):
@@ -183,7 +150,7 @@ class SceneCommands(commands.Cog):
 
     @scene_group.command(name="delete", description="Delete a scene")
     @app_commands.describe(scene_name="Name of the scene to delete")
-    @app_commands.autocomplete(scene_name=scene_name_autocomplete)
+    @app_commands.autocomplete(scene_name=scene_names_autocomplete)
     @gm_role_required()
     @no_ic_channels()
     async def scene_delete(self, interaction: discord.Interaction, scene_name: str):
@@ -205,7 +172,7 @@ class SceneCommands(commands.Cog):
         current_name="Current name of the scene",
         new_name="New name for the scene"
     )
-    @app_commands.autocomplete(current_name=scene_name_autocomplete)
+    @app_commands.autocomplete(current_name=scene_names_autocomplete)
     @gm_role_required()
     @no_ic_channels()
     async def scene_rename(self, interaction: discord.Interaction, current_name: str, new_name: str):
@@ -241,8 +208,8 @@ class SceneCommands(commands.Cog):
         scene_name="Optional: Name of the scene to add to (defaults to active scene)"
     )
     @app_commands.autocomplete(
-        npc_name=npc_name_autocomplete,
-        scene_name=scene_name_autocomplete
+        npc_name=npcs_not_in_scene_autocomplete,
+        scene_name=scene_names_autocomplete
     )
     @gm_role_required()
     @no_ic_channels()
@@ -299,7 +266,7 @@ class SceneCommands(commands.Cog):
     )
     @app_commands.autocomplete(
         npc_name=npcs_in_scene_autocomplete,
-        scene_name=scene_name_autocomplete
+        scene_name=scene_names_autocomplete
     )
     @gm_role_required()
     @no_ic_channels()
@@ -370,7 +337,7 @@ class SceneCommands(commands.Cog):
 
     @scene_group.command(name="view", description="View a scene (defaults to current scene if not specified)")
     @app_commands.describe(scene_name="Optional: Name of the scene to view (defaults to active scene)")
-    @app_commands.autocomplete(scene_name=scene_name_autocomplete)
+    @app_commands.autocomplete(scene_name=scene_names_autocomplete)
     @player_or_gm_role_required()
     @no_ic_channels()
     async def scene_view(self, interaction: discord.Interaction, scene_name: str = None):
@@ -546,7 +513,7 @@ class SceneCommands(commands.Cog):
         image_url="Optional: URL to an image for the scene",
         file="Optional: Upload an image file for the scene"
     )
-    @app_commands.autocomplete(scene_name=scene_name_autocomplete)
+    @app_commands.autocomplete(scene_name=scene_names_autocomplete)
     @gm_role_required()
     @no_ic_channels()
     async def scene_set_image(self, interaction: discord.Interaction, scene_name: str = None, image_url: str = None, file: discord.Attachment = None):

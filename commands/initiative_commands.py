@@ -1,68 +1,11 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from typing import List
-from core.base_models import EntityType
+from commands.autocomplete import initiative_addable_names_autocomplete, initiative_participant_names_autocomplete, initiative_type_autocomplete
 from core.command_decorators import gm_role_required, no_ic_channels
 from core.initiative_types import InitiativeParticipant
 from data.repositories.repository_factory import repositories
 import core.factories as factories
-
-async def initiative_type_autocomplete(
-        interaction: discord.Interaction,
-        current: str,
-    ) -> List[app_commands.Choice[str]]:
-        """Autocomplete for initiative types"""
-        initiative_types = ["popcorn", "generic"]
-        
-        # Filter based on what the user has typed so far
-        filtered_types = [
-            init_type for init_type in initiative_types 
-            if current.lower() in init_type.lower()
-        ]
-        
-        return [
-            app_commands.Choice(name=init_type.capitalize(), value=init_type)
-            for init_type in filtered_types
-        ]
-
-async def initiative_participant_name_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
-    """Autocomplete for participants in the current initiative."""
-    initiative = repositories.initiative.get_active_initiative(str(interaction.guild.id), str(interaction.channel.id))
-    if not initiative:
-        return []
-    # Only suggest names that match the current input
-    return [
-        app_commands.Choice(name=p.name, value=p.name)
-        for p in initiative.participants
-        if current.lower() in p.name.lower()
-    ][:25]
-
-async def initiative_addable_name_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
-    """
-    Autocomplete for PCs and NPCs that are NOT currently in initiative.
-    """
-    guild_id = str(interaction.guild.id)
-    channel_id = str(interaction.channel.id)
-    initiative = repositories.initiative.get_active_initiative(guild_id, channel_id)
-    if not initiative:
-        return []
-
-    # Get all PCs and NPCs in the guild
-    all_chars = repositories.character.get_all_pcs_and_npcs_by_guild(guild_id)
-    # Names already in initiative (case-insensitive)
-    in_initiative = {p.name.lower() for p in initiative.participants}
-
-    # Only suggest those not already in initiative and matching current input
-    addable = [
-        c for c in all_chars
-        if (c.entity_type in (EntityType.PC, EntityType.NPC, EntityType.COMPANION)) and (c.name.lower() not in in_initiative) and (current.lower() in c.name.lower())
-    ]
-
-    return [
-        app_commands.Choice(name=c.name, value=c.name)
-        for c in addable[:25]
-    ]
 
 class InitiativeCommands(commands.Cog):
     def __init__(self, bot):
@@ -157,7 +100,7 @@ class InitiativeCommands(commands.Cog):
 
     @initiative_group.command(name="add-char", description="Add a PC or NPC to the current initiative.")
     @app_commands.describe(name="Name of the PC or NPC to add")
-    @app_commands.autocomplete(name=initiative_addable_name_autocomplete)
+    @app_commands.autocomplete(name=initiative_addable_names_autocomplete)
     @gm_role_required()
     @no_ic_channels()
     async def initiative_add_char(self, interaction: discord.Interaction, name: str, position: int = None):
@@ -199,7 +142,7 @@ class InitiativeCommands(commands.Cog):
 
     @initiative_group.command(name="remove-char", description="Remove a PC or NPC from the current initiative.")
     @app_commands.describe(name="Name of the PC or NPC to remove")
-    @app_commands.autocomplete(name=initiative_participant_name_autocomplete)
+    @app_commands.autocomplete(name=initiative_participant_names_autocomplete)
     @gm_role_required()
     @no_ic_channels()
     async def initiative_remove_char(self, interaction: discord.Interaction, name: str):

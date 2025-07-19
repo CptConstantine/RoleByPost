@@ -1,37 +1,12 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from commands.character_commands import owner_characters_autocomplete
+from commands.autocomplete import ic_channels_autocomplete, owned_character_npc_or_companion_autocomplete
 from commands.narration import can_user_speak_as_character
 from core.command_decorators import player_or_gm_role_required
 from core.utils import _get_character_by_name_or_nickname
 from data.repositories.repository_factory import repositories
 
-
-async def ic_channels_autocomplete(interaction: discord.Interaction, current: str):
-    """Autocomplete for IC channels in the current guild"""
-    if not interaction.guild:
-        return []
-    
-    # Get all IC channels for this guild
-    all_channels = repositories.channel_permissions.get_all_channel_permissions(str(interaction.guild.id))
-    if not all_channels:
-        return []
-    ic_channel_ids = [channel.channel_id for channel in all_channels if channel.channel_type == 'ic']
-
-    # Filter channels the user can see and match current input
-    choices = []
-    for channel_id in ic_channel_ids:
-        channel = interaction.guild.get_channel(int(channel_id))
-        if channel and channel.permissions_for(interaction.user).view_channel:
-            channel_name = channel.name
-            if current.lower() in channel_name.lower():
-                choices.append(app_commands.Choice(
-                    name=f"#{channel_name}",
-                    value=str(channel.id)
-                ))
-    
-    return choices[:25]  # Discord limit
 
 
 class NarrationCommands(commands.Cog):
@@ -50,7 +25,7 @@ class NarrationCommands(commands.Cog):
         character="Character name to stick, or 'off' to disable",
         channel="IC channel to set sticky character for (defaults to current channel)"
     )
-    @app_commands.autocomplete(character=owner_characters_autocomplete, channel=ic_channels_autocomplete)
+    @app_commands.autocomplete(character=owned_character_npc_or_companion_autocomplete, channel=ic_channels_autocomplete)
     @player_or_gm_role_required()
     async def narration_sticky(self, interaction: discord.Interaction, character: str = None, channel: str = None):
         # Determine target channel

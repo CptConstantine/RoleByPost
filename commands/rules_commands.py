@@ -2,29 +2,11 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import openai
+from commands.autocomplete import homebrew_rules_autocomplete
 from core import command_decorators
 from core.base_models import SystemType
-from core.command_decorators import channel_restricted, gm_role_required, no_ic_channels, player_or_gm_role_required
+from core.command_decorators import gm_role_required, no_ic_channels, player_or_gm_role_required
 from data.repositories.repository_factory import repositories
-
-# Autocomplete function for homebrew rule names
-async def homebrew_rule_autocomplete(interaction: discord.Interaction, current: str):
-    """
-    Provide autocomplete suggestions for homebrew rule names.
-    
-    Args:
-        interaction: Discord interaction object
-        current: Current text being typed
-        
-    Returns:
-        List of app_commands.Choice objects for autocomplete
-    """
-    try:
-        homebrew_rules = repositories.homebrew.get_all_homebrew_rules(str(interaction.guild.id))
-        options = [rule.rule_name for rule in homebrew_rules if current.lower() in rule.rule_name.lower()]
-        return [app_commands.Choice(name=name, value=name) for name in options[:25]]
-    except Exception:
-        return []
 
 class RulesCommands(commands.Cog):
     """
@@ -187,7 +169,7 @@ class RulesCommands(commands.Cog):
     @app_commands.describe(
         rule_name="Name of the homebrew rule to remove"
     )
-    @app_commands.autocomplete(rule_name=homebrew_rule_autocomplete)
+    @app_commands.autocomplete(rule_name=homebrew_rules_autocomplete)
     @gm_role_required()
     @no_ic_channels()
     async def rules_homebrew_remove(self, interaction: discord.Interaction, rule_name: str):
