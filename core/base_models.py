@@ -300,7 +300,7 @@ class EntityJSONEncoder(json.JSONEncoder):
 
 class EntityType(Enum):
     """Standard entity types across all systems"""
-    GENERIC = "generic"
+    OTHER = "other"  # Generic entity, not a character or item
     PC = "pc"
     NPC = "npc"
     COMPANION = "companion"  # A character that is not a PC but is controlled by a player
@@ -388,7 +388,7 @@ class BaseEntity(BaseRpgObj):
     """
     # Override in subclasses
     ENTITY_DEFAULTS: ClassVar[Optional[EntityDefaults]] = None
-    SUPPORTED_ENTITY_TYPES: ClassVar[List[EntityType]] = [EntityType.GENERIC]
+    SUPPORTED_ENTITY_TYPES: ClassVar[List[EntityType]] = [EntityType.OTHER]
 
     def __init__(self, data: Dict[str, Any]):
         self.data = data
@@ -400,7 +400,7 @@ class BaseEntity(BaseRpgObj):
 
     @property
     def entity_type(self) -> EntityType:
-        entity_type_str = self.data.get("entity_type", EntityType.GENERIC.value)
+        entity_type_str = self.data.get("entity_type", EntityType.OTHER.value)
         return EntityType(entity_type_str)
 
     @entity_type.setter

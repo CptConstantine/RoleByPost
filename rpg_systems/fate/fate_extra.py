@@ -11,14 +11,14 @@ class FateExtra(FateCharacter):
     entity that might have aspects, skills, or stress tracks.
     """
     SUPPORTED_ENTITY_TYPES: List[EntityType] = [
-        EntityType.GENERIC,
+        EntityType.OTHER,
         EntityType.ITEM,
         EntityType.COMPANION
     ]
     
     # Define defaults for all entity types
     ENTITY_DEFAULTS = EntityDefaults({
-        EntityType.GENERIC: {
+        EntityType.OTHER: {
             "refresh": 0,
             "fate_points": 0,
             "skills": {},

@@ -9,10 +9,10 @@ from .roll_formula import RollFormula
 
 class GenericEntity(BaseEntity):
     """Generic system entity - simple entity with basic properties"""
-    SUPPORTED_ENTITY_TYPES: ClassVar[List[EntityType]] = [EntityType.GENERIC, EntityType.ITEM]
+    SUPPORTED_ENTITY_TYPES: ClassVar[List[EntityType]] = [EntityType.OTHER, EntityType.ITEM]
     
     ENTITY_DEFAULTS = EntityDefaults({
-        EntityType.GENERIC: {
+        EntityType.OTHER: {
         },
         EntityType.ITEM: {
         }

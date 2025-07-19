@@ -155,7 +155,7 @@ def get_specific_entity(system: SystemType, entity_type: EntityType):
             return mgt2e_character.MGT2ECharacter
         elif entity_type == EntityType.COMPANION:
             return generic_entities.GenericCompanion
-        elif entity_type == EntityType.GENERIC or entity_type == EntityType.ITEM:
+        elif entity_type == EntityType.OTHER or entity_type == EntityType.ITEM:
             return generic_entities.GenericEntity
         elif entity_type == EntityType.CONTAINER:
             return generic_entities.GenericContainer
@@ -168,21 +168,21 @@ def get_system_entity_types(system: SystemType) -> List[EntityType]:
     """Get the available entity types for the given system"""
     if system == SystemType.FATE:
         return [
-            EntityType.GENERIC,
+            EntityType.OTHER,
             EntityType.ITEM,
             EntityType.COMPANION,
             EntityType.CONTAINER
         ]
     elif system == SystemType.MGT2E:
         return [
-            EntityType.GENERIC,
+            EntityType.OTHER,
             EntityType.ITEM,
             EntityType.COMPANION,
             EntityType.CONTAINER
         ]
     else:
         return [
-        EntityType.GENERIC,
+        EntityType.OTHER,
         EntityType.ITEM,
         EntityType.COMPANION,
         EntityType.CONTAINER
