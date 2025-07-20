@@ -2,6 +2,7 @@ import logging
 from functools import wraps
 from typing import List, Callable, Union
 import discord
+from core.base_models import SystemType
 from data.repositories.repository_factory import repositories
 
 def channel_restricted(allowed_types: List[str]):
@@ -135,6 +136,40 @@ def player_or_gm_role_required():
                 )
                 return
             
+            return await func(self, interaction, *args, **kwargs)
+        
+        return wrapper
+    return decorator
+
+def system_required(required_system: SystemType):
+    """
+    Decorator to restrict commands to specific RPG systems.
+    
+    Args:
+        required_system: The SystemType that must be configured for the server
+    
+    Usage:
+        @system_required(SystemType.FATE)
+        async def my_fate_command(self, interaction: discord.Interaction):
+            # Command implementation
+    """
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(self, interaction: discord.Interaction, *args, **kwargs):
+            # Get the current system for this server
+            current_system = repositories.server.get_system(str(interaction.guild.id))
+            
+            if current_system != required_system:
+                system_name = required_system.value.upper()
+                current_name = current_system.value.upper() if current_system else "None"
+                await interaction.response.send_message(
+                    f"⚠️ This command is only available for {system_name} games. "
+                    f"Current system: {current_name}",
+                    ephemeral=True
+                )
+                return
+            
+            # System matches, proceed with the command
             return await func(self, interaction, *args, **kwargs)
         
         return wrapper

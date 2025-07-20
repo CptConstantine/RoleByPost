@@ -27,14 +27,11 @@ class FateCommands(commands.Cog):
 
     # Existing scene aspects command
     @fate_scene_group.command(name="aspects", description="Show detailed aspects in the current scene")
+    @command_decorators.player_or_gm_role_required()
+    @command_decorators.no_ic_channels()
+    @command_decorators.system_required(SYSTEM)
     async def fate_scene_aspects(self, interaction: discord.Interaction):
         """Show all aspects in the current scene and their descriptions"""
-        # Check if server is using Fate
-        system = repositories.server.get_system(str(interaction.guild.id))
-        if system != SystemType.FATE:
-            await interaction.response.send_message("⚠️ This command is only available for Fate games.", ephemeral=True)
-            return
-
         # Get active scene
         active_scene = repositories.scene.get_active_scene(str(interaction.guild.id))
         if not active_scene:
