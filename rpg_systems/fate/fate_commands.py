@@ -9,6 +9,7 @@ from data.repositories.repository_factory import repositories
 from core import command_decorators
 from core.base_models import BaseEntity, EntityType, EntityLinkType, SystemType
 import core.factories as factories
+from rpg_systems.fate.fate_autocomplete import active_player_characters_plus_fate_points_autocomplete
 from rpg_systems.fate.fate_character import FateCharacter
 from rpg_systems.fate.fate_compel_views import CompelType, CompelView
 
@@ -240,7 +241,7 @@ class FateCommands(commands.Cog):
         char_name="Character to compel",
         message="Description of the compel"
     )
-    @app_commands.autocomplete(char_name=active_player_characters_autocomplete)
+    @app_commands.autocomplete(char_name=active_player_characters_plus_fate_points_autocomplete)
     @command_decorators.player_or_gm_role_required()
     @command_decorators.system_required(SYSTEM)
     async def compel_character(self, interaction: discord.Interaction, char_name: str, message: str):
@@ -290,6 +291,61 @@ class FateCommands(commands.Cog):
             embed=embed,
             view=view
         )
+
+    @fate_group.command(name="refresh", description="GM: Reset all active characters' fate points to their refresh values")
+    @command_decorators.gm_role_required()
+    @command_decorators.no_ic_channels()
+    @command_decorators.system_required(SYSTEM)
+    async def refresh_fate_points(self, interaction: discord.Interaction, message: str = None):
+        """GM resets all active player characters' fate points to their refresh values"""
+        # Get all active characters
+        all_characters = repositories.active_character.get_all_active_characters(interaction.guild.id)
+        
+        # Filter to only Fate characters
+        fate_characters = [char for char in all_characters if isinstance(char, FateCharacter)]
+        
+        if not fate_characters:
+            await interaction.response.send_message("❌ No active Fate characters found.", ephemeral=True)
+            return
+        
+        # Process each character
+        refreshed_characters = []
+        unchanged_characters = []
+        
+        for character in fate_characters:
+            # Only refresh if current FP is less than refresh value
+            if character.fate_points < character.refresh:
+                old_fp = character.fate_points
+                character.fate_points = character.refresh
+                repositories.entity.upsert_entity(interaction.guild.id, character, SYSTEM)
+                refreshed_characters.append(f"**{character.name}**: {old_fp} → {character.refresh} FP")
+            else:
+                unchanged_characters.append(f"**{character.name}**: {character.fate_points} FP (unchanged)")
+        
+        # Create response embed
+        embed = discord.Embed(
+            title="🔄 Fate Points Refreshed",
+            color=discord.Color.blue()
+        )
+        
+        if refreshed_characters:
+            embed.add_field(
+                name="Characters Refreshed",
+                value="\n".join(refreshed_characters),
+                inline=False
+            )
+        
+        if unchanged_characters:
+            embed.add_field(
+                name="Characters Already at Refresh or Higher",
+                value="\n".join(unchanged_characters),
+                inline=False
+            )
+        
+        if not refreshed_characters and not unchanged_characters:
+            embed.description = "No characters were processed."
+        
+        await interaction.response.send_message(content=message, embed=embed)
 
     async def _award_fate_point(self, character: FateCharacter, guild_id: str) -> bool:
         """Award 1 fate point to character"""
