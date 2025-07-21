@@ -279,40 +279,17 @@ class FateCommands(commands.Cog):
             message=message,
             guild_id=str(interaction.guild.id)
         )
-        
-        # Create initial embed
-        embed = self._create_compel_embed(compel_type, character.name, interaction.user, message)
-        
-        # Mention the target character if they are in the server
-        mention = None
-        target_user = interaction.guild.get_member(int(character.owner_id))
-        if target_user:
-            mention = f"**{target_user.mention}**"
 
-        await interaction.response.send_message(content=mention, embed=embed, view=view)
+        embed = view.create_status_embed()
+        mentions = await view.get_compel_interaction_mentions(interaction)
+        message_content = ", ".join(mentions) if mentions else ""
+        message_content += f"\n{interaction.user.display_name} proposed a compel for **{character.name}**"
 
-    def _create_compel_embed(self, compel_type: CompelType, character_name: str, compeller: discord.User, message: str) -> discord.Embed:
-        """Create the initial compel embed"""
-        if compel_type == CompelType.GM:
-            title = "GM Compel"
-            description = f"The GM is offering a compel to **{character_name}**:"
-            color = 0xff6b35  # Orange for GM
-            footer = "Accept to gain 1 fate point, or reject to spend 1 fate point. You may negotiate the compel before you decide."
-        else:
-            title = "Player Compel Suggestion"
-            description = f"**{compeller.display_name}** has spent 1 fate point to suggest a compel for **{character_name}**:"
-            color = 0x4dabf7  # Blue for player
-            footer = "Player must accept/reject. GM must approve/reject. You may negotiate the compel before you decide."
-        
-        embed = discord.Embed(
-            title=title,
-            description=description,
-            color=color
+        await interaction.response.send_message(
+            content=message_content,
+            embed=embed,
+            view=view
         )
-        embed.add_field(name="Compel", value=message, inline=False)
-        embed.set_footer(text=footer)
-        
-        return embed
 
     async def _award_fate_point(self, character: FateCharacter, guild_id: str) -> bool:
         """Award 1 fate point to character"""
@@ -334,49 +311,6 @@ class FateCommands(commands.Cog):
             return True
         except Exception:
             return False
-
-class ConfirmDeleteExtraView(discord.ui.View):
-    def __init__(self, extra: BaseEntity, transfer_inventory: bool = False):
-        super().__init__(timeout=60)
-        self.extra = extra
-        self.transfer_inventory = transfer_inventory
-
-    @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger)
-    async def confirm_delete(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if self.transfer_inventory:
-            # Remove all POSSESSES links for this extra
-            possessed_entities = repositories.link.get_children(
-                str(interaction.guild.id),
-                self.extra.id,
-                EntityLinkType.POSSESSES.value
-            )
-            
-            for possessed_entity in possessed_entities:
-                repositories.link.delete_links_by_entities(
-                    str(interaction.guild.id),
-                    self.extra.id,
-                    possessed_entity.id,
-                    EntityLinkType.POSSESSES.value
-                )
-        
-        # Delete the extra (this will also delete all remaining links)
-        repositories.entity.delete_entity(str(interaction.guild.id), self.extra.id)
-        
-        delete_msg = f"✅ Deleted {self.extra.entity_type.value} `{self.extra.name}`."
-        if self.transfer_inventory:
-            delete_msg += " Released all possessed items."
-        
-        await interaction.response.edit_message(
-            content=delete_msg,
-            view=None
-        )
-
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
-    async def cancel_delete(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.edit_message(
-            content="❌ Deletion cancelled.",
-            view=None
-        )
 
 async def setup_fate_commands(bot: commands.Bot):
     await bot.add_cog(FateCommands(bot))

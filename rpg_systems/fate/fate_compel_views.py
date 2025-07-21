@@ -2,7 +2,7 @@ from enum import Enum
 import discord
 from core.base_models import SystemType
 from data.repositories.repository_factory import repositories
-from core.utils import _get_character_by_name_or_nickname
+from core.utils import _get_character_by_name_or_nickname, _get_gm_mention
 from rpg_systems.fate.fate_character import FateCharacter
 
 class CompelType(Enum):
@@ -12,12 +12,13 @@ class CompelType(Enum):
 class CompelView(discord.ui.View):
     def __init__(self, compel_type: CompelType, target_character: str, compeller_user_id: int, 
                  target_user_id: str, message: str, guild_id: int):
-        super().__init__(timeout=300)  # 5 minute timeout
+        super().__init__(timeout=60 * 60 * 24 * 7)  # 1 week timeout
         self.compel_type = compel_type
         self.target_character = target_character
         self.compeller_user_id = compeller_user_id
         self.target_user_id = target_user_id
         self.message = message
+        self.negotiation_message = ""
         self.guild_id = guild_id
         
         # Track decisions
@@ -40,14 +41,60 @@ class CompelView(discord.ui.View):
             self.add_item(GMRejectButton())
             self.add_item(NegotiateCompelButton())
     
-    async def update_embed(self, interaction: discord.Interaction):
+    async def update_message(self, interaction: discord.Interaction, message: str = None):
         """Update the embed based on current decisions"""
-        embed = self._create_status_embed()
+        # Mention different users based on interaction
+        mentions = await self.get_compel_interaction_mentions(interaction)
+        
+        message_content = ""
+        if mentions:
+            message_content = ", ".join(mentions)
+        if message:
+            message_content += f"\n**Update:** {message}"
+        embed = self.create_status_embed()
         self._update_button_states()
         
-        await interaction.response.edit_message(embed=embed, view=self)
+        # Delete the original message to avoid clutter
+        await interaction.channel.send(content=message_content, embed=embed, view=self)
+        await interaction.message.delete()
+        await interaction.response.defer()
+
+    async def get_compel_interaction_mentions(self, interaction: discord.Interaction) -> list[str]:
+        """Get mentions based on the interaction context"""
+        mentions = []
+        if self.compel_type == CompelType.GM:
+            if interaction.user.id == self.compeller_user_id:
+                # Mention the target user if the interaction is from the compeller
+                target_user = interaction.guild.get_member(int(self.target_user_id))
+                if target_user:
+                    mentions.append(target_user.mention)
+            elif interaction.user.id == self.target_user_id:
+                # Mention the GM role if the interaction is from the target player
+                gm_mention = await _get_gm_mention(interaction)
+                if gm_mention:
+                    mentions.append(gm_mention)
+        elif self.compel_type == CompelType.PLAYER:
+            if interaction.user.id == self.compeller_user_id:
+                # Mention the GM and target player if the interaction is from the compeller
+                target_user = interaction.guild.get_member(int(self.target_user_id))
+                if target_user:
+                    mentions.append(target_user.mention)
+                gm_mention = await _get_gm_mention(interaction)
+                if gm_mention:
+                    mentions.append(gm_mention)
+            elif interaction.user.id == self.target_user_id:
+                # Mention the GM if the interaction is from the target player
+                gm_mention = await _get_gm_mention(interaction)
+                if gm_mention:
+                    mentions.append(gm_mention)
+            elif await repositories.server.has_gm_permission(self.guild_id, interaction.user):
+                # If the interaction is from a GM, mention the target player
+                target_user = interaction.guild.get_member(int(self.target_user_id))
+                if target_user:
+                    mentions.append(target_user.mention)
+        return mentions
     
-    def _create_status_embed(self) -> discord.Embed:
+    def create_status_embed(self) -> discord.Embed:
         """Create embed showing current compel status"""
         if self.compel_type == CompelType.GM:
             title = "GM Compel"
@@ -88,6 +135,7 @@ class CompelView(discord.ui.View):
         embed = discord.Embed(title=title, color=color)
         embed.add_field(name="Character", value=self.target_character, inline=True)
         embed.add_field(name="Compel", value=self.message, inline=False)
+        embed.add_field(name="Negotiation", value=self.negotiation_message or "None yet.", inline=False)
         embed.set_footer(text=status)
         
         return embed
@@ -178,7 +226,7 @@ class AcceptCompelButton(discord.ui.Button):
             return
         
         view.player_decision = "accept"
-        await view.update_embed(interaction)
+        await view.update_message(interaction, message="Player accepted the compel!")
         
         if view.is_complete():
             await view.resolve_compel(interaction)
@@ -196,8 +244,8 @@ class RejectCompelButton(discord.ui.Button):
             return
         
         view.player_decision = "reject"
-        await view.update_embed(interaction)
-        
+        await view.update_message(interaction, message="Player rejected the compel.")
+
         if view.is_complete():
             await view.resolve_compel(interaction)
 
@@ -215,8 +263,8 @@ class GMApproveButton(discord.ui.Button):
             return
         
         view.gm_decision = "gm_accept"
-        await view.update_embed(interaction)
-        
+        await view.update_message(interaction, message="GM approved the compel!")
+
         if view.is_complete():
             await view.resolve_compel(interaction)
 
@@ -234,8 +282,8 @@ class GMRejectButton(discord.ui.Button):
             return
         
         view.gm_decision = "gm_reject"
-        await view.update_embed(interaction)
-        
+        await view.update_message(interaction, message="GM rejected the compel.")
+
         if view.is_complete():
             await view.resolve_compel(interaction)
 
@@ -256,33 +304,5 @@ class NegotiationModal(discord.ui.Modal, title="Negotiate Compel"):
         self.parent_view = parent_view
 
     async def on_submit(self, interaction: discord.Interaction):
-        self.parent_view.message = self.parent_view.message + f"\n{interaction.user.display_name}: {self.message.value}"
-        await self.parent_view.update_embed(interaction)
-        
-        mentions = []
-        
-        # Add target player
-        target_user = interaction.guild.get_member(int(self.parent_view.target_user_id))
-        if target_user and target_user.id != interaction.user.id:
-            mentions.append(target_user.mention)
-        
-        # Add compeller if different from current user
-        compeller = interaction.guild.get_member(self.parent_view.compeller_user_id)
-        if compeller and compeller.id != interaction.user.id:
-            mentions.append(compeller.mention)
-        
-        # Add GMs for player compels
-        if self.parent_view.compel_type == CompelType.PLAYER:
-            gm_role_id = await repositories.server.get_gm_role_id(interaction.guild.id)
-            for member in interaction.guild.members:
-                if any(role.id in gm_role_id for role in member.roles):
-                    if member.id != interaction.user.id and member.mention not in mentions:
-                        mentions.append(member.mention)
-        
-        # Send timed notification if there are people to mention
-        if mentions:
-            mention_text = " ".join(mentions)
-            await interaction.followup.send(
-                f"{mention_text} - Compel negotiation update from {interaction.user.display_name}",
-                delete_after=60
-            )
+        self.parent_view.negotiation_message = self.parent_view.negotiation_message + f"\n{interaction.user.display_name}: {self.message.value}"
+        await self.parent_view.update_message(interaction, message=f"Negotiation update from {interaction.user.display_name}")

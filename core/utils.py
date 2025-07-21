@@ -3,6 +3,16 @@ import discord
 from core.base_models import BaseCharacter, BaseEntity, EntityLinkType, EntityType
 from data.repositories.repository_factory import repositories
 
+async def _get_gm_mention(interaction: discord.Interaction) -> str:
+    """Get mentions for GMs in the server"""
+    mentions = ""
+    gm_role_id = repositories.server.get_gm_role_id(interaction.guild.id)
+    if gm_role_id:
+        gm_role = interaction.guild.get_role(gm_role_id)
+        if gm_role:
+            mentions += f" {gm_role.mention}"
+    return mentions
+
 async def _can_user_view_character(guild_id: str, user: discord.User, character: BaseCharacter) -> bool:
         """Check if a user can view a specific character based on entity type and ownership"""
         is_gm = await repositories.server.has_gm_permission(guild_id, user)
