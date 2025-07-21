@@ -416,7 +416,6 @@ class SceneCommands(commands.Cog):
 
     @scene_group.command(name="pin", description="Pin the current scene to this channel")
     @gm_role_required()
-    @no_ic_channels()
     async def scene_pin(self, interaction: discord.Interaction):
         """Pin the current scene to the current channel"""
         active_scene = repositories.scene.get_active_scene(str(interaction.guild.id))
@@ -459,7 +458,6 @@ class SceneCommands(commands.Cog):
 
     @scene_group.command(name="unpin", description="Unpin pinned scenes and clear all pins")
     @gm_role_required()
-    @no_ic_channels()
     async def scene_unpin(self, interaction: discord.Interaction):
         """Unpin pinned scenes and clear all pins"""
         # Get all pinned messages for this guild

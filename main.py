@@ -4,7 +4,7 @@ import re
 import dotenv
 import discord
 from discord.ext import commands
-from commands import narration_commands, narration_context_menu, user_context_menu
+from commands import message_context_menu, narration_commands, user_context_menu
 from commands.narration import can_user_speak_as_character, process_narration, send_narration_webhook
 from commands import character_commands, entity_commands, help_commands, initiative_commands, link_commands, reminder_commands, roll_commands, scene_commands, setup_commands, recap_commands, rules_commands
 from rpg_systems.fate import fate_commands
@@ -12,7 +12,6 @@ from core.initiative_views import GenericInitiativeView, PopcornInitiativeView
 from core.scene_views import GenericSceneView
 from rpg_systems.fate.fate_scene_views import FateSceneView
 from rpg_systems.mgt2e.mgt2e_scene_views import MGT2ESceneView
-from data.repositories.repository_factory import repositories
 
 dotenv.load_dotenv()
 
@@ -63,7 +62,7 @@ async def setup_hook():
     await entity_commands.setup_entity_commands(bot)
     await link_commands.setup_link_commands(bot)
     await narration_commands.setup_narration_commands(bot)
-    await narration_context_menu.setup_narration_context_menu_commands(bot)
+    await message_context_menu.setup_narration_context_menu_commands(bot)
     await user_context_menu.setup_user_context_menu_commands(bot)
     # System-specific commands
     await fate_commands.setup_fate_commands(bot)
@@ -108,6 +107,8 @@ async def on_guild_join(guild):
 @bot.event
 async def on_message(message: discord.Message):
     # Skip processing webhook messages entirely
+    from data.repositories.repository_factory import repositories
+    
     if message.webhook_id:
         return
 

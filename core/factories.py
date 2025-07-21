@@ -1,10 +1,9 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import uuid
-from core import initiative_types, initiative_views, scene_views
-from core.base_models import AccessType, BaseEntity, BaseInitiative, EntityType, SystemType
-from rpg_systems.fate import fate_character, fate_extra, fate_roll_formula, fate_roll_views, fate_scene_views, fate_sheet_edit_views
-from rpg_systems.mgt2e import mgt2e_character, mgt2e_roll_formula, mgt2e_roll_views, mgt2e_scene_views, mgt2e_sheet_edit_views
-from core import generic_entities
+from core.base_models import AccessType, EntityType, SystemType, BaseEntity
+
+if TYPE_CHECKING:
+    from core.base_models import BaseInitiative
 
 def build_entity(
     system: SystemType,
@@ -16,7 +15,7 @@ def build_entity(
     avatar_url: Optional[str] = None,
     access_type: AccessType = AccessType.PUBLIC,
     system_specific_fields: Optional[Dict[str, Any]] = None
-) -> BaseEntity:
+) -> "BaseEntity":
     """
     Factory method to create any entity with the given parameters.
     
@@ -71,7 +70,7 @@ def build_and_save_entity(
     avatar_url: Optional[str] = None,
     access_type: AccessType = AccessType.PUBLIC,
     system_specific_fields: Optional[Dict[str, Any]] = None
-) -> BaseEntity:
+) -> "BaseEntity":
     """
     Factory method to create and save any entity with the given parameters.
     
@@ -113,6 +112,10 @@ def build_and_save_entity(
 
 def get_specific_character(system: SystemType, entity_type: EntityType = None):
     # If entity_type is COMPANION, use companion-specific views
+    from rpg_systems.fate import fate_character
+    from rpg_systems.mgt2e import mgt2e_character
+    from core import generic_entities
+
     if entity_type == EntityType.COMPANION:
         return get_specific_companion(system)
 
@@ -127,6 +130,9 @@ def get_specific_character(system: SystemType, entity_type: EntityType = None):
     
 def get_specific_companion(system: SystemType):
     """Get the appropriate companion class based on system"""
+    from rpg_systems.fate import fate_extra
+    from core import generic_entities
+
     if system == SystemType.FATE:
         return fate_extra.FateExtra
     else:
@@ -134,6 +140,10 @@ def get_specific_companion(system: SystemType):
 
 def get_specific_entity(system: SystemType, entity_type: EntityType):
     """Get the appropriate entity class for the given system and entity type"""
+    from rpg_systems.fate import fate_character, fate_extra
+    from rpg_systems.mgt2e import mgt2e_character
+    from core import generic_entities
+
     if system == SystemType.GENERIC:
         if entity_type == EntityType.PC or entity_type == EntityType.NPC:
             return generic_entities.GenericCharacter
@@ -189,6 +199,8 @@ def get_system_entity_types(system: SystemType) -> List[EntityType]:
     ]
 
 def get_specific_initiative(initiative_type: str):
+    """Get the appropriate initiative class based on type"""
+    from core import initiative_types
     if initiative_type == "popcorn":
         return initiative_types.PopcornInitiative
     elif initiative_type == "generic":
@@ -196,7 +208,9 @@ def get_specific_initiative(initiative_type: str):
     else:
         raise ValueError(f"Unknown initiative type: {initiative_type}")
 
-def get_specific_initiative_view(guild_id: str, channel_id: str, initiative: BaseInitiative, message_id=None):
+def get_specific_initiative_view(guild_id: str, channel_id: str, initiative: "BaseInitiative", message_id=None):
+    """Get the appropriate initiative view for the given initiative type"""
+    from core import initiative_views
     if initiative.type == "popcorn":
         return initiative_views.PopcornInitiativeView(
             guild_id=guild_id, 
@@ -215,6 +229,11 @@ def get_specific_initiative_view(guild_id: str, channel_id: str, initiative: Bas
         raise ValueError(f"Unknown initiative type: {initiative.type}")
 
 def get_specific_roll_formula(system: SystemType, roll_parameters_dict: dict = None):
+    """Get the appropriate roll formula class for the given system"""
+    from rpg_systems.fate import fate_roll_formula
+    from rpg_systems.mgt2e import mgt2e_roll_formula
+    from core import generic_entities
+
     if system == SystemType.FATE:
         return fate_roll_formula.FateRollFormula(roll_parameters_dict)
     elif system == SystemType.MGT2E:
@@ -225,6 +244,11 @@ def get_specific_roll_formula(system: SystemType, roll_parameters_dict: dict = N
         raise ValueError(f"Unknown system: {system}")
 
 def get_specific_roll_formula_view(system: SystemType, roll_formula_obj, difficulty: int = None):
+    """Get the appropriate roll formula view for the given system"""
+    from rpg_systems.fate import fate_roll_views
+    from rpg_systems.mgt2e import mgt2e_roll_views
+    from core import generic_entities
+
     if system == SystemType.FATE:
         return fate_roll_views.FateRollFormulaView(roll_formula_obj, difficulty)
     elif system == SystemType.MGT2E:
@@ -236,6 +260,10 @@ def get_specific_roll_formula_view(system: SystemType, roll_formula_obj, difficu
 
 def get_specific_scene_view(system: SystemType, guild_id=None, channel_id=None, scene_id=None, message_id=None):
     """Get the appropriate scene view for the given system"""
+    from rpg_systems.fate import fate_scene_views
+    from rpg_systems.mgt2e import mgt2e_scene_views
+    from core import scene_views
+    
     if system == SystemType.FATE:
         return fate_scene_views.FateSceneView(guild_id, channel_id, scene_id, message_id)
     elif system == SystemType.MGT2E:

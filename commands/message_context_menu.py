@@ -2,11 +2,12 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from core.utils import _get_character_by_name_or_nickname
-from data.repositories.repository_factory import repositories
+
 
 async def can_user_edit_message(guild_id: int, user: discord.User, message: discord.Message) -> bool:
     """Check if user can edit/delete this narrated message."""
-    
+    from data.repositories.repository_factory import repositories
+
     # For GM narration, check if user is a GM
     if message.embeds and message.embeds[0].author and message.embeds[0].author.name == "GM":
         return await repositories.server.has_gm_permission(guild_id, user)
@@ -82,6 +83,7 @@ async def view_character_sheet_from_narration_context(interaction: discord.Inter
     if character_name:
         character = await _get_character_by_name_or_nickname(interaction.guild.id, character_name)
         if character:
+            from data.repositories.repository_factory import repositories
             is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
             embed = character.format_full_sheet(interaction.guild.id, is_gm=is_gm)
             view = character.get_sheet_edit_view(interaction.user.id, is_gm=is_gm)

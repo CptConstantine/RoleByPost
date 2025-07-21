@@ -125,6 +125,19 @@ async def owned_player_characters_autocomplete(interaction: discord.Interaction,
         for char in filtered_entities[:25]
     ]
 
+async def active_player_characters_autocomplete(interaction: discord.Interaction, current: str):
+    """Autocomplete for active player characters in the current guild"""
+    active_chars = repositories.active_character.get_all_active_characters(interaction.guild.id)
+    
+    # Filter characters based on permissions
+    options = list[str]()
+    for c in active_chars:
+        options.append(c.name)
+    
+    # Filter by current input
+    filtered_options = [n for n in options if current.lower() in n.lower()]
+    return [app_commands.Choice(name=name, value=name) for name in filtered_options[:25]]
+
 async def multi_character_autocomplete(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
     """Enhanced autocomplete that handles comma-separated character names"""
     # Parse what's already been typed

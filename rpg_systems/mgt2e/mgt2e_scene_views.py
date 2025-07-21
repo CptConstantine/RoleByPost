@@ -1,3 +1,4 @@
+from typing import TYPE_CHECKING
 import discord
 from discord import ui
 from discord.ext import commands

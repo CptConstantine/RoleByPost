@@ -1,4 +1,5 @@
 # rpg_systems/fate/fate_roll_views.py
+from typing import TYPE_CHECKING
 import discord
 from discord import ui, SelectOption
 from core.shared_views import FinalizeRollButton, PaginatedSelectView, RollFormulaView

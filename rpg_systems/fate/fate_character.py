@@ -1,8 +1,6 @@
 from typing import Any, Dict, List, Union
 import discord
 from core.base_models import BaseCharacter, EntityDefaults, EntityType, EntityLinkType, SystemType
-from core.roll_formula import RollFormula
-from data.repositories.repository_factory import repositories
 from rpg_systems.fate.aspect import Aspect
 from rpg_systems.fate.fate_roll_formula import FateRollFormula
 from rpg_systems.fate.fate_roll_views import FateRollFormulaView
@@ -214,6 +212,7 @@ class FateCharacter(BaseCharacter):
                 # Use per-guild default if available
                 skills = None
                 if guild_id:
+                    from data.repositories.repository_factory import repositories
                     skills = repositories.default_skills.get_default_skills(guild_id, SYSTEM)
                 default_skills = dict(skills) if skills else dict(self.DEFAULT_SKILLS)
                 # Use the property setter for skills
@@ -486,5 +485,6 @@ class FateCharacter(BaseCharacter):
         return "\n".join(lines)
 
 def get_character(char_id) -> FateCharacter:
+    from data.repositories.repository_factory import repositories
     character = repositories.entity.get_by_id(str(char_id))
     return character if character else None

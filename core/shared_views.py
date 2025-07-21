@@ -1,7 +1,7 @@
 import re
+from typing import TYPE_CHECKING
 import discord
 from discord import Interaction, TextStyle, ui
-from core import factories
 from core.base_models import BaseCharacter, RollFormula, SystemType
 from data.repositories.repository_factory import repositories
 

@@ -1,12 +1,11 @@
-import logging
 import discord
 from discord import ui
 from discord.ext import commands
 from core.base_models import SystemType
 from core.scene_views import BasePinnableSceneView, PlaceholderPersistentButton, SceneNotesButton
-from core import factories
 from rpg_systems.fate.aspect import Aspect
 from data.repositories.repository_factory import repositories
+
 
 SYSTEM = SystemType.FATE
 

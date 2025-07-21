@@ -38,7 +38,7 @@ class BasePinnableSceneView(ABC, discord.ui.View):
         """
         pass
     
-    async def initialize_if_needed(self, interaction):
+    async def initialize_if_needed(self, interaction: discord.Interaction) -> bool:
         """Initialize the view if it was loaded as a persistent view"""
         if not self.is_initialized:
             # Get scene ID from the database for this channel
@@ -59,8 +59,8 @@ class BasePinnableSceneView(ABC, discord.ui.View):
             self.build_view_components()
             return True
         return False
-    
-    async def get_scene_message(self, interaction):
+
+    async def get_scene_message(self, interaction: discord.Interaction) -> discord.Message:
         """
         Get the scene message if it exists or create a new one without pinning.
         This is the base method for displaying scene content.
@@ -106,7 +106,7 @@ class BasePinnableSceneView(ABC, discord.ui.View):
             )
             return None
     
-    async def pin_message(self, interaction):
+    async def pin_message(self, interaction: discord.Interaction):
         """
         Pin the scene message to the channel.
         This should only be called from /scene pin command for active scenes.

@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Any, Dict
+from typing import TYPE_CHECKING, Any, Dict
 import discord
 from core.base_models import BaseCharacter, EntityType, EntityDefaults, EntityLinkType, RollFormula, SystemType
 from core.roll_formula import RollFormula

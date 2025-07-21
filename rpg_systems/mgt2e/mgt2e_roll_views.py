@@ -1,3 +1,4 @@
+from typing import TYPE_CHECKING
 import discord
 import discord.ui as ui
 from core.shared_views import FinalizeRollButton, PaginatedSelectView, RollFormulaView

@@ -1,4 +1,3 @@
-import dis
 import discord
 from discord import ui
 from core.base_models import BaseEntity, EntityLinkType, EntityType

@@ -3,10 +3,14 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from typing import List
+from commands.autocomplete import active_player_characters_autocomplete
+from core.utils import _get_character_by_name_or_nickname
 from data.repositories.repository_factory import repositories
 from core import command_decorators
 from core.base_models import BaseEntity, EntityType, EntityLinkType, SystemType
 import core.factories as factories
+from rpg_systems.fate.fate_character import FateCharacter
+from rpg_systems.fate.fate_compel_views import CompelType, CompelView
 
 SYSTEM = SystemType.FATE
 
@@ -194,6 +198,142 @@ class FateCommands(commands.Cog):
             embed.set_footer(text="Hidden aspects are not shown. Contact the GM for more information.")
             
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @fate_group.command(name="give-fp", description="GM: Award a fate point to a character")
+    @app_commands.describe(char_name="Character to award fate point to")
+    @app_commands.autocomplete(char_name=active_player_characters_autocomplete)
+    @command_decorators.gm_role_required()
+    @command_decorators.no_ic_channels()
+    @command_decorators.system_required(SYSTEM)
+    async def give_fate_point(self, interaction: discord.Interaction, char_name: str):
+        """GM awards a fate point to a character"""
+        character = await _get_character_by_name_or_nickname(interaction.guild.id, char_name)
+        
+        if not character:
+            await interaction.response.send_message(f"❌ Character '{char_name}' not found.", ephemeral=True)
+            return
+        
+        if not isinstance(character, FateCharacter):
+            await interaction.response.send_message(f"❌ Character '{char_name}' is not a Fate character.", ephemeral=True)
+            return
+        
+        # Award fate point
+        success = await self._award_fate_point(character, interaction.guild.id)
+        
+        if success:
+            embed = discord.Embed(
+                title="Fate Point Awarded",
+                description=f"**{character.name}** has been awarded 1 fate point by the GM.",
+                color=0x00ff00
+            )
+            embed.add_field(
+                name="Current Fate Points", 
+                value=character.fate_points, 
+                inline=False
+            )
+            await interaction.response.send_message(embed=embed)
+        else:
+            await interaction.response.send_message("❌ Failed to award fate point.", ephemeral=True)
+
+    @fate_group.command(name="compel", description="Propose a compel for a character")
+    @app_commands.describe(
+        char_name="Character to compel",
+        message="Description of the compel"
+    )
+    @app_commands.autocomplete(char_name=active_player_characters_autocomplete)
+    @command_decorators.player_or_gm_role_required()
+    @command_decorators.system_required(SYSTEM)
+    async def compel_character(self, interaction: discord.Interaction, char_name: str, message: str):
+        """Propose a compel for a character"""
+        character = await _get_character_by_name_or_nickname(interaction.guild.id, char_name)
+        
+        if not character:
+            await interaction.response.send_message(f"❌ Character '{char_name}' not found.", ephemeral=True)
+            return
+        
+        if not isinstance(character, FateCharacter):
+            await interaction.response.send_message(f"❌ Character '{char_name}' is not a Fate character.", ephemeral=True)
+            return
+        
+        # Check if GM or player compel
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        compel_type = CompelType.GM if is_gm else CompelType.PLAYER
+
+        # Player spends FP if it's a player compel
+        if compel_type == CompelType.PLAYER:
+            active_char = repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id)
+            success = await self._spend_fate_point(active_char, interaction.guild.id)
+            if not success:
+                await interaction.response.send_message(
+                    f"❌ {active_char.name} has no fate points to spend for this compel.",
+                    ephemeral=True
+                )
+                return
+        
+        # Create compel view
+        view = CompelView(
+            compel_type=compel_type,
+            target_character=character.name,
+            compeller_user_id=interaction.user.id,
+            target_user_id=character.owner_id,
+            message=message,
+            guild_id=str(interaction.guild.id)
+        )
+        
+        # Create initial embed
+        embed = self._create_compel_embed(compel_type, character.name, interaction.user, message)
+        
+        # Mention the target character if they are in the server
+        mention = None
+        target_user = interaction.guild.get_member(int(character.owner_id))
+        if target_user:
+            mention = f"**{target_user.mention}**"
+
+        await interaction.response.send_message(content=mention, embed=embed, view=view)
+
+    def _create_compel_embed(self, compel_type: CompelType, character_name: str, compeller: discord.User, message: str) -> discord.Embed:
+        """Create the initial compel embed"""
+        if compel_type == CompelType.GM:
+            title = "GM Compel"
+            description = f"The GM is offering a compel to **{character_name}**:"
+            color = 0xff6b35  # Orange for GM
+            footer = "Accept to gain 1 fate point, or reject to spend 1 fate point. You may negotiate the compel before you decide."
+        else:
+            title = "Player Compel Suggestion"
+            description = f"**{compeller.display_name}** has spent 1 fate point to suggest a compel for **{character_name}**:"
+            color = 0x4dabf7  # Blue for player
+            footer = "Player must accept/reject. GM must approve/reject. You may negotiate the compel before you decide."
+        
+        embed = discord.Embed(
+            title=title,
+            description=description,
+            color=color
+        )
+        embed.add_field(name="Compel", value=message, inline=False)
+        embed.set_footer(text=footer)
+        
+        return embed
+
+    async def _award_fate_point(self, character: FateCharacter, guild_id: str) -> bool:
+        """Award 1 fate point to character"""
+        try:
+            character.fate_points = character.fate_points + 1
+            repositories.entity.upsert_entity(guild_id, character, SYSTEM)
+            return True
+        except Exception:
+            return False
+
+    async def _spend_fate_point(self, character: FateCharacter, guild_id: str) -> bool:
+        """Spend 1 fate point from character, return success"""
+        if character.fate_points <= 0:
+            return False
+        
+        try:
+            character.fate_points = character.fate_points - 1
+            repositories.entity.upsert_entity(guild_id, character, SYSTEM)
+            return True
+        except Exception:
+            return False
 
 class ConfirmDeleteExtraView(discord.ui.View):
     def __init__(self, extra: BaseEntity, transfer_inventory: bool = False):
