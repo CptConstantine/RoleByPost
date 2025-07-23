@@ -1,10 +1,13 @@
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, TYPE_CHECKING
 import discord
 from discord import ui
 from .base_models import AccessType, BaseCharacter, BaseEntity, EntityDefaults, EntityType, EntityLinkType, SystemType
 from .inventory_views import EditInventoryView
 from .shared_views import EditNameModal, EditNotesModal, FinalizeRollButton, RollFormulaView
 from .roll_formula import RollFormula
+
+if TYPE_CHECKING:
+    from .roll_mechanics import RollMechanicConfig
 
 
 class GenericEntity(BaseEntity):
@@ -111,19 +114,63 @@ class GenericCharacter(BaseCharacter):
 
     async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollFormula, difficulty: int = None):
         """
-        Prints the roll result
+        Prints the roll result using configured roll mechanics
         """
         from data.repositories.repository_factory import repositories
-        base_roll = repositories.server.get_generic_base_roll(interaction.guild.id)
-        result, total = roll_formula_obj.roll_formula(self, base_roll=(base_roll or "1d20"))
-
+        
+        # Set guild_id on character for roll mechanics to access
+        if not hasattr(self, 'guild_id'):
+            self.guild_id = interaction.guild.id
+        
+        # Use the enhanced roll formula that supports different mechanics
+        result, total = roll_formula_obj.roll_formula(self, "")  # Empty base_roll since mechanics handle it
+        
+        # Handle difficulty for different roll types
         difficulty_str = ""
-        if difficulty:
-            difficulty_str = f" (Needed {difficulty})"
-            if total >= difficulty:
-                result += f"\n✅ Success.{difficulty_str}"
+        if difficulty and total is not None:
+            # Get roll mechanic to determine success criteria
+            mechanic_data = repositories.server.get_core_roll_mechanic(interaction.guild.id)
+            
+            if mechanic_data:
+                from core.roll_mechanics import RollMechanicConfig, CoreRollMechanic
+                try:
+                    config = RollMechanicConfig.from_dict(mechanic_data)
+                    
+                    if config.mechanic_type == CoreRollMechanic.ROLL_UNDER:
+                        # For roll-under, success is when total <= difficulty
+                        difficulty_str = f" (Target {difficulty})"
+                        if total <= difficulty:
+                            result += f"\n✅ Success.{difficulty_str}"
+                        else:
+                            result += f"\n❌ Failure.{difficulty_str}"
+                    elif config.mechanic_type == CoreRollMechanic.DICE_POOL:
+                        # For dice pools, difficulty is number of successes needed
+                        difficulty_str = f" (Need {difficulty} successes)"
+                        if total >= difficulty:
+                            result += f"\n✅ Success.{difficulty_str}"
+                        else:
+                            result += f"\n❌ Failure.{difficulty_str}"
+                    else:
+                        # Standard difficulty check (d20, 2d6, etc.)
+                        difficulty_str = f" (Needed {difficulty})"
+                        if total >= difficulty:
+                            result += f"\n✅ Success.{difficulty_str}"
+                        else:
+                            result += f"\n❌ Failure.{difficulty_str}"
+                except Exception:
+                    # Fallback to standard difficulty
+                    difficulty_str = f" (Needed {difficulty})"
+                    if total >= difficulty:
+                        result += f"\n✅ Success.{difficulty_str}"
+                    else:
+                        result += f"\n❌ Failure.{difficulty_str}"
             else:
-                result += f"\n❌ Failure.{difficulty_str}"
+                # No mechanic configured, use standard
+                difficulty_str = f" (Needed {difficulty})"
+                if total >= difficulty:
+                    result += f"\n✅ Success.{difficulty_str}"
+                else:
+                    result += f"\n❌ Failure.{difficulty_str}"
         
         await interaction.response.send_message(result, ephemeral=False)
 
@@ -190,29 +237,346 @@ class GenericCompanion(BaseCharacter):
     
     async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollFormula, difficulty: int = None):
         """
-        Prints the roll result
+        Prints the roll result using configured roll mechanics
         """
         from data.repositories.repository_factory import repositories
-        base_roll = repositories.server.get_generic_base_roll(interaction.guild.id)
-        result, total = roll_formula_obj.roll_formula(self, base_roll=(base_roll or "1d20"))
-
+        
+        # Set guild_id on character for roll mechanics to access
+        if not hasattr(self, 'guild_id'):
+            self.guild_id = interaction.guild.id
+        
+        # Use the enhanced roll formula that supports different mechanics
+        result, total = roll_formula_obj.roll_formula(self, "")  # Empty base_roll since mechanics handle it
+        
+        # Handle difficulty for different roll types
         difficulty_str = ""
-        if difficulty:
-            difficulty_str = f" (Needed {difficulty})"
-            if total >= difficulty:
-                result += f"\n✅ Success.{difficulty_str}"
+        if difficulty and total is not None:
+            # Get roll mechanic to determine success criteria
+            mechanic_data = repositories.server.get_core_roll_mechanic(interaction.guild.id)
+            
+            if mechanic_data:
+                from core.roll_mechanics import RollMechanicConfig, CoreRollMechanic
+                try:
+                    config = RollMechanicConfig.from_dict(mechanic_data)
+                    
+                    if config.mechanic_type == CoreRollMechanic.ROLL_UNDER:
+                        # For roll-under, success is when total <= difficulty
+                        difficulty_str = f" (Target {difficulty})"
+                        if total <= difficulty:
+                            result += f"\n✅ Success.{difficulty_str}"
+                        else:
+                            result += f"\n❌ Failure.{difficulty_str}"
+                    elif config.mechanic_type == CoreRollMechanic.DICE_POOL:
+                        # For dice pools, difficulty is number of successes needed
+                        difficulty_str = f" (Need {difficulty} successes)"
+                        if total >= difficulty:
+                            result += f"\n✅ Success.{difficulty_str}"
+                        else:
+                            result += f"\n❌ Failure.{difficulty_str}"
+                    else:
+                        # Standard difficulty check (d20, 2d6, etc.)
+                        difficulty_str = f" (Needed {difficulty})"
+                        if total >= difficulty:
+                            result += f"\n✅ Success.{difficulty_str}"
+                        else:
+                            result += f"\n❌ Failure.{difficulty_str}"
+                except Exception:
+                    # Fallback to standard difficulty
+                    difficulty_str = f" (Needed {difficulty})"
+                    if total >= difficulty:
+                        result += f"\n✅ Success.{difficulty_str}"
+                    else:
+                        result += f"\n❌ Failure.{difficulty_str}"
             else:
-                result += f"\n❌ Failure.{difficulty_str}"
+                # No mechanic configured, use standard
+                difficulty_str = f" (Needed {difficulty})"
+                if total >= difficulty:
+                    result += f"\n✅ Success.{difficulty_str}"
+                else:
+                    result += f"\n❌ Failure.{difficulty_str}"
         
         await interaction.response.send_message(result, ephemeral=False)
 
 class GenericRollFormula(RollFormula):
     """
     A roll formula specifically for the generic RPG system.
-    It can handle any roll parameters as needed.
+    It can handle any roll parameters as needed and supports flexible roll mechanics.
     """
     def __init__(self, roll_parameters_dict: dict = None):
         super().__init__(roll_parameters_dict)
+
+    def roll_formula(self, character: "BaseCharacter", base_roll: str):
+        """
+        Enhanced roll formula that supports different core roll mechanics
+        """
+        from data.repositories.repository_factory import repositories
+        from core.roll_mechanics import RollMechanicConfig, CoreRollMechanic
+        
+        # Get the guild's configured roll mechanic
+        guild_id = getattr(character, 'guild_id', None)
+        if not guild_id:
+            # Fallback to standard rolling if no guild context
+            return super().roll_formula(character, base_roll)
+        
+        mechanic_data = repositories.server.get_core_roll_mechanic(guild_id)
+        if not mechanic_data:
+            # Migration: Check for legacy base roll setting
+            legacy_base_roll = repositories.server.get_generic_base_roll(guild_id)
+            if legacy_base_roll:
+                # Create a temporary config for backward compatibility
+                config = RollMechanicConfig(
+                    mechanic_type=CoreRollMechanic.GENERIC,
+                    dice_formula=legacy_base_roll,
+                    custom_formula=legacy_base_roll,
+                    description=f"Legacy: {legacy_base_roll}"
+                )
+                return self._roll_generic_system(character, config)
+            else:
+                # No configuration at all, use default d20
+                return super().roll_formula(character, "1d20")
+        
+        try:
+            config = RollMechanicConfig.from_dict(mechanic_data)
+        except Exception:
+            # Fallback if config is corrupted
+            return super().roll_formula(character, base_roll)
+        
+        # Execute the appropriate roll mechanic
+        if config.mechanic_type == CoreRollMechanic.D20_SYSTEM:
+            return self._roll_d20_system(character, config)
+        elif config.mechanic_type == CoreRollMechanic.TWO_D6:
+            return self._roll_2d6_system(character, config)
+        elif config.mechanic_type == CoreRollMechanic.ROLL_UNDER:
+            return self._roll_under_system(character, config)
+        elif config.mechanic_type == CoreRollMechanic.DICE_POOL:
+            return self._roll_dice_pool(character, config)
+        elif config.mechanic_type == CoreRollMechanic.EXPLODING:
+            return self._roll_exploding_dice(character, config)
+        elif config.mechanic_type == CoreRollMechanic.DUALITY:
+            return self._roll_duality_system(character, config)
+        elif config.mechanic_type == CoreRollMechanic.GENERIC:
+            return self._roll_generic_system(character, config)
+        else:
+            # Fallback to standard rolling
+            return super().roll_formula(character, base_roll)
+
+    def _roll_d20_system(self, character: "BaseCharacter", config: "RollMechanicConfig"):
+        """Roll 1d20 + modifiers vs difficulty"""
+        return super().roll_formula(character, "1d20")
+
+    def _roll_2d6_system(self, character: "BaseCharacter", config: "RollMechanicConfig"):
+        """Roll 2d6 + modifiers vs difficulty"""
+        return super().roll_formula(character, "2d6")
+
+    def _roll_under_system(self, character: "BaseCharacter", config: "RollMechanicConfig"):
+        """Roll dice and succeed if <= target number"""
+        import random
+        
+        modifier_descriptions = []
+        total_mod = 0
+        
+        # Get modifiers
+        for key, value in self.get_modifiers(character).items():
+            try:
+                mod = int(value)
+                total_mod += mod
+                sign = "+" if mod >= 0 else ""
+                modifier_descriptions.append(f"{key} ({sign}{mod})")
+            except (ValueError, TypeError):
+                continue
+        
+        # Roll the base dice
+        if "d" in config.dice_formula:
+            parts = config.dice_formula.lower().split("d")
+            num_dice = int(parts[0]) if parts[0] else 1
+            die_size = int(parts[1])
+            
+            if num_dice > 100 or die_size > 1000:
+                return "😵 That's a lot of dice. Try fewer.", None
+                
+            rolls = [random.randint(1, die_size) for _ in range(num_dice)]
+            base_total = sum(rolls)
+            total = base_total + total_mod
+            
+            # Format result
+            formula_str = f"{config.dice_formula} [{', '.join(str(r) for r in rolls)}]"
+            if modifier_descriptions:
+                formula_str += " + " + " + ".join(modifier_descriptions)
+            
+            response = f'🎲 {formula_str}\n🧮 Total: {total} (Roll-Under system)'
+            return response, total
+        
+        return "❌ Invalid dice configuration.", None
+
+    def _roll_dice_pool(self, character: "BaseCharacter", config: "RollMechanicConfig"):
+        """Roll multiple dice and count successes"""
+        import random
+        
+        # Get pool size from modifiers
+        pool_size = 1  # Default
+        modifier_descriptions = []
+        
+        for key, value in self.get_modifiers(character).items():
+            if key.lower() in ['pool', 'dice', 'pool_size']:
+                try:
+                    pool_size = max(1, int(value))
+                    modifier_descriptions.append(f"Pool Size: {pool_size}")
+                except (ValueError, TypeError):
+                    continue
+            else:
+                try:
+                    pool_mod = int(value)
+                    pool_size += pool_mod
+                    sign = "+" if pool_mod >= 0 else ""
+                    modifier_descriptions.append(f"{key} ({sign}{pool_mod})")
+                except (ValueError, TypeError):
+                    continue
+        
+        pool_size = max(1, pool_size)  # Ensure at least 1 die
+        
+        # Extract die size from config
+        if "d" in config.dice_formula:
+            die_size = int(config.dice_formula.lower().split("d")[1])
+        else:
+            die_size = 10  # Default to d10
+        
+        # Determine success threshold
+        success_threshold = 8  # Default
+        if config.success_criteria:
+            if config.success_criteria.endswith("+"):
+                success_threshold = int(config.success_criteria[:-1])
+            elif ">=" in config.success_criteria:
+                success_threshold = int(config.success_criteria.split(">=")[1])
+        
+        # Roll the dice pool
+        rolls = [random.randint(1, die_size) for _ in range(pool_size)]
+        successes = sum(1 for roll in rolls if roll >= success_threshold)
+        
+        # Format result
+        roll_display = []
+        for roll in rolls:
+            if roll >= success_threshold:
+                roll_display.append(f"**{roll}**")  # Bold for successes
+            else:
+                roll_display.append(str(roll))
+        
+        formula_str = f"{pool_size}d{die_size} [{', '.join(roll_display)}]"
+        if modifier_descriptions:
+            formula_str += " (" + ", ".join(modifier_descriptions) + ")"
+        
+        response = f'🎲 {formula_str}\n🎯 Successes: {successes} (need {success_threshold}+)'
+        return response, successes
+
+    def _roll_exploding_dice(self, character: "BaseCharacter", config: "RollMechanicConfig"):
+        """Roll dice with explosions on maximum values"""
+        import random
+        
+        modifier_descriptions = []
+        total_mod = 0
+        
+        # Get modifiers
+        for key, value in self.get_modifiers(character).items():
+            try:
+                mod = int(value)
+                total_mod += mod
+                sign = "+" if mod >= 0 else ""
+                modifier_descriptions.append(f"{key} ({sign}{mod})")
+            except (ValueError, TypeError):
+                continue
+        
+        # Extract die info from config
+        if "d" in config.dice_formula:
+            parts = config.dice_formula.lower().split("d")
+            num_dice = int(parts[0]) if parts[0] else 1
+            die_size = int(parts[1])
+        else:
+            return "❌ Invalid dice configuration.", None
+        
+        explode_threshold = config.explode_on or die_size
+        
+        # Roll with explosions
+        all_rolls = []
+        for _ in range(num_dice):
+            die_rolls = []
+            current_roll = random.randint(1, die_size)
+            die_rolls.append(current_roll)
+            
+            # Handle explosions
+            explosions = 0
+            while current_roll >= explode_threshold and explosions < 10:  # Limit explosions
+                current_roll = random.randint(1, die_size)
+                die_rolls.append(current_roll)
+                explosions += 1
+            
+            all_rolls.append(die_rolls)
+        
+        # Calculate total
+        total_rolled = sum(sum(die_group) for die_group in all_rolls)
+        final_total = total_rolled + total_mod
+        
+        # Format result
+        roll_parts = []
+        for die_group in all_rolls:
+            if len(die_group) > 1:
+                roll_parts.append(f"[{'+'.join(map(str, die_group))}]")
+            else:
+                roll_parts.append(str(die_group[0]))
+        
+        formula_str = f"{config.dice_formula} {' '.join(roll_parts)}"
+        if modifier_descriptions:
+            formula_str += " + " + " + ".join(modifier_descriptions)
+        
+        response = f'🎲 {formula_str}\n💥 Total: {final_total} (exploding on {explode_threshold}+)'
+        return response, final_total
+
+    def _roll_duality_system(self, character: "BaseCharacter", config: "RollMechanicConfig"):
+        """Roll with Hope/Fear duality mechanics"""
+        import random
+        
+        # This is a simplified implementation - real Daggerheart is more complex
+        hope_dice = random.randint(1, 12)
+        fear_dice = random.randint(1, 12)
+        
+        # Use the higher result as the main roll
+        result = max(hope_dice, fear_dice)
+        
+        # Determine if hope or fear dominates
+        if hope_dice > fear_dice:
+            emotion = "Hope"
+            emotion_emoji = "🌟"
+        elif fear_dice > hope_dice:
+            emotion = "Fear"
+            emotion_emoji = "😰"
+        else:
+            emotion = "Balanced"
+            emotion_emoji = "⚖️"
+        
+        # Add modifiers
+        modifier_descriptions = []
+        total_mod = 0
+        
+        for key, value in self.get_modifiers(character).items():
+            try:
+                mod = int(value)
+                total_mod += mod
+                sign = "+" if mod >= 0 else ""
+                modifier_descriptions.append(f"{key} ({sign}{mod})")
+            except (ValueError, TypeError):
+                continue
+        
+        final_total = result + total_mod
+        
+        formula_str = f"Hope d12: {hope_dice}, Fear d12: {fear_dice} → {result}"
+        if modifier_descriptions:
+            formula_str += " + " + " + ".join(modifier_descriptions)
+        
+        response = f'🎲 {formula_str}\n{emotion_emoji} Total: {final_total} ({emotion} dominates)'
+        return response, final_total
+
+    def _roll_generic_system(self, character: "BaseCharacter", config: "RollMechanicConfig"):
+        """Roll using custom formula"""
+        base_roll = config.custom_formula or config.dice_formula
+        return super().roll_formula(character, base_roll)
 
 class GenericSheetEditView(ui.View):
     def __init__(self, editor_id: int, char_id: str, system: SystemType):

@@ -44,8 +44,8 @@ def channel_restricted(allowed_types: List[str]):
                 current_name = channel_type_names.get(channel_type, channel_type)
                 
                 await interaction.response.send_message(
-                    f"❌ This command is not allowed in **{current_name}** channels.\n"
-                    f"💡 This command can be used in: **{', '.join(allowed_names)}** channels.",
+                    f"This command is not allowed in **{current_name}** channels.\n"
+                    f"This command can be used in: **{', '.join(allowed_names)}** channels.",
                     ephemeral=True
                 )
                 return

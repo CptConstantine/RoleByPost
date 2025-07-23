@@ -1,10 +1,15 @@
 
+-- Add core_roll_mechanic column to server_settings table
+ALTER TABLE server_settings 
+ADD COLUMN IF NOT EXISTS core_roll_mechanic JSONB;
+
 -- Server settings
 CREATE TABLE IF NOT EXISTS server_settings (
     guild_id TEXT PRIMARY KEY,
     system TEXT,
     gm_role_id TEXT,
-    player_role_id TEXT
+    player_role_id TEXT,
+    core_roll_mechanic JSONB DEFAULT '{}'
 );
 
 -- Active characters
@@ -237,6 +242,8 @@ CREATE TABLE IF NOT EXISTS sticky_narration (
 );
 
 -- Indexes for performance
+CREATE INDEX IF NOT EXISTS idx_server_settings_core_roll_mechanic ON server_settings USING GIN (core_roll_mechanic);
+
 CREATE INDEX IF NOT EXISTS idx_scenes_guild_active ON scenes(guild_id, is_active);
 
 CREATE INDEX IF NOT EXISTS idx_reminders_timestamp ON reminders(timestamp);

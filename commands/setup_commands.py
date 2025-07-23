@@ -356,6 +356,42 @@ class SetupCommands(commands.Cog):
         )
 
     @setup_group.command(
+        name="core-roll-mechanic",
+        description="GM: Configure core roll mechanics for the Generic system"
+    )
+    @gm_role_required()
+    @no_ic_channels()
+    async def setup_core_roll_mechanic(self, interaction: discord.Interaction):
+        """Configure the core roll mechanic for the Generic system"""
+        from core.roll_mechanics import CoreRollMechanicSelectView
+        
+        # Check if server is using generic system
+        system = repositories.server.get_system(str(interaction.guild.id))
+        if system != SystemType.GENERIC:
+            await interaction.response.send_message(
+                "❌ Core roll mechanic configuration is only available for the Generic system.",
+                ephemeral=True
+            )
+            return
+        
+        # Create the selection view
+        view = CoreRollMechanicSelectView()
+        
+        embed = discord.Embed(
+            title="🎲 Configure Core Roll Mechanic",
+            description="Choose the core dice mechanic that best fits your game system.\n\n"
+                       "This will determine how players roll dice and what constitutes success.",
+            color=discord.Color.blue()
+        )
+        embed.add_field(
+            name="Current Setup",
+            value="Select a roll mechanic below to get started.",
+            inline=False
+        )
+        
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+
+    @setup_group.command(
         name="status",
         description="GM: View comprehensive server bot configuration and statistics"
     )
@@ -437,6 +473,42 @@ class SetupCommands(commands.Cog):
             value="\n".join(config_lines),
             inline=False
         )
+        
+        # System-Specific Configuration
+        system_lines = []
+        if system == SystemType.GENERIC:
+            # Show roll mechanic configuration
+            mechanic_data = repositories.server.get_core_roll_mechanic(guild_id)
+            if mechanic_data:
+                from core.roll_mechanics import RollMechanicConfig, CoreRollMechanic
+                try:
+                    config = RollMechanicConfig.from_dict(mechanic_data)
+                    system_lines.append(f"**Roll Mechanic:** {config.mechanic_type.value}")
+                    system_lines.append(f"**Description:** {config.description}")
+                except Exception:
+                    system_lines.append("**Roll Mechanic:** ❌ Configuration error")
+            else:
+                # Show legacy base roll if no new mechanic is set
+                base_roll = repositories.server.get_generic_base_roll(guild_id)
+                if base_roll:
+                    system_lines.append(f"**Legacy Base Roll:** {base_roll}")
+                    system_lines.append("⚠️ Consider upgrading to new roll mechanics with `/setup core-roll-mechanic`")
+                else:
+                    system_lines.append("**Roll Mechanic:** ❌ Not configured")
+                    system_lines.append("Use `/setup core-roll-mechanic` to configure")
+        elif system == SystemType.FATE:
+            system_lines.append("**Fate Points:** Managed per character")
+            system_lines.append("**Aspects:** Scene and game aspects supported")
+        elif system == SystemType.MGT2E:
+            system_lines.append("**Boons/Banes:** Supported in rolling")
+            system_lines.append("**Skills/Attributes:** Character sheet integration")
+        
+        if system_lines:
+            embed.add_field(
+                name=f"🎲 {system.value.upper()} System Settings",
+                value="\n".join(system_lines),
+                inline=False
+            )
         
         # Active Game State
         game_state_lines = []

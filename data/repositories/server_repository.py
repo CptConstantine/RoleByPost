@@ -1,4 +1,5 @@
 from typing import Optional
+import json
 
 from core.base_models import SystemType
 from .base_repository import BaseRepository
@@ -15,16 +16,25 @@ class ServerRepository(BaseRepository[ServerSettings]):
             'system': entity.system,
             'gm_role_id': entity.gm_role_id,
             'player_role_id': entity.player_role_id,
-            'generic_base_roll': entity.generic_base_roll
+            'generic_base_roll': entity.generic_base_roll,
+            'core_roll_mechanic': json.dumps(entity.core_roll_mechanic) if entity.core_roll_mechanic else None
         }
     
     def from_dict(self, data: dict) -> ServerSettings:
+        core_roll_mechanic = None
+        if data.get('core_roll_mechanic'):
+            if isinstance(data['core_roll_mechanic'], str):
+                core_roll_mechanic = json.loads(data['core_roll_mechanic'])
+            else:
+                core_roll_mechanic = data['core_roll_mechanic']
+        
         return ServerSettings(
             guild_id=data['guild_id'],
             system=data.get('system', 'generic'),
             gm_role_id=data.get('gm_role_id'),
             player_role_id=data.get('player_role_id'),
-            generic_base_roll=data.get('generic_base_roll')
+            generic_base_roll=data.get('generic_base_roll'),
+            core_roll_mechanic=core_roll_mechanic
         )
     
     def get_by_guild_id(self, guild_id: str) -> Optional[ServerSettings]:
@@ -99,4 +109,28 @@ class ServerRepository(BaseRepository[ServerSettings]):
         """Set the generic base roll for a guild"""
         server = self.get_by_guild_id(str(guild_id)) or ServerSettings(guild_id=str(guild_id))
         server.generic_base_roll = base_roll
+        self.save(server, conflict_columns=['guild_id'])
+
+    def get_core_roll_mechanic(self, guild_id: str) -> Optional[dict]:
+        """Get the core roll mechanic configuration for a guild"""
+        server = self.get_by_guild_id(guild_id)
+        return server.core_roll_mechanic if server else None
+    
+    def set_core_roll_mechanic(self, guild_id: str, config: dict) -> None:
+        """Set the core roll mechanic configuration for a guild"""
+        # Get existing server settings or create defaults
+        server = self.get_by_guild_id(guild_id)
+        if not server:
+            server = ServerSettings(
+                guild_id=guild_id,
+                system='generic',
+                gm_role_id=None,
+                player_role_id=None,
+                generic_base_roll=None,
+                core_roll_mechanic=config
+            )
+        else:
+            server.core_roll_mechanic = config
+        
+        # Save with conflict resolution on guild_id
         self.save(server, conflict_columns=['guild_id'])

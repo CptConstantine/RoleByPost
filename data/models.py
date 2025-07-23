@@ -9,6 +9,7 @@ class ServerSettings:
     gm_role_id: Optional[str] = None
     player_role_id: Optional[str] = None
     generic_base_roll: Optional[str] = None
+    core_roll_mechanic: Optional[Dict[str, Any]] = None
 
 @dataclass
 class Character:
