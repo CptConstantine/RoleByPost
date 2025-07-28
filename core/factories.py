@@ -1,9 +1,11 @@
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import uuid
-from core.base_models import AccessType, EntityType, SystemType, BaseEntity
+from core import generic_roll_formulas
+from core.base_models import AccessType, BaseCharacter, EntityType, SystemType, BaseEntity
 
 if TYPE_CHECKING:
     from core.base_models import BaseInitiative
+    from core.generic_roll_formulas import RollFormula
 
 def build_entity(
     system: SystemType,
@@ -228,33 +230,53 @@ def get_specific_initiative_view(guild_id: str, channel_id: str, initiative: "Ba
     else:
         raise ValueError(f"Unknown initiative type: {initiative.type}")
 
-def get_specific_roll_formula(system: SystemType, roll_parameters_dict: dict = None):
+def get_specific_roll_formula(guild_id: int, system: SystemType, roll_parameters_dict: dict = None):
     """Get the appropriate roll formula class for the given system"""
     from rpg_systems.fate import fate_roll_formula
     from rpg_systems.mgt2e import mgt2e_roll_formula
-    from core import generic_entities
+    from core.generic_roll_mechanics import CoreRollMechanicType
+    from data.repositories.repository_factory import repositories
 
     if system == SystemType.FATE:
         return fate_roll_formula.FateRollFormula(roll_parameters_dict)
     elif system == SystemType.MGT2E:
         return mgt2e_roll_formula.MGT2ERollFormula(roll_parameters_dict)
     elif system == SystemType.GENERIC:
-        return generic_entities.GenericRollFormula(roll_parameters_dict)
+        roll_config = repositories.server.get_core_roll_mechanic(guild_id)
+        if not roll_config:
+            return generic_roll_formulas.CustomRollFormula(roll_config, roll_parameters_dict)
+
+        if roll_config.mechanic_type == CoreRollMechanicType.DICE_POOL:
+            return generic_roll_formulas.DicePoolRollFormula(roll_config, roll_parameters_dict)
+        elif roll_config.mechanic_type == CoreRollMechanicType.ROLL_AND_SUM:
+            return generic_roll_formulas.GenericRollFormula(roll_config, roll_parameters_dict)
+        else:
+            return generic_roll_formulas.CustomRollFormula(roll_config, roll_parameters_dict)
     else:
         raise ValueError(f"Unknown system: {system}")
 
-def get_specific_roll_formula_view(system: SystemType, roll_formula_obj, difficulty: int = None):
+def get_specific_roll_formula_view(guild_id: int, character: BaseCharacter, system: SystemType, roll_formula_obj: "RollFormula", difficulty: int = None):
     """Get the appropriate roll formula view for the given system"""
-    from rpg_systems.fate import fate_roll_views
-    from rpg_systems.mgt2e import mgt2e_roll_views
-    from core import generic_entities
-
     if system == SystemType.FATE:
-        return fate_roll_views.FateRollFormulaView(roll_formula_obj, difficulty)
+        from rpg_systems.fate import fate_roll_views
+        return fate_roll_views.FateRollFormulaView(character, roll_formula_obj, difficulty)
     elif system == SystemType.MGT2E:
-        return mgt2e_roll_views.MGT2ERollFormulaView(roll_formula_obj, difficulty)
+        from rpg_systems.mgt2e import mgt2e_roll_views
+        return mgt2e_roll_views.MGT2ERollFormulaView(character, roll_formula_obj, difficulty)
     elif system == SystemType.GENERIC:
-        return generic_entities.GenericRollFormulaView(roll_formula_obj, difficulty)
+        from data.repositories.repository_factory import repositories
+        from core import generic_roll_views
+        from core.generic_roll_mechanics import CoreRollMechanicType
+        roll_config = repositories.server.get_core_roll_mechanic(str(guild_id))
+        if not roll_config:
+            return generic_roll_views.CustomFormulaView(character, roll_formula_obj, difficulty)
+
+        if roll_config.mechanic_type == CoreRollMechanicType.DICE_POOL:
+            return generic_roll_views.DicePoolFormulaView(character, roll_formula_obj, difficulty)
+        elif roll_config.mechanic_type == CoreRollMechanicType.ROLL_AND_SUM:
+            return generic_roll_views.RollAndSumFormulaView(character, roll_formula_obj, difficulty)
+        else:
+            return generic_roll_views.CustomFormulaView(character, roll_formula_obj, difficulty)
     else:
         raise ValueError(f"Unknown system: {system}")
 

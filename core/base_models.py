@@ -5,7 +5,7 @@ import json
 from typing import Any, ClassVar, Dict, List, Optional
 import discord
 import discord.ui as ui
-from core.roll_formula import RollFormula
+from core.generic_roll_formulas import RollFormula
 from data.models import EntityLink
 
 class SystemType(Enum):

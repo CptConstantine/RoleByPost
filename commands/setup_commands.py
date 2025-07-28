@@ -363,7 +363,7 @@ class SetupCommands(commands.Cog):
     @no_ic_channels()
     async def setup_core_roll_mechanic(self, interaction: discord.Interaction):
         """Configure the core roll mechanic for the Generic system"""
-        from core.roll_mechanics import CoreRollMechanicSelectView
+        from core.generic_roll_mechanics import CoreRollMechanicSelectView
         
         # Check if server is using generic system
         system = repositories.server.get_system(str(interaction.guild.id))
@@ -478,13 +478,12 @@ class SetupCommands(commands.Cog):
         system_lines = []
         if system == SystemType.GENERIC:
             # Show roll mechanic configuration
-            mechanic_data = repositories.server.get_core_roll_mechanic(guild_id)
-            if mechanic_data:
-                from core.roll_mechanics import RollMechanicConfig, CoreRollMechanic
+            roll_config = repositories.server.get_core_roll_mechanic(guild_id)
+            if roll_config:
+                from core.generic_roll_mechanics import RollMechanicConfig, CoreRollMechanicType
                 try:
-                    config = RollMechanicConfig.from_dict(mechanic_data)
-                    system_lines.append(f"**Roll Mechanic:** {config.mechanic_type.value}")
-                    system_lines.append(f"**Description:** {config.description}")
+                    system_lines.append(f"**Roll Mechanic:** {roll_config.mechanic_type.value}")
+                    system_lines.append(f"**Description:** {roll_config.description}")
                 except Exception:
                     system_lines.append("**Roll Mechanic:** ❌ Configuration error")
             else:

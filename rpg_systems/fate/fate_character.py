@@ -278,7 +278,7 @@ class FateCharacter(BaseCharacter):
         """
         Prints the roll result
         """
-        result, total = roll_formula_obj.roll_formula(self, "4df")
+        result, total = roll_formula_obj.roll_formula(self, roll_formula_obj.roll_config.dice_formula)
 
         difficulty_shifts_str = ""
         if difficulty:

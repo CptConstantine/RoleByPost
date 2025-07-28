@@ -2,7 +2,7 @@ from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Dict
 import discord
 from core.base_models import BaseCharacter, EntityType, EntityDefaults, EntityLinkType, RollFormula, SystemType
-from core.roll_formula import RollFormula
+from core.generic_roll_formulas import RollFormula
 from rpg_systems.mgt2e.mgt2e_roll_formula import MGT2ERollFormula
 from rpg_systems.mgt2e.mgt2e_roll_views import MGT2ERollFormulaView
 from data.repositories.repository_factory import repositories
@@ -209,7 +209,7 @@ class MGT2ECharacter(BaseCharacter):
         """
         Prints the roll result
         """
-        result, total = roll_formula_obj.roll_formula(self, "2d6")
+        result, total = roll_formula_obj.roll_formula(self, roll_formula_obj.roll_config.dice_formula)
 
         difficulty_shifts_str = ""
         if difficulty:

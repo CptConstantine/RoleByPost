@@ -3,9 +3,10 @@ from discord.ext import commands
 from discord import app_commands
 from commands.autocomplete import multi_character_autocomplete, roll_parameters_autocomplete
 from core.command_decorators import no_ic_channels, player_or_gm_role_required
-from core.roll_formula import RollFormula
+from core.generic_roll_formulas import RollFormula
 from core.shared_views import RequestRollView
 import core.factories as factories
+from data.repositories import character_repository
 from data.repositories.repository_factory import repositories
 
 class RollCommands(commands.Cog):
@@ -33,7 +34,7 @@ class RollCommands(commands.Cog):
         
         system = repositories.server.get_system(str(interaction.guild.id))
         roll_parameters_dict = RollFormula.roll_parameters_to_dict(roll_parameters)
-        roll_formula_obj = factories.get_specific_roll_formula(system, roll_parameters_dict)
+        roll_formula_obj = factories.get_specific_roll_formula(interaction.guild.id, system, roll_parameters_dict)
         await character.send_roll_message(interaction, roll_formula_obj, difficulty)
 
     @roll_group.command(
@@ -50,8 +51,8 @@ class RollCommands(commands.Cog):
             return
         
         system = repositories.server.get_system(str(interaction.guild.id))
-        roll_formula_obj = factories.get_specific_roll_formula(system, {})
-        formula_view = factories.get_specific_roll_formula_view(system, roll_formula_obj)
+        roll_formula_obj = factories.get_specific_roll_formula(interaction.guild.id, system, {})
+        formula_view = factories.get_specific_roll_formula_view(interaction.guild.id, character, system, roll_formula_obj)
         await interaction.response.send_message(
             content=f"🎲 What will **{character.name}** roll?",
             view=formula_view,
@@ -102,7 +103,7 @@ class RollCommands(commands.Cog):
 
         # Parse roll_parameters
         roll_parameters_dict = RollFormula.roll_parameters_to_dict(roll_parameters)
-        roll_formula_obj = factories.get_specific_roll_formula(system, roll_parameters_dict)
+        roll_formula_obj = factories.get_specific_roll_formula(interaction.guild.id, system, roll_parameters_dict)
 
         view = RequestRollView(roll_formula=roll_formula_obj, difficulty=difficulty)
         await interaction.response.send_message(

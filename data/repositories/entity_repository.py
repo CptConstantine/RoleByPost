@@ -3,9 +3,6 @@ from .base_repository import BaseRepository
 from data.models import Entity
 from core.base_models import AccessType, BaseEntity, EntityType, EntityJSONEncoder, SystemType
 import json
-import uuid
-import time
-import core.factories as factories
 
 class EntityRepository(BaseRepository[Entity]):
     def __init__(self):
@@ -59,6 +56,7 @@ class EntityRepository(BaseRepository[Entity]):
             return None
             
         # Get the system-specific entity class
+        import core.factories as factories
         EntityClass = factories.get_specific_entity(SystemType(entity.system), EntityType(entity.entity_type))
 
         # Create the entity dict using the helper method
@@ -210,6 +208,7 @@ class EntityRepository(BaseRepository[Entity]):
     def upsert_entity(self, guild_id: str, entity: BaseEntity, system: SystemType) -> None:
         """Save or update a BaseEntity by converting it to Entity first"""
         # Get system-specific fields
+        import core.factories as factories
         EntityClass = factories.get_specific_entity(system, entity.entity_type)
         system_fields = EntityClass.ENTITY_DEFAULTS.get_defaults(entity.entity_type)
 

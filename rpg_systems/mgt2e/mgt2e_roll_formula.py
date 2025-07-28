@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from core.base_models import RollFormula
 from typing import TYPE_CHECKING
 
+from core.generic_roll_mechanics import CoreRollMechanicType, RollMechanicConfig, SuccessCriteria
+
 if TYPE_CHECKING:
     from rpg_systems.mgt2e.mgt2e_character import MGT2ECharacter
 
@@ -40,7 +42,12 @@ class MGT2ERollFormula(RollFormula):
     It can handle any roll parameters as needed, including boons and banes.
     """
     def __init__(self, roll_parameters_dict: dict = None):
-        super().__init__(roll_parameters_dict)
+        roll_config = RollMechanicConfig(
+            mechanic_type=CoreRollMechanicType.ROLL_AND_SUM,
+            dice_formula="2d6",
+            success_criteria=SuccessCriteria.GREATER_EQUAL
+        )
+        super().__init__(roll_config, roll_parameters_dict)
         self.skill = roll_parameters_dict.get("skill") if roll_parameters_dict else None
         self.attribute = roll_parameters_dict.get("attribute") if roll_parameters_dict else None
         self.boon_bane = self._parse_boon_bane(roll_parameters_dict)

@@ -5,13 +5,15 @@ from core.shared_views import FinalizeRollButton, PaginatedSelectView, RollFormu
 from rpg_systems.mgt2e.mgt2e_roll_formula import MGT2ERollFormula, BoonBane
 from data.repositories.repository_factory import repositories
 
+if TYPE_CHECKING:
+    from rpg_systems.mgt2e.mgt2e_character import MGT2ECharacter
+
 class MGT2ERollFormulaView(RollFormulaView):
     """
     MGT2E-specific roll modifiers view that includes buttons to select skills and attributes.
     """
-    def __init__(self, roll_formula_obj: MGT2ERollFormula, difficulty: int = None):
-        self.character = None
-        super().__init__(roll_formula_obj, self.character, difficulty)
+    def __init__(self, character: 'MGT2ECharacter', roll_formula_obj: MGT2ERollFormula, difficulty: int = None):
+        super().__init__(roll_formula_obj, character, difficulty)
         # Add buttons for skill and attribute selection
         self.add_item(MGT2ESelectSkillButton(self, roll_formula_obj.skill))
         self.add_item(MGT2ESelectAttributeButton(self, roll_formula_obj.attribute))

@@ -2,6 +2,7 @@ from typing import Optional
 import json
 
 from core.base_models import SystemType
+from core.generic_roll_mechanics import RollMechanicConfig
 from .base_repository import BaseRepository
 from data.models import ServerSettings
 import discord
@@ -111,10 +112,12 @@ class ServerRepository(BaseRepository[ServerSettings]):
         server.generic_base_roll = base_roll
         self.save(server, conflict_columns=['guild_id'])
 
-    def get_core_roll_mechanic(self, guild_id: str) -> Optional[dict]:
+    def get_core_roll_mechanic(self, guild_id: str) -> Optional[RollMechanicConfig]:
         """Get the core roll mechanic configuration for a guild"""
         server = self.get_by_guild_id(guild_id)
-        return server.core_roll_mechanic if server else None
+        if server.core_roll_mechanic:
+            return RollMechanicConfig.from_dict(server.core_roll_mechanic)
+        return None
     
     def set_core_roll_mechanic(self, guild_id: str, config: dict) -> None:
         """Set the core roll mechanic configuration for a guild"""

@@ -123,27 +123,38 @@ The following are the commands that are currently available.
 
 - `/setup player-role [role]`  
   Set a Discord role as the player role for the server. Anyone with this role will be considered a player. You must be an Admin.
+
+- `/setup core-roll-mechanic`  
+  (GM only, Generic system only) Configure advanced roll mechanics for the Generic system. Choose from:
+  - **Roll and Sum**: Traditional dice rolling - roll dice, add them up, compare to target
+  - **Dice Pool**: Count individual successes - roll multiple dice, count successes based on target numbers
+  - **Custom**: Flexible configuration with custom dice formulas, success criteria
+  
+  Each mechanic type supports custom dice formulas (e.g., `1d20`, `2d6+1d4`, `3d8-2`), configurable success criteria (>=, <=, ==), and optional exploding dice mechanics.
   
 - `/setup default-skills-file [.txt file]` or `/setup default-skills [skill1:0, skill2:0, skill3:1, etc.]`  
   (GM only) Set default skills via command or file upload. Skills are validated per system (if the system has skills).
+
+- `/setup generic-dice [base_dice]`  
+  (GM only, Generic system only) Set a simple base dice formula for the Generic system (legacy method). Consider using `/setup core-roll-mechanic` for more advanced configuration.
 
 - `/setup openai set-api-key [api_key]`  
   (GM only) Set the OpenAI API key used for generating recaps and answering rules questions. Required for all AI functionality.
 
 - `/setup openai remove-api-key`  
-  (GM only) Removes your api key if it was set.
+  (GM only) Remove the OpenAI API key and disable AI features.
 
 - `/setup openai status`  
-  Check if an OpenAI API key is configured for this server and see available AI features.
+  Check if an OpenAI API key is configured for this server.
 
 - `/setup channel type [channel] [channel_type]`  
-  (GM only) Configure channel restrictions. Set channels as IC (in-character), OOC (out-of-character), GM Only, or Unrestricted.
+  (GM only) Configure which commands are allowed in specific channels. Types: ic (in-character), ooc (out-of-character), gm (GM only), unrestricted.
 
 - `/setup channel status`  
-  (GM only) View all channel permission configurations for this server.
+  (GM only) View channel permission configuration for this server.
 
 - `/setup status`  
-  (GM only) View comprehensive server bot configuration and statistics including roles, active scenes, character counts, feature settings, channel restrictions, and more.
+  View comprehensive server bot configuration and statistics including system settings, active game state, feature configuration, and channel restrictions.
 
 ### Characters
 

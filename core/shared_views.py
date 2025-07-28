@@ -195,7 +195,7 @@ class EditNotesModal(ui.Modal, title="Edit Notes"):
 
 class RequestRollView(ui.View):
     def __init__(self, roll_formula: RollFormula = None, difficulty: int = None):
-        super().__init__(timeout=60*60*24*7) # 1 week timeout; easy enough to re-request a roll after a bot restart
+        super().__init__(timeout=60*60*24*7) # 1 week timeout
         self.roll_formula_obj = roll_formula
         self.difficulty = difficulty
         self.add_item(EditRequestedRollButton(roll_formula, difficulty))
@@ -230,7 +230,7 @@ class RollFormulaView(ui.View):
 
         # Create a button for each key in the roll formula
         dice_pattern = re.compile(r"^\s*\d*d\d+([+-]\d+)?\s*$", re.IGNORECASE)
-        for key, value in self.roll_formula_obj.to_dict().items():
+        for key, value in self.roll_formula_obj.modifiers.items():
             is_numeric = False
             try:
                 int(value)
@@ -316,13 +316,19 @@ class AddModifierModal(discord.ui.Modal, title="Add Modifier"):
     async def on_submit(self, interaction: discord.Interaction):
         key = self.key_input.value.strip()
         value = self.value_input.value.strip()
-        self.parent_view.roll_formula_obj[key] = value
+        self.parent_view.roll_formula_obj.modifiers[key] = value
         self.parent_view.add_modifier_button(label=key, value=value)
+        
+        for item in self.parent_view.children:
+            if isinstance(item, FinalizeRollButton):
+                item.label = f"Roll {self.parent_view.roll_formula_obj.get_total_dice_formula()}"
+                break
+
         await interaction.response.edit_message(view=self.parent_view)
 
 class FinalizeRollButton(discord.ui.Button):
     def __init__(self, roll_formula_obj: RollFormula = None, difficulty: int = None):
-        super().__init__(label="Roll", style=discord.ButtonStyle.success)
+        super().__init__(label=f"Roll {roll_formula_obj.get_total_dice_formula()}", style=discord.ButtonStyle.success)
         self.roll_formula_obj = roll_formula_obj
         self.difficulty = difficulty
 

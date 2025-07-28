@@ -6,13 +6,15 @@ from core.shared_views import FinalizeRollButton, PaginatedSelectView, RollFormu
 from rpg_systems.fate.fate_roll_formula import FateRollFormula
 from data.repositories.repository_factory import repositories
 
+if TYPE_CHECKING:
+    from rpg_systems.fate.fate_character import FateCharacter
+
 class FateRollFormulaView(RollFormulaView):
     """
     Fate-specific roll modifiers view that includes a button to select skills.
     """
-    def __init__(self, roll_formula_obj: FateRollFormula, difficulty: int = None):
-        self.character = None
-        super().__init__(roll_formula_obj, self.character, difficulty)
+    def __init__(self, character: 'FateCharacter', roll_formula_obj: FateRollFormula, difficulty: int = None):
+        super().__init__(roll_formula_obj, character, difficulty)
         # Add a button for skill selection
         self.add_item(FateSelectSkillButton(self, roll_formula_obj.skill))
         self.add_item(FinalizeRollButton(roll_formula_obj, difficulty))
