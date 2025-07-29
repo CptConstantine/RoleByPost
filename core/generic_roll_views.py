@@ -268,7 +268,7 @@ class SetCustomFormulaModal(ui.Modal, title="Set Custom Formula"):
         self.formula_input = ui.TextInput(
             label="Custom Formula",
             placeholder="e.g., 1d20+1d4, 2d6+3, 3d8-2",
-            default=parent_view.roll_formula_obj.get_total_dice_formula(),
+            default=parent_view.roll_formula_obj.roll_config.dice_formula,
             required=True,
             max_length=100
         )

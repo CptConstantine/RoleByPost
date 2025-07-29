@@ -89,12 +89,14 @@ class RollCommands(commands.Cog):
 
         # Mention users
         mentions = []
+        users_requested = []
         for char in chars:
             if not char.is_npc:
                 try:
                     member = await interaction.guild.fetch_member(int(char.owner_id))
                     if member and member not in mentions:
                         mentions.append(member.mention)
+                        users_requested.append(member.id)
                 except discord.NotFound:
                     continue  # Member not found in guild
                 except discord.HTTPException:
@@ -105,7 +107,7 @@ class RollCommands(commands.Cog):
         roll_parameters_dict = RollFormula.roll_parameters_to_dict(roll_parameters)
         roll_formula_obj = factories.get_specific_roll_formula(interaction.guild.id, system, roll_parameters_dict)
 
-        view = RequestRollView(roll_formula=roll_formula_obj, difficulty=difficulty)
+        view = RequestRollView(users_requested=users_requested, roll_formula=roll_formula_obj, difficulty=difficulty)
         await interaction.response.send_message(
             content=f"{mention_str}\n{interaction.user.display_name} requests a roll: `{roll_parameters}`",
             view=view

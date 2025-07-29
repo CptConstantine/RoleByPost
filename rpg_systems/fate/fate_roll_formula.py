@@ -27,3 +27,10 @@ class FateRollFormula(RollFormula):
             skill_value = character.skills.get(self.skill)
             modifiers = list(modifiers) + [(self.skill, skill_value)]
         return dict(modifiers)
+    
+    def get_total_dice_formula(self):
+        formula = super().get_total_dice_formula()
+        # Get the skill value and append it to the formula
+        if self.skill:
+            formula += f"+{self.skill}"
+        return formula

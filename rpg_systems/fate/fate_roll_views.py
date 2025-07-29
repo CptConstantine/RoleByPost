@@ -15,7 +15,10 @@ class FateRollFormulaView(RollFormulaView):
     """
     def __init__(self, character: 'FateCharacter', roll_formula_obj: FateRollFormula, difficulty: int = None):
         super().__init__(roll_formula_obj, character, difficulty)
-        # Add a button for skill selection
+        
+        self.character = character
+        self.roll_formula_obj = roll_formula_obj
+
         self.add_item(FateSelectSkillButton(self, roll_formula_obj.skill))
         self.add_item(FinalizeRollButton(roll_formula_obj, difficulty))
     
@@ -30,12 +33,21 @@ class FateRollFormulaView(RollFormulaView):
 class FateSelectSkillButton(ui.Button):
     """Button that opens a skill selection menu when clicked"""
     def __init__(self, parent_view: FateRollFormulaView, selected_skill: str = None):
+        # Get the skill bonus from the character if a skill is selected
+        label = self.get_skill_label(parent_view.character, selected_skill)
         super().__init__(
-            label=selected_skill if selected_skill else "Select Skill",
+            label=label,
             style=discord.ButtonStyle.primary,
             row=3
         )
         self.parent_view = parent_view
+
+    def get_skill_label(self, character: 'FateCharacter', selected_skill: str):
+        label = "Select Skill"
+        if selected_skill:
+            skill_value = character.skills[selected_skill] if selected_skill in character.skills else 0
+            label = f"{selected_skill} (+{skill_value})" if skill_value >= 0 else f"{selected_skill} ({skill_value})"
+        return label
     
     async def callback(self, interaction: discord.Interaction):
         character = repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id)
@@ -51,19 +63,21 @@ class FateSelectSkillButton(ui.Button):
         if not skill_options:
             await interaction.response.send_message("❌ Your character has no skills to select.", ephemeral=True)
             return
-        
-        async def on_skill_selected(view, interaction2, skill):
+
+        async def on_skill_selected(view, interaction2: discord.Interaction, skill: str):
             # Update the roll formula with the selected skill
-            self.label = skill
+            self.label = self.get_skill_label(character, skill)
             self.parent_view.roll_formula_obj.skill = skill
             skill_value = character.skills.get(skill, 0)
+
+            new_view = FateRollFormulaView(character, self.parent_view.roll_formula_obj, self.parent_view.difficulty)
+
             await interaction2.response.edit_message(
                 content=f"Selected skill: **{skill}** (+{skill_value if skill_value >= 0 else skill_value})",
-                view=self.parent_view
+                view=new_view
             )
         
-        await interaction.response.send_message(
-            "Select a skill for your roll:",
-            view=PaginatedSelectView(skill_options, on_skill_selected, interaction.user.id, prompt="Select a skill:"),
-            ephemeral=True
+        await interaction.response.edit_message(
+            content="Select a skill for your roll:",
+            view=PaginatedSelectView(skill_options, on_skill_selected, interaction.user.id, prompt="Select a skill:")
         )

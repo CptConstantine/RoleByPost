@@ -27,7 +27,7 @@ class PaginatedSelectView(ui.View):
         return interaction.user.id == self.user_id
 
 class PaginatedSelect(ui.Select):
-    def __init__(self, options, parent_view):
+    def __init__(self, options, parent_view: PaginatedSelectView):
         super().__init__(placeholder="Select...", min_values=1, max_values=1, options=options)
         self.parent_view = parent_view
 
@@ -36,7 +36,7 @@ class PaginatedSelect(ui.Select):
         await self.parent_view.select_callback(self.parent_view, interaction, value)
 
 class PaginatedPrevButton(ui.Button):
-    def __init__(self, parent_view):
+    def __init__(self, parent_view: PaginatedSelectView):
         super().__init__(label="Previous", style=discord.ButtonStyle.secondary, row=1)
         self.parent_view = parent_view
 
@@ -54,7 +54,7 @@ class PaginatedPrevButton(ui.Button):
         )
 
 class PaginatedNextButton(ui.Button):
-    def __init__(self, parent_view):
+    def __init__(self, parent_view: PaginatedSelectView):
         super().__init__(label="Next", style=discord.ButtonStyle.secondary, row=1)
         self.parent_view = parent_view
 
@@ -194,12 +194,23 @@ class EditNotesModal(ui.Modal, title="Edit Notes"):
         await interaction.response.edit_message(content="✅ Notes updated.", embed=embed, view=view)
 
 class RequestRollView(ui.View):
-    def __init__(self, roll_formula: RollFormula = None, difficulty: int = None):
+    def __init__(self, users_requested: list[int], roll_formula: RollFormula = None, difficulty: int = None):
         super().__init__(timeout=60*60*24*7) # 1 week timeout
+        self.users_requested = users_requested
         self.roll_formula_obj = roll_formula
         self.difficulty = difficulty
         self.add_item(EditRequestedRollButton(roll_formula, difficulty))
         self.add_item(FinalizeRollButton(roll_formula, difficulty))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # Ensure the user was someone whose roll was requested
+        if interaction.user.id not in self.users_requested:
+            await interaction.response.send_message(
+                "❌ You were not included in this roll request. Use `/roll check` or `/roll custom` to roll separately.",
+                ephemeral=True
+            )
+            return False
+        return await super().interaction_check(interaction)
 
 class EditRequestedRollButton(ui.Button):
     def __init__(self, roll_formula: RollFormula = None, difficulty: int = None):
@@ -232,11 +243,12 @@ class RollFormulaView(ui.View):
         dice_pattern = re.compile(r"^\s*\d*d\d+([+-]\d+)?\s*$", re.IGNORECASE)
         for key, value in self.roll_formula_obj.modifiers.items():
             is_numeric = False
-            try:
-                int(value)
-                is_numeric = True
-            except (ValueError, TypeError):
-                pass
+            if not isinstance(value, bool):
+                try:
+                    int(value)
+                    is_numeric = True
+                except (ValueError, TypeError):
+                    pass
             if is_numeric or dice_pattern.match(str(value)):
                 button = EditModifierButton(key, str(value), self)
                 self.modifier_buttons[key] = button
@@ -323,7 +335,7 @@ class AddModifierModal(discord.ui.Modal, title="Add Modifier"):
             if isinstance(item, FinalizeRollButton):
                 item.label = f"Roll {self.parent_view.roll_formula_obj.get_total_dice_formula()}"
                 break
-
+                
         await interaction.response.edit_message(view=self.parent_view)
 
 class FinalizeRollButton(discord.ui.Button):

@@ -260,7 +260,7 @@ class FateCharacter(BaseCharacter):
         """
         Opens a view for editing the roll parameters, prepopulated with any requested skill.
         """
-        view = FateRollFormulaView(roll_formula_obj, difficulty)
+        view = FateRollFormulaView(self, roll_formula_obj, difficulty)
         
         # Create a message that shows what was initially requested
         content = "Adjust your roll formula as needed, then finalize to roll."

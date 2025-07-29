@@ -181,7 +181,7 @@ class MGT2ECharacter(BaseCharacter):
         """
         Opens a view for editing the roll parameters, prepopulated with any requested skill and attribute.
         """
-        view = MGT2ERollFormulaView(roll_formula_obj, difficulty)
+        view = MGT2ERollFormulaView(self, roll_formula_obj, difficulty)
         
         # Create a message that shows what was initially requested
         content = "Adjust your roll formula as needed, then finalize to roll."

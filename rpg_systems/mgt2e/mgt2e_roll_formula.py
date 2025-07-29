@@ -1,4 +1,5 @@
 import random
+import re
 from typing import Dict
 from dataclasses import dataclass
 from core.base_models import RollFormula
@@ -121,6 +122,43 @@ class MGT2ERollFormula(RollFormula):
             
         return modifiers
     
+    def get_total_dice_formula(self):
+        """
+        Get the total dice formula including boon/bane, skill and attribute modifiers.
+        """
+        super().get_total_dice_formula()
+        formula = "2d6"
+        if self.boon_bane.has_effect:
+            if self.boon_bane.net_effect > 0:
+                formula = "3d6(boon)"
+            elif self.boon_bane.net_effect < 0:
+                formula = "3d6(bane)"
+        
+        if self.skill:
+            formula += f"+{self.skill}"
+        if self.attribute:
+            formula += f"+{self.attribute}"
+
+        # Append simple modifiers
+        total_numeric_modifier = 0
+        
+        for key, value in self.modifiers.items():
+            if isinstance(value, str) and re.match(r'^\d*d\d+', value.replace(" ", "")):
+                formula += f"+{value}"
+            else:
+                if not isinstance(value, bool):
+                    try:
+                        mod = int(value)
+                        total_numeric_modifier += mod
+                    except (ValueError, TypeError):
+                        continue
+        
+        # Add combined numeric modifier if non-zero
+        if total_numeric_modifier != 0:
+            formula += f"{total_numeric_modifier:+d}"
+
+        return formula
+
     def roll_formula(self, character: "MGT2ECharacter", base_roll: str) -> tuple:
         """Execute MGT2E boon/bane rolling mechanics"""
         
