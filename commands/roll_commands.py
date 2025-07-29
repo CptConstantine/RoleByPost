@@ -4,6 +4,7 @@ from discord import app_commands
 from commands.autocomplete import multi_character_autocomplete, roll_parameters_autocomplete
 from core.command_decorators import no_ic_channels, player_or_gm_role_required
 from core.generic_roll_formulas import RollFormula
+from core.generic_roll_mechanics import execute_roll
 from core.shared_views import RequestRollView
 import core.factories as factories
 from data.repositories import character_repository
@@ -14,6 +15,53 @@ class RollCommands(commands.Cog):
         self.bot = bot
 
     roll_group = app_commands.Group(name="roll", description="Dice rolling commands")
+
+    @roll_group.command(
+        name="simple",
+        description="Roll a simple dice formula (e.g., 1d20+5, 2d6+1d4-2)"
+    )
+    @app_commands.describe(
+        formula="Dice formula to roll (e.g., 1d20+5, 2d6, 3d8-1)"
+    )
+    @player_or_gm_role_required()
+    @no_ic_channels()
+    async def roll_simple(self, interaction: discord.Interaction, formula: str):
+        """Roll a simple dice formula without requiring character sheets"""
+        from core.generic_roll_formulas import RollFormula
+        
+        # Validate and clean the formula
+        formula = formula.strip()
+        if not formula:
+            await interaction.response.send_message("❌ Please provide a dice formula.", ephemeral=True)
+            return
+        
+        # Basic validation - ensure it contains 'd' and looks like a dice formula
+        if 'd' not in formula.lower():
+            await interaction.response.send_message("❌ Invalid dice formula. Use format like `1d20+5`, `2d6`, `3d8-1`, etc.", ephemeral=True)
+            return
+        
+        try:
+            # Create a basic roll formula with no modifiers
+            from core.generic_roll_mechanics import RollMechanicConfig, CoreRollMechanicType, SuccessCriteria
+            roll_config = RollMechanicConfig(
+                mechanic_type=CoreRollMechanicType.ROLL_AND_SUM,
+                dice_formula=formula,
+                success_criteria=SuccessCriteria.GREATER_EQUAL
+            )
+            
+            # Create roll formula with empty modifiers
+            roll_formula_obj = RollFormula(roll_config, {})
+            
+            result = execute_roll(roll_formula_obj=roll_formula_obj)
+            
+            if result is None:
+                await interaction.response.send_message("❌ Invalid dice formula format. Use like `2d6+3-2`, `1d20+5-1`, `1d100`, or `4dF+1`.", ephemeral=True)
+                return
+            
+            await interaction.response.send_message(content=result['description'])
+            
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error rolling dice: {str(e)}", ephemeral=True)
 
     @roll_group.command(
         name="check",
