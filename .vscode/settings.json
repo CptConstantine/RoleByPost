@@ -1,3 +1,13 @@
 {
-    "python.analysis.autoImportCompletions": true
+    "python.analysis.autoImportCompletions": true,
+    "chat.mcp.serverSampling": {
+        "RoleByPost/.vscode/mcp.json: postgres": {
+            "allowedModels": [
+                "copilot/gpt-4.1",
+                "copilot/claude-sonnet-4",
+                "copilot/gemini-2.5-pro",
+                "copilot/gpt-5"
+            ]
+        }
+    }
 }

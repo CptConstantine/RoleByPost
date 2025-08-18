@@ -12,3 +12,5 @@ character/__pycache__/
 *.pyd
 .github/
 .vscode/
+.vscode/launch.json
+.vscode/settings.json
