@@ -1,5 +1,5 @@
 python-dotenv
 psycopg2-binary
 cryptography
-discord.py
+discord.py==2.6.0
 openai
