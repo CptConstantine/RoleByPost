@@ -213,6 +213,79 @@ class GenericSheetEditView(ui.View):
     async def edit_inventory(self, interaction: discord.Interaction, button: ui.Button):
         await interaction.response.edit_message(content="Editing inventory:", view=EditInventoryView(interaction.guild.id, self.editor_id, self.char_id))
 
+class GenericSheetEditViewV2(ui.LayoutView):
+    def __init__(self, editor_id: int, char_id: str, system: SystemType):
+        super().__init__(timeout=120)
+        self.editor_id = editor_id
+        self.char_id = char_id
+        self.system = system
+        
+        # Build the layout using Components v2
+        self._build_layout()
+    
+    def _build_layout(self):
+        """Build the layout using Components v2 features"""
+        # Container for edit buttons
+        edit_action_row = ui.ActionRow()
+        
+        # Edit name button
+        edit_name_btn = ui.Button(
+            label="Edit Name", 
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"edit_name_{self.char_id}"
+        )
+        edit_name_btn.callback = self.edit_name
+        edit_action_row.add_item(edit_name_btn)
+        
+        # Edit notes button  
+        edit_notes_btn = ui.Button(
+            label="Edit Notes",
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"edit_notes_{self.char_id}"
+        )
+        edit_notes_btn.callback = self.edit_notes
+        edit_action_row.add_item(edit_notes_btn)
+        
+        self.add_item(edit_action_row)
+        
+        # Separator between containers
+        self.add_item(ui.Separator())
+        
+        # Container for inventory button
+        inventory_action_row = ui.ActionRow()
+        
+        # Inventory button
+        inventory_btn = ui.Button(
+            label="📦 Manage Inventory",
+            style=discord.ButtonStyle.primary,
+            custom_id=f"inventory_{self.char_id}"
+        )
+        inventory_btn.callback = self.edit_inventory
+        inventory_action_row.add_item(inventory_btn)
+        
+        self.add_item(inventory_action_row)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.editor_id:
+            await interaction.response.send_message("You can't edit this character.", ephemeral=True)
+            return False
+        return True
+
+    async def edit_name(self, interaction: discord.Interaction):
+        """Open the edit name modal"""
+        await interaction.response.send_modal(EditNameModal(self.char_id, self.system))
+
+    async def edit_notes(self, interaction: discord.Interaction):
+        """Open the edit notes modal"""
+        await interaction.response.send_modal(EditNotesModal(self.char_id, self.system))
+    
+    async def edit_inventory(self, interaction: discord.Interaction):
+        """Switch to the inventory management view"""
+        await interaction.response.edit_message(
+            content="Editing inventory:", 
+            view=EditInventoryView(interaction.guild.id, self.editor_id, self.char_id)
+        )
+
 class GenericContainer(BaseEntity):
     """A container that can hold items for loot distribution"""
     SUPPORTED_ENTITY_TYPES: ClassVar[List[EntityType]] = [EntityType.CONTAINER]
@@ -498,7 +571,6 @@ class GenericContainerEditView(ui.View):
             
         await interaction.response.send_modal(ContainerAccessModal(self.char_id))
 
-
 class ContainerAccessModal(ui.Modal, title="Manage Container Access"):
     def __init__(self, container_id: str):
         super().__init__()
@@ -745,7 +817,6 @@ class ContainerTakeView(ui.View):
                 view=view
             )
 
-
 class ContainerGiveView(ui.View):
     """Interactive view for giving items to container"""
     
@@ -944,7 +1015,6 @@ class ContainerGiveView(ui.View):
                 view=view
             )
 
-
 class ContainerTakeQuantityModal(ui.Modal, title="Take Items"):
     """Modal for specifying take quantity"""
     
@@ -1004,7 +1074,6 @@ class ContainerTakeQuantityModal(ui.Modal, title="Take Items"):
             await self.parent_view._refresh_container_view(interaction, success_message)
         else:
             await interaction.response.edit_message(content=success_message, view=None, embed=None)
-
 
 class ContainerGiveQuantityModal(ui.Modal, title="Give Items"):
     """Modal for specifying give quantity"""
