@@ -4,6 +4,7 @@ from discord.ext import commands
 from commands.autocomplete import owned_character_npc_or_companion_autocomplete, owned_companion_autocomplete, all_pc_names_autocomplete, owned_player_character_names_autocomplete
 from core.base_models import AccessType, BaseCharacter, EntityType, EntityLinkType
 from core.command_decorators import gm_role_required, no_ic_channels, player_or_gm_role_required
+from core.shared_views import ConfirmDialogV2
 from core.utils import _can_user_edit_character, _can_user_view_character, _check_character_possessions, _get_character_by_name_or_nickname, _resolve_character, _set_character_avatar
 from data.repositories.repository_factory import repositories
 import core.factories as factories
@@ -242,9 +243,7 @@ class CharacterCommands(commands.Cog):
             )
             return
 
-        # Show confirmation
-        view = ConfirmDeleteCharacterView(character, transfer_inventory)
-        
+        # Show confirmation (Components v2)
         confirmation_msg = f"⚠️ Are you sure you want to delete **{char_name}** ({'NPC' if character.is_npc else 'PC'})?\n"
         
         if possessed_entities and transfer_inventory:
@@ -253,11 +252,8 @@ class CharacterCommands(commands.Cog):
         
         confirmation_msg += "\nThis action cannot be undone."
         
-        await interaction.response.send_message(
-            confirmation_msg,
-            view=view,
-            ephemeral=True
-        )
+        view = ConfirmDeleteCharacterViewV2(character, transfer_inventory, confirmation_msg)
+        await interaction.response.send_message(view=view, ephemeral=True)
 
     @character_group.command(name="sheet", description="View a character, NPC, or companion's full sheet")
     @app_commands.describe(char_name="Leave blank to view your active character, or enter a character/NPC/companion name")
@@ -273,10 +269,13 @@ class CharacterCommands(commands.Cog):
                 return
             
             is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
-            sheet_view = character.get_sheet_edit_view(interaction.user.id, is_gm=is_gm)
-            embed = character.format_full_sheet(interaction.guild.id)
+            sheet_view = character.get_sheet_edit_view(interaction.user.id, is_gm=is_gm, guild_id=str(interaction.guild.id))
             
-            await interaction.response.send_message(embed=embed, view=sheet_view, ephemeral=True)
+            if isinstance(sheet_view, discord.ui.LayoutView):
+                await interaction.response.send_message(view=sheet_view, ephemeral=True)
+            else:
+                embed = character.format_full_sheet(interaction.guild.id)
+                await interaction.response.send_message(embed=embed, view=sheet_view, ephemeral=True)
             
         except ValueError as e:
             await interaction.response.send_message(f"❌ {str(e)}", ephemeral=True)
@@ -713,6 +712,45 @@ class ConfirmDeleteCharacterView(discord.ui.View):
             content="❌ Deletion cancelled.",
             view=None
         )
+
+
+class ConfirmDeleteCharacterViewV2(ConfirmDialogV2):
+    """Components v2 confirmation dialog for character deletion."""
+
+    def __init__(self, character: BaseCharacter, transfer_inventory: bool = False, confirmation_msg: str = ""):
+        self.character = character
+        self.transfer_inventory = transfer_inventory
+        super().__init__(
+            message=confirmation_msg,
+            confirm_label="Delete",
+        )
+
+    async def on_confirm(self, interaction: discord.Interaction):
+        if self.transfer_inventory:
+            possessed_entities = repositories.link.get_children(
+                str(interaction.guild.id),
+                self.character.id,
+                EntityLinkType.POSSESSES.value
+            )
+            for entity in possessed_entities:
+                repositories.link.delete_links_by_entities(
+                    str(interaction.guild.id),
+                    self.character.id,
+                    entity.id,
+                    EntityLinkType.POSSESSES.value
+                )
+
+        repositories.character.delete_character(interaction.guild.id, self.character.id)
+
+        delete_msg = f"✅ Deleted character **{self.character.name}**."
+        if self.transfer_inventory:
+            delete_msg += " Released all possessed items."
+
+        await interaction.response.edit_message(content=delete_msg, view=None)
+
+    async def on_cancel(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(content="❌ Deletion cancelled.", view=None)
+
 
 async def setup_character_commands(bot: commands.Bot):
     await bot.add_cog(CharacterCommands(bot))

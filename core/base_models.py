@@ -423,7 +423,7 @@ class BaseEntity(BaseRpgObj):
     def avatar_url(self, url):
         self.data["avatar_url"] = url
 
-    def get_sheet_edit_view(self, editor_id: int, is_gm: bool) -> ui.View:
+    def get_sheet_edit_view(self, editor_id: int, is_gm: bool, guild_id: str = None) -> ui.View:
         """Get the appropriate sheet edit view for this entity type"""
         raise NotImplementedError("Subclasses must implement get_sheet_edit_view")
 

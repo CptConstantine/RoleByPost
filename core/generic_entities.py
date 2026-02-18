@@ -5,7 +5,7 @@ from discord import ui
 from core.generic_roll_mechanics import execute_roll
 from .base_models import AccessType, BaseCharacter, BaseEntity, EntityDefaults, EntityType, EntityLinkType, SystemType
 from .inventory_views import EditInventoryView
-from .shared_views import EditNameModal, EditNotesModal
+from .shared_views import EditNameModal, EditNotesModal, embed_to_text
 from .generic_roll_formulas import GenericRollFormula, RollFormula
 
 
@@ -27,7 +27,9 @@ class GenericEntity(BaseEntity):
     def from_dict(cls, data: Dict[str, Any]) -> "GenericEntity":
         return cls(data)
     
-    def get_sheet_edit_view(self, editor_id: int, is_gm: bool) -> ui.View:
+    def get_sheet_edit_view(self, editor_id: int, is_gm: bool, guild_id: str = None) -> ui.View:
+        if guild_id:
+            return GenericSheetEditViewV2(editor_id=editor_id, char_id=self.id, system=self.system, guild_id=guild_id)
         return GenericSheetEditView(editor_id=editor_id, char_id=self.id, system=self.system)
     
     def apply_defaults(self, entity_type: EntityType = None, guild_id: str = None):
@@ -57,7 +59,9 @@ class GenericCharacter(BaseCharacter):
             for key, value in defaults.items():
                 self._apply_default_field(key, value, guild_id) 
     
-    def get_sheet_edit_view(self, editor_id: int, is_gm: bool) -> ui.View:
+    def get_sheet_edit_view(self, editor_id: int, is_gm: bool, guild_id: str = None) -> ui.View:
+        if guild_id:
+            return GenericSheetEditViewV2(editor_id=editor_id, char_id=self.id, system=self.system, guild_id=guild_id)
         return GenericSheetEditView(editor_id=editor_id, char_id=self.id, system=self.system)
 
     def format_full_sheet(self, guild_id: int, is_gm: bool = False) -> discord.Embed:
@@ -139,7 +143,9 @@ class GenericCompanion(BaseCharacter):
     def from_dict(cls, data: Dict[str, Any]) -> "GenericCompanion":
         return cls(data)
     
-    def get_sheet_edit_view(self, editor_id: int, is_gm: bool) -> ui.View:
+    def get_sheet_edit_view(self, editor_id: int, is_gm: bool, guild_id: str = None) -> ui.View:
+        if guild_id:
+            return GenericSheetEditViewV2(editor_id=editor_id, char_id=self.id, system=self.system, guild_id=guild_id)
         return GenericSheetEditView(editor_id=editor_id, char_id=self.id, system=self.system)
 
     def format_full_sheet(self, guild_id: int, is_gm: bool = False) -> discord.Embed:
@@ -214,17 +220,31 @@ class GenericSheetEditView(ui.View):
         await interaction.response.edit_message(content="Editing inventory:", view=EditInventoryView(interaction.guild.id, self.editor_id, self.char_id))
 
 class GenericSheetEditViewV2(ui.LayoutView):
-    def __init__(self, editor_id: int, char_id: str, system: SystemType):
-        super().__init__(timeout=120)
+    def __init__(self, editor_id: int, char_id: str, system: SystemType, guild_id: str = None):
+        super().__init__(timeout=86400)
         self.editor_id = editor_id
         self.char_id = char_id
         self.system = system
+        self.guild_id = guild_id
         
         # Build the layout using Components v2
         self._build_layout()
     
     def _build_layout(self):
         """Build the layout using Components v2 features"""
+        from data.repositories.repository_factory import repositories
+
+        # Render sheet content if guild_id is available
+        if self.guild_id:
+            entity = repositories.entity.get_entity(self.guild_id, self.char_id)
+            if entity:
+                embed = entity.format_full_sheet(guild_id=int(self.guild_id), is_gm=True)
+                sheet_text = embed_to_text(embed)
+                content_container = ui.Container(accent_colour=discord.Colour.greyple())
+                content_container.add_item(ui.TextDisplay(sheet_text))
+                self.add_item(content_container)
+                self.add_item(ui.Separator())
+
         # Container for edit buttons
         edit_action_row = ui.ActionRow()
         
@@ -256,7 +276,7 @@ class GenericSheetEditViewV2(ui.LayoutView):
         
         # Inventory button
         inventory_btn = ui.Button(
-            label="📦 Manage Inventory",
+            label="\U0001F4E6 Manage Inventory",
             style=discord.ButtonStyle.primary,
             custom_id=f"inventory_{self.char_id}"
         )
@@ -328,7 +348,9 @@ class GenericContainer(BaseEntity):
     def from_dict(cls, data: Dict[str, Any]) -> "GenericContainer":
         return cls(data)
     
-    def get_sheet_edit_view(self, editor_id: int, is_gm: bool) -> ui.View:
+    def get_sheet_edit_view(self, editor_id: int, is_gm: bool, guild_id: str = None) -> ui.View:
+        if guild_id:
+            return GenericContainerEditViewV2(editor_id=editor_id, char_id=self.id, system=self.system, guild_id=guild_id, is_gm=is_gm)
         return GenericContainerEditView(editor_id=editor_id, char_id=self.id, system=self.system, is_gm=is_gm)
 
     def format_full_sheet(self, guild_id: int, is_gm: bool = False) -> discord.Embed:
@@ -572,9 +594,10 @@ class GenericContainerEditView(ui.View):
         await interaction.response.send_modal(ContainerAccessModal(self.char_id))
 
 class ContainerAccessModal(ui.Modal, title="Manage Container Access"):
-    def __init__(self, container_id: str):
+    def __init__(self, container_id: str, guild_id: str = None):
         super().__init__()
         self.container_id = container_id
+        self._guild_id = guild_id  # If set, creates V2 view on submit
         
     access_type = ui.TextInput(
         label="Access Type",
@@ -604,19 +627,31 @@ class ContainerAccessModal(ui.Modal, title="Manage Container Access"):
         
         try:
             container.set_access_type(access_type)
-            
             repositories.entity.upsert_entity(str(interaction.guild.id), container, system=container.system)
-            await interaction.response.edit_message(
-                f"✅ Updated {container.name} access to '{access_type.value}'.",
-                embed=container.format_full_sheet(interaction.guild.id, is_gm=True),
-                view=GenericContainerEditView(
+
+            if self._guild_id:
+                # V2 view
+                new_view = GenericContainerEditViewV2(
                     interaction.user.id,
-                    container_id=container.id,
+                    char_id=container.id,
                     system=container.system,
-                    is_gm=True
-                ),
-                ephemeral=True
-            )
+                    guild_id=self._guild_id,
+                    is_gm=True,
+                    status_message=f"✅ Updated access to '{access_type.value}'."
+                )
+                await interaction.response.edit_message(content=None, embed=None, view=new_view)
+            else:
+                # V1 view
+                await interaction.response.edit_message(
+                    content=f"✅ Updated {container.name} access to '{access_type.value}'.",
+                    embed=container.format_full_sheet(interaction.guild.id, is_gm=True),
+                    view=GenericContainerEditView(
+                        interaction.user.id,
+                        char_id=container.id,
+                        system=container.system,
+                        is_gm=True
+                    )
+                )
                 
         except Exception as e:
             await interaction.response.send_message(f"❌ Error updating access control: {str(e)}", ephemeral=True)
@@ -1148,3 +1183,233 @@ class ContainerGiveQuantityModal(ui.Modal, title="Give Items"):
             await self.parent_view._refresh_container_view(interaction, success_message)
         else:
             await interaction.response.edit_message(content=success_message, view=None, embed=None)
+
+
+class GenericContainerEditViewV2(ui.LayoutView):
+    """Components v2 container edit view with self-contained content rendering"""
+
+    def __init__(self, editor_id: int, char_id: str, system: SystemType, guild_id: str,
+                 is_gm: bool = False, status_message: str = None):
+        super().__init__(timeout=60 * 60 * 24)  # 24 hours
+        self.editor_id = editor_id
+        self.char_id = char_id
+        self.system = system
+        self.guild_id = guild_id
+        self.is_gm = is_gm
+        self.status_message = status_message
+        self._build_layout()
+
+    def _build_layout(self):
+        from data.repositories.repository_factory import repositories
+        container = repositories.entity.get_by_id(self.char_id)
+        if not container:
+            err = ui.Container(accent_colour=discord.Colour.red())
+            err.add_item(ui.TextDisplay("\u274c Container not found."))
+            self.add_item(err)
+            return
+
+        # Optional status message (e.g. after take/give)
+        if self.status_message:
+            status = ui.Container(accent_colour=discord.Colour.green())
+            status.add_item(ui.TextDisplay(self.status_message))
+            self.add_item(status)
+
+        # Container content
+        content_container = ui.Container(accent_colour=discord.Colour.gold())
+        content_container.add_item(ui.TextDisplay(self._format_container_text(container)))
+        self.add_item(content_container)
+
+        self.add_item(ui.Separator())
+
+        # GM edit row
+        if self.is_gm:
+            gm_row = ui.ActionRow()
+
+            edit_name_btn = ui.Button(label="Edit Name", style=discord.ButtonStyle.secondary)
+            edit_name_btn.callback = self.edit_name
+            gm_row.add_item(edit_name_btn)
+
+            edit_notes_btn = ui.Button(label="Edit Notes", style=discord.ButtonStyle.secondary)
+            edit_notes_btn.callback = self.edit_notes
+            gm_row.add_item(edit_notes_btn)
+
+            if container.access_type != AccessType.PUBLIC:
+                reveal_btn = ui.Button(label="\U0001F4E2 Reveal to Players", style=discord.ButtonStyle.success)
+                reveal_btn.callback = self.reveal_to_players
+                gm_row.add_item(reveal_btn)
+
+            self.add_item(gm_row)
+
+        # Action row
+        action_row = ui.ActionRow()
+
+        refresh_btn = ui.Button(label="\U0001F504 Refresh", style=discord.ButtonStyle.secondary)
+        refresh_btn.callback = self.refresh_view
+        action_row.add_item(refresh_btn)
+
+        take_btn = ui.Button(label="\U0001F4E4 Take Items", style=discord.ButtonStyle.success)
+        take_btn.callback = self.take_items_interactive
+        action_row.add_item(take_btn)
+
+        give_btn = ui.Button(label="\U0001F4E5 Give Items", style=discord.ButtonStyle.primary)
+        give_btn.callback = self.give_items_interactive
+        action_row.add_item(give_btn)
+
+        self.add_item(action_row)
+
+        # GM management row
+        if self.is_gm:
+            mgmt_row = ui.ActionRow()
+            access_btn = ui.Button(label="\U0001F512 Access Control", style=discord.ButtonStyle.secondary)
+            access_btn.callback = self.manage_access
+            mgmt_row.add_item(access_btn)
+            self.add_item(mgmt_row)
+
+    def _format_container_text(self, container) -> str:
+        lines = [f"## \U0001F4E6 {container.name or 'Container'}"]
+
+        # GM-only properties
+        if self.is_gm:
+            max_items = container.data.get("max_items", 0)
+            is_locked = container.data.get("is_locked", False)
+            access_display = container.access_type.value.title()
+            lines.append("")
+            lines.append("**\U0001F527 Properties (GM Only)**")
+            lines.append(f"**Max Items:** {'Unlimited' if max_items == 0 else max_items}")
+            lines.append(f"**Locked:** {'Yes' if is_locked else 'No'}")
+            lines.append(f"**Access:** {access_display}")
+
+        # Contents
+        contained_items = container.get_contained_items(int(self.guild_id))
+        if contained_items:
+            lines.append("")
+            lines.append(f"**\U0001F4E6 Contents ({len(contained_items)})**")
+            for item in contained_items:
+                links = container.get_links_to_entity(int(self.guild_id), item.id, EntityLinkType.POSSESSES)
+                quantity = links[0].metadata.get("quantity", 1) if links else 1
+                quantity_str = f" x{quantity}" if quantity > 1 else ""
+                lines.append(f"\u2022 {item.name}{quantity_str}")
+        else:
+            lines.append("")
+            lines.append("**\U0001F4E6 Contents**")
+            lines.append("*Empty*")
+
+        # Notes
+        notes = container.notes
+        if notes:
+            lines.append("")
+            lines.append("**\U0001F4DD Notes**")
+            lines.append("\n".join(notes))
+
+        return "\n".join(lines)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        from data.repositories.repository_factory import repositories
+        container = repositories.entity.get_by_id(self.char_id)
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+
+        if self.is_gm != is_gm:
+            self.is_gm = is_gm
+
+        if not container.can_be_accessed_by(str(interaction.user.id), is_gm):
+            await interaction.response.send_message("\u274c You don't have access to this container.", ephemeral=True)
+            return False
+        return True
+
+    async def _refresh_container_view(self, interaction: discord.Interaction, message: str = None):
+        """Refresh the container view, creating a new V2 layout"""
+        from data.repositories.repository_factory import repositories
+        container = repositories.entity.get_by_id(self.char_id)
+        if not container:
+            await interaction.response.send_message("\u274c Container not found.", ephemeral=True)
+            return
+
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        new_view = GenericContainerEditViewV2(
+            self.editor_id, self.char_id, self.system,
+            guild_id=self.guild_id, is_gm=is_gm, status_message=message
+        )
+        await interaction.response.edit_message(content=None, embed=None, view=new_view)
+
+    async def edit_name(self, interaction: discord.Interaction):
+        from data.repositories.repository_factory import repositories
+        container = repositories.entity.get_by_id(self.char_id)
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        if not (container.is_owned_by(str(interaction.user.id)) or is_gm):
+            await interaction.response.send_message(
+                "\u274c Only the owner or GM can edit the container name.", ephemeral=True)
+            return
+        await interaction.response.send_modal(EditNameModal(self.char_id, self.system))
+
+    async def edit_notes(self, interaction: discord.Interaction):
+        from data.repositories.repository_factory import repositories
+        container = repositories.entity.get_by_id(self.char_id)
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        if not (container.is_owned_by(str(interaction.user.id)) or is_gm):
+            await interaction.response.send_message(
+                "\u274c Only the owner or GM can edit the container notes.", ephemeral=True)
+            return
+        await interaction.response.send_modal(EditNotesModal(self.char_id, self.system))
+
+    async def refresh_view(self, interaction: discord.Interaction):
+        await self._refresh_container_view(interaction)
+
+    async def reveal_to_players(self, interaction: discord.Interaction):
+        from data.repositories.repository_factory import repositories
+        container = repositories.entity.get_by_id(self.char_id)
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        if not (container.is_owned_by(str(interaction.user.id)) or is_gm):
+            await interaction.response.send_message(
+                "\u274c Only the owner or GM can reveal containers to players.", ephemeral=True)
+            return
+
+        container.reveal_to_players()
+        repositories.entity.upsert_entity(str(interaction.guild.id), container, system=container.system)
+
+        # Send a public message (non-ephemeral) using V1 view
+        embed = container.format_full_sheet(interaction.guild.id, is_gm=False)
+        public_view = GenericContainerEditView(interaction.user.id, self.char_id, self.system, is_gm=False)
+        await interaction.response.send_message(
+            content=f"\U0001F4E6 **{container.name}** has been revealed!",
+            embed=embed,
+            view=public_view,
+            ephemeral=False
+        )
+
+    async def take_items_interactive(self, interaction: discord.Interaction):
+        from data.repositories.repository_factory import repositories
+        container = repositories.entity.get_by_id(self.char_id)
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        if container.is_locked and not (container.is_owned_by(str(interaction.user.id)) or is_gm):
+            await interaction.response.send_message("\u274c This container is locked.", ephemeral=True)
+            return
+
+        # Transition to V1 Take view
+        view = ContainerTakeView(self.char_id, interaction.guild.id, interaction.user.id, parent_view=self)
+        await interaction.response.edit_message(
+            content=f"\U0001F4E4 **Take items from {container.name}**\nSelect an item and character:",
+            embed=None,
+            view=view
+        )
+
+    async def give_items_interactive(self, interaction: discord.Interaction):
+        from data.repositories.repository_factory import repositories
+        container = repositories.entity.get_by_id(self.char_id)
+
+        # Transition to V1 Give view
+        view = ContainerGiveView(self.char_id, interaction.guild.id, interaction.user.id, parent_view=self)
+        await interaction.response.edit_message(
+            content=f"\U0001F4E5 **Give items to {container.name}**\nSelect a character and item:",
+            embed=None,
+            view=view
+        )
+
+    async def manage_access(self, interaction: discord.Interaction):
+        from data.repositories.repository_factory import repositories
+        container = repositories.entity.get_by_id(self.char_id)
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        if not (container.is_owned_by(str(interaction.user.id)) or is_gm):
+            await interaction.response.send_message(
+                "\u274c Only the owner or GM can manage access control.", ephemeral=True)
+            return
+        await interaction.response.send_modal(ContainerAccessModal(self.char_id, guild_id=self.guild_id))

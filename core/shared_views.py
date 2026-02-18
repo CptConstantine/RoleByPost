@@ -5,6 +5,99 @@ from discord import Interaction, TextStyle, ui
 from core.base_models import BaseCharacter, RollFormula, SystemType
 from data.repositories.repository_factory import repositories
 
+
+# ─── Components v2 base classes ───────────────────────────────────────────────
+
+class ConfirmDialogV2(ui.LayoutView):
+    """Base Components v2 confirmation dialog with confirm/cancel buttons.
+
+    Subclasses must implement ``on_confirm(interaction)``.
+    Override ``on_cancel(interaction)`` for custom cancel behaviour.
+
+    The *message* is rendered as a ``TextDisplay`` inside a ``Container``
+    with a red accent colour (configurable).  Below the container an
+    ``ActionRow`` holds the confirm (danger) and cancel (secondary) buttons.
+    """
+
+    def __init__(
+        self,
+        *,
+        message: str,
+        confirm_label: str = "Confirm",
+        cancel_label: str = "Cancel",
+        accent_colour: discord.Colour = None,
+        timeout: float = 60,
+    ):
+        super().__init__(timeout=timeout)
+        self._warning_message = message
+        self._confirm_label = confirm_label
+        self._cancel_label = cancel_label
+        self._accent_colour = accent_colour or discord.Colour.red()
+        self._build_layout()
+
+    def _build_layout(self):
+        """Construct the LayoutView hierarchy."""
+        container = ui.Container(
+            ui.TextDisplay(self._warning_message),
+            accent_colour=self._accent_colour,
+        )
+        self.add_item(container)
+
+        action_row = ui.ActionRow()
+
+        confirm_btn = ui.Button(
+            label=self._confirm_label,
+            style=discord.ButtonStyle.danger,
+        )
+        confirm_btn.callback = self._on_confirm
+        action_row.add_item(confirm_btn)
+
+        cancel_btn = ui.Button(
+            label=self._cancel_label,
+            style=discord.ButtonStyle.secondary,
+        )
+        cancel_btn.callback = self._on_cancel
+        action_row.add_item(cancel_btn)
+
+        self.add_item(action_row)
+
+    async def _on_confirm(self, interaction: discord.Interaction):
+        await self.on_confirm(interaction)
+
+    async def _on_cancel(self, interaction: discord.Interaction):
+        await self.on_cancel(interaction)
+
+    # ── Subclass hooks ──────────────────────────────────────────────────
+
+    async def on_confirm(self, interaction: discord.Interaction):
+        """Handle confirmation.  Must respond to the interaction."""
+        raise NotImplementedError
+
+    async def on_cancel(self, interaction: discord.Interaction):
+        """Default cancel: dismiss with a short message."""
+        await interaction.response.edit_message(
+            content="❌ Cancelled.",
+            view=None,
+        )
+
+
+def embed_to_text(embed: discord.Embed) -> str:
+    """Convert a discord.Embed to markdown text for TextDisplay in Components v2."""
+    lines = []
+    if embed.title:
+        lines.append(f"## {embed.title}")
+    if embed.description:
+        lines.append(embed.description)
+    for field in embed.fields:
+        lines.append(f"\n**{field.name}**")
+        lines.append(field.value)
+    if embed.footer and embed.footer.text:
+        lines.append(f"\n*{embed.footer.text}*")
+    return "\n".join(lines)
+
+
+# ─── Legacy (v1) shared views ────────────────────────────────────────────────
+
 class PaginatedSelectView(ui.View):
     def __init__(self, options, select_callback, user_id, prompt="Select an option:", page=0, page_size=25):
         super().__init__(timeout=60)
@@ -166,10 +259,13 @@ class EditNameModal(ui.Modal, title="Edit Character Name"):
             return
         self.entity.name = new_name
         repositories.entity.upsert_entity(interaction.guild.id, self.entity, self.system)
-        embed = self.entity.format_full_sheet(interaction.guild.id)
         is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
-        view = self.entity.get_sheet_edit_view(interaction.user.id, is_gm=is_gm)
-        await interaction.response.edit_message(content="✅ Name updated.", embed=embed, view=view)
+        view = self.entity.get_sheet_edit_view(interaction.user.id, is_gm=is_gm, guild_id=str(interaction.guild.id))
+        if isinstance(view, ui.LayoutView):
+            await interaction.response.edit_message(view=view, content=None, embed=None)
+        else:
+            embed = self.entity.format_full_sheet(interaction.guild.id)
+            await interaction.response.edit_message(content="✅ Name updated.", embed=embed, view=view)
 
 class EditNotesModal(ui.Modal, title="Edit Notes"):
     def __init__(self, entity_id: str, system: SystemType):
@@ -188,10 +284,13 @@ class EditNotesModal(ui.Modal, title="Edit Notes"):
     async def on_submit(self, interaction: Interaction):
         self.entity.notes = [line for line in self.notes_field.value.splitlines() if line.strip()]
         repositories.entity.upsert_entity(interaction.guild.id, self.entity, self.system)
-        embed = self.entity.format_full_sheet(interaction.guild.id)
         is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
-        view = self.entity.get_sheet_edit_view(interaction.user.id, is_gm=is_gm)
-        await interaction.response.edit_message(content="✅ Notes updated.", embed=embed, view=view)
+        view = self.entity.get_sheet_edit_view(interaction.user.id, is_gm=is_gm, guild_id=str(interaction.guild.id))
+        if isinstance(view, ui.LayoutView):
+            await interaction.response.edit_message(view=view, content=None, embed=None)
+        else:
+            embed = self.entity.format_full_sheet(interaction.guild.id)
+            await interaction.response.edit_message(content="✅ Notes updated.", embed=embed, view=view)
 
 class RequestRollView(ui.View):
     def __init__(self, users_requested: list[int], roll_formula: RollFormula = None, difficulty: int = None):

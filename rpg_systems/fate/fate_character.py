@@ -318,7 +318,7 @@ class FateCharacter(BaseCharacter):
         # Add Fate-specific validation here if needed (e.g., pyramid structure)
         return skills_dict
     
-    def get_sheet_edit_view(self, editor_id: int, is_gm: bool) -> discord.ui.View:
+    def get_sheet_edit_view(self, editor_id: int, is_gm: bool, guild_id: str = None) -> discord.ui.View:
         from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
         return FateSheetEditView(editor_id=editor_id, char_id=self.id)
 

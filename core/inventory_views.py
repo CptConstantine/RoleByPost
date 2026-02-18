@@ -149,12 +149,16 @@ class EditInventoryView(ui.View):
                 await interaction.response.send_modal(InventorySearchModal(self.parent_id, self))
                 return
             elif cid == "done_inventory":
-                is_gm = repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
-                await interaction.response.edit_message(
-                    content="✅ Done editing inventory.",
-                    embed=self.entity.format_full_sheet(interaction.guild.id, is_gm=is_gm),
-                    view=self.entity.get_sheet_edit_view(interaction.user.id, is_gm=is_gm)
-                )
+                is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+                sheet_view = self.entity.get_sheet_edit_view(interaction.user.id, is_gm=is_gm, guild_id=str(interaction.guild.id))
+                if isinstance(sheet_view, ui.LayoutView):
+                    await interaction.response.edit_message(content=None, embed=None, view=sheet_view)
+                else:
+                    await interaction.response.edit_message(
+                        content="\u2705 Done editing inventory.",
+                        embed=self.entity.format_full_sheet(interaction.guild.id, is_gm=is_gm),
+                        view=sheet_view
+                    )
                 return
         
         return callback
@@ -179,15 +183,18 @@ class ItemManagementView(ui.View):
     @ui.button(label="✏️ View/Edit", style=discord.ButtonStyle.primary, row=0)
     async def edit_item(self, interaction: discord.Interaction, button: ui.Button):
         is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
-        sheet_view = self.item.get_sheet_edit_view(interaction.user.id, is_gm=is_gm)
-        embed = self.item.format_full_sheet(interaction.guild.id, is_gm=is_gm)
+        sheet_view = self.item.get_sheet_edit_view(interaction.user.id, is_gm=is_gm, guild_id=str(interaction.guild.id))
         
-        await interaction.response.send_message(
-            content=f"Editing **{self.item.name}**:",
-            embed=embed,
-            view=sheet_view,
-            ephemeral=True
-        )
+        if isinstance(sheet_view, ui.LayoutView):
+            await interaction.response.send_message(view=sheet_view, ephemeral=True)
+        else:
+            embed = self.item.format_full_sheet(interaction.guild.id, is_gm=is_gm)
+            await interaction.response.send_message(
+                content=f"Editing **{self.item.name}**:",
+                embed=embed,
+                view=sheet_view,
+                ephemeral=True
+            )
     
     @ui.button(label="Transfer Item", style=discord.ButtonStyle.primary, row=0)
     async def transfer_item(self, interaction: discord.Interaction, button: ui.Button):
@@ -727,14 +734,17 @@ class TransferQuantityModal(ui.Modal, title="Transfer Quantity"):
         elif hasattr(self.parent_view, 'format_full_sheet'):
             # Refresh character sheet view
             is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
-            updated_embed = source_entity.format_full_sheet(interaction.guild.id, is_gm=is_gm)
-            updated_view = source_entity.get_sheet_edit_view(interaction.user.id, is_gm=is_gm)
+            updated_view = source_entity.get_sheet_edit_view(interaction.user.id, is_gm=is_gm, guild_id=str(interaction.guild.id))
             
-            await interaction.response.edit_message(
-                content=f"✅ Transferred {transfer_quantity}x **{item_entity.name}** to **{target_entity.name}**.",
-                embed=updated_embed,
-                view=updated_view
-            )
+            if isinstance(updated_view, ui.LayoutView):
+                await interaction.response.edit_message(content=None, embed=None, view=updated_view)
+            else:
+                updated_embed = source_entity.format_full_sheet(interaction.guild.id, is_gm=is_gm)
+                await interaction.response.edit_message(
+                    content=f"\u2705 Transferred {transfer_quantity}x **{item_entity.name}** to **{target_entity.name}**.",
+                    embed=updated_embed,
+                    view=updated_view
+                )
         else:
             # Default fallback
             await interaction.response.edit_message(

@@ -5,6 +5,7 @@ from typing import List
 from commands.autocomplete import accessible_entities_autocomplete, entity_type_autocomplete, top_level_entities_autocomplete
 from core.base_models import AccessType, BaseEntity, EntityType, EntityLinkType
 from core.command_decorators import gm_role_required, no_ic_channels, player_or_gm_role_required
+from core.shared_views import ConfirmDialogV2
 from data.repositories.repository_factory import repositories
 import core.factories as factories
 
@@ -101,8 +102,6 @@ class EntityCommands(commands.Cog):
             )
             return
         
-        view = ConfirmDeleteEntityView(entity, transfer_inventory)
-        
         confirmation_msg = f"⚠️ Are you sure you want to delete `{entity_name}` ({entity.entity_type.value})?\n"
         
         if possessed_entities and transfer_inventory:
@@ -111,11 +110,9 @@ class EntityCommands(commands.Cog):
         
         confirmation_msg += "\nThis action cannot be undone."
         
-        await interaction.response.send_message(
-            confirmation_msg,
-            view=view,
-            ephemeral=True
-        )
+        # Components v2 confirmation dialog
+        view = ConfirmDeleteEntityViewV2(entity, transfer_inventory, confirmation_msg)
+        await interaction.response.send_message(view=view, ephemeral=True)
 
     @entity_group.command(name="list", description="List entities")
     @app_commands.describe(
@@ -256,24 +253,25 @@ class EntityCommands(commands.Cog):
             return
         
         # Get the entity's sheet edit view
-        sheet_view = entity.get_sheet_edit_view(interaction.user.id, is_gm=is_gm)
+        sheet_view = entity.get_sheet_edit_view(interaction.user.id, is_gm=is_gm, guild_id=str(interaction.guild.id))
         
-        # Format the full sheet embed
-        embed = entity.format_full_sheet(str(interaction.guild.id), is_gm=is_gm)
-        
-        # Add link information if requested
-        if show_links:
-            # Add link information to the embed
-            link_info = EntityLinkType.get_links_str(str(interaction.guild.id), entity)
+        if isinstance(sheet_view, discord.ui.LayoutView):
+            await interaction.response.send_message(view=sheet_view, ephemeral=True)
+        else:
+            # V1 fallback: format embed externally
+            embed = entity.format_full_sheet(str(interaction.guild.id), is_gm=is_gm)
             
-            if link_info:
-                embed.add_field(name="🔗 Links", value="\n".join(link_info), inline=False)
+            # Add link information if requested
+            if show_links:
+                link_info = EntityLinkType.get_links_str(str(interaction.guild.id), entity)
+                if link_info:
+                    embed.add_field(name="\U0001F517 Links", value="\n".join(link_info), inline=False)
 
-        await interaction.response.send_message(
-            embed=embed,
-            view=sheet_view,
-            ephemeral=True
-        )
+            await interaction.response.send_message(
+                embed=embed,
+                view=sheet_view,
+                ephemeral=True
+            )
 
     @entity_group.command(name="rename", description="Rename an entity")
     @app_commands.describe(
@@ -363,50 +361,9 @@ class EntityCommands(commands.Cog):
             )
             return
         
-        # Show confirmation with detailed information
-        view = ConfirmDeleteAllView(entities_to_delete, entity_type)
-        
-        # Create summary embed
-        embed = discord.Embed(
-            title="⚠️ Bulk Entity Deletion",
-            color=discord.Color.red(),
-            description=f"Found **{len(entities_to_delete)}** entities without links that will be deleted."
-        )
-        
-        # Group entities by type for display
-        by_type = {}
-        for entity in entities_to_delete:
-            type_name = entity.entity_type.value
-            if type_name not in by_type:
-                by_type[type_name] = []
-            by_type[type_name].append(entity.name)
-        
-        # Add fields for each type (limit to prevent embed size issues)
-        for type_name, entity_names in by_type.items():
-            display_names = entity_names[:10]  # Show first 10
-            if len(entity_names) > 10:
-                display_names.append(f"... and {len(entity_names) - 10} more")
-            
-            embed.add_field(
-                name=f"{type_name.title()} ({len(entity_names)})",
-                value="\n".join([f"• {name}" for name in display_names]),
-                inline=True
-            )
-        
-        if entities_with_links:
-            embed.add_field(
-                name="ℹ️ Entities Preserved",
-                value=f"{len(entities_with_links)} entities with links will be preserved",
-                inline=False
-            )
-        
-        embed.set_footer(text="This action cannot be undone. Click Confirm to proceed.")
-        
-        await interaction.followup.send(
-            embed=embed,
-            view=view,
-            ephemeral=True
-        )
+        # Show confirmation with detailed information (Components v2)
+        view = ConfirmDeleteAllViewV2(entities_to_delete, entity_type, preserved_count=len(entities_with_links))
+        await interaction.followup.send(view=view, ephemeral=True)
 
     @entity_group.command(name="set-access", description="Set access level for an entity and its possessed entities")
     @app_commands.describe(
@@ -666,6 +623,125 @@ class ConfirmDeleteEntityView(discord.ui.View):
             content="❌ Deletion cancelled.",
             view=None
         )
+
+
+class ConfirmDeleteAllViewV2(ConfirmDialogV2):
+    """Components v2 confirmation dialog for bulk entity deletion."""
+
+    def __init__(self, entities_to_delete: List[BaseEntity], entity_type: str = None, preserved_count: int = 0):
+        self.entities_to_delete = entities_to_delete
+        self.entity_type = entity_type
+
+        # Build the detailed warning text (replaces the embed from V1 call site)
+        filter_text = f" of type '{entity_type}'" if entity_type else ""
+        lines = [
+            f"## ⚠️ Bulk Entity Deletion",
+            f"Found **{len(entities_to_delete)}** entities{filter_text} without links that will be deleted.\n",
+        ]
+
+        # Group by type
+        by_type: dict[str, list[str]] = {}
+        for entity in entities_to_delete:
+            by_type.setdefault(entity.entity_type.value, []).append(entity.name)
+
+        for type_name, names in by_type.items():
+            display = names[:10]
+            if len(names) > 10:
+                display.append(f"... and {len(names) - 10} more")
+            lines.append(f"**{type_name.title()} ({len(names)}):**")
+            lines.extend(f"• {n}" for n in display)
+            lines.append("")
+
+        if preserved_count > 0:
+            lines.append(f"ℹ️ {preserved_count} entities with links will be preserved.\n")
+
+        lines.append("*This action cannot be undone.*")
+
+        super().__init__(
+            message="\n".join(lines),
+            confirm_label="Confirm Delete All",
+        )
+
+    async def on_confirm(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+
+        deleted_count = 0
+        failed_deletions = []
+
+        for entity in self.entities_to_delete:
+            try:
+                repositories.entity.delete_entity(str(interaction.guild.id), entity.id)
+                deleted_count += 1
+            except Exception as e:
+                failed_deletions.append(f"{entity.name}: {str(e)}")
+
+        filter_text = f" of type '{self.entity_type}'" if self.entity_type else ""
+        success_msg = f"✅ Successfully deleted **{deleted_count}** entities{filter_text} without links."
+
+        if failed_deletions:
+            error_msg = "\n\n❌ **Failed to delete:**\n" + "\n".join(failed_deletions[:5])
+            if len(failed_deletions) > 5:
+                error_msg += f"\n... and {len(failed_deletions) - 5} more errors"
+            success_msg += error_msg
+
+        embed = discord.Embed(
+            title="🗑️ Bulk Deletion Complete",
+            description=success_msg,
+            color=discord.Color.green() if not failed_deletions else discord.Color.orange()
+        )
+        if deleted_count > 0:
+            embed.add_field(name="Deleted", value=f"{deleted_count} entities", inline=True)
+        if failed_deletions:
+            embed.add_field(name="Failed", value=f"{len(failed_deletions)} entities", inline=True)
+
+        await interaction.edit_original_response(embed=embed, view=None)
+
+    async def on_cancel(self, interaction: discord.Interaction):
+        embed = discord.Embed(
+            title="❌ Bulk Deletion Cancelled",
+            description="No entities were deleted.",
+            color=discord.Color.blue()
+        )
+        await interaction.response.edit_message(embed=embed, view=None)
+
+
+class ConfirmDeleteEntityViewV2(ConfirmDialogV2):
+    """Components v2 confirmation dialog for single entity deletion."""
+
+    def __init__(self, entity: BaseEntity, transfer_inventory: bool = False, confirmation_msg: str = ""):
+        self.entity = entity
+        self.transfer_inventory = transfer_inventory
+        super().__init__(
+            message=confirmation_msg,
+            confirm_label="Delete",
+        )
+
+    async def on_confirm(self, interaction: discord.Interaction):
+        if self.transfer_inventory:
+            possessed_entities = repositories.link.get_children(
+                str(interaction.guild.id),
+                self.entity.id,
+                EntityLinkType.POSSESSES.value
+            )
+            for possessed_entity in possessed_entities:
+                repositories.link.delete_links_by_entities(
+                    str(interaction.guild.id),
+                    self.entity.id,
+                    possessed_entity.id,
+                    EntityLinkType.POSSESSES.value
+                )
+
+        repositories.entity.delete_entity(str(interaction.guild.id), self.entity.id)
+
+        delete_msg = f"✅ Deleted entity `{self.entity.name}`."
+        if self.transfer_inventory:
+            delete_msg += " Released all possessed items."
+
+        await interaction.response.edit_message(content=delete_msg, view=None)
+
+    async def on_cancel(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(content="❌ Deletion cancelled.", view=None)
+
 
 async def setup_entity_commands(bot: commands.Bot):
     await bot.add_cog(EntityCommands(bot))

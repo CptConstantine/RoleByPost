@@ -102,7 +102,7 @@ Every location that creates and sends a V1 View must be updated to optionally us
 
 | # | V1 Class | File | V2 Class Name | Priority | Complexity | Notes |
 |---|----------|------|---------------|----------|------------|-------|
-| 1 | `GenericSheetEditView` | `core/generic_entities.py` | `GenericSheetEditViewV2` | **Done** | Low | Already exists as reference |
+| 1 | `GenericSheetEditView` | `core/generic_entities.py` | `GenericSheetEditViewV2` | **Done** | Low | V2 reference; now wired via `get_sheet_edit_view(guild_id=)` |
 | 2 | `PaginatedSelectView` | `core/shared_views.py` | `PaginatedSelectViewV2` | High | Medium | Embed content → TextDisplay; PaginatedSelect component → ActionRow with Select |
 | 3 | `SceneNotesEditView` | `core/shared_views.py` | `SceneNotesEditViewV2` | Medium | Low | Simple view with buttons |
 | 4 | `RequestRollView` | `core/shared_views.py` | `RequestRollViewV2` | Medium | Medium | 1-week timeout, ephemeral=False, embed content → TextDisplay |
@@ -131,7 +131,7 @@ Every location that creates and sends a V1 View must be updated to optionally us
 
 | # | V1 Class | File | V2 Class Name | Priority | Complexity | Notes |
 |---|----------|------|---------------|----------|------------|-------|
-| 15 | `GenericContainerEditView` | `core/generic_entities.py` | `GenericContainerEditViewV2` | Medium | Medium | 24h timeout; dynamic buttons from entity config |
+| 15 | `GenericContainerEditView` | `core/generic_entities.py` | `GenericContainerEditViewV2` | **Done** | Medium | V2 with self-contained content rendering; V1→V2 transitions for Take/Give sub-views |
 | 16 | `ContainerTakeView` | `core/generic_entities.py` | `ContainerTakeViewV2` | Low | Low | 300s; simple select + buttons |
 | 17 | `ContainerGiveView` | `core/generic_entities.py` | `ContainerGiveViewV2` | Low | Low | 300s; simple select + buttons |
 
@@ -314,9 +314,22 @@ With Components v2, several UX improvements become possible:
 ## Implementation Order (Recommended)
 
 ### Phase 1: Foundation & Simple Views
-1. Create a shared `ConfirmDialogV2` base class for all confirmation views (#26-30)
-2. Migrate `GenericContainerEditView` (#15), `ContainerTakeView` (#16), `ContainerGiveView` (#17)
-3. Wire `GenericSheetEditViewV2` (#1) into actual use via `get_sheet_edit_view()`
+1. ~~Create a shared `ConfirmDialogV2` base class for all confirmation views (#26-30)~~ ✅ **Done** — `core/shared_views.py`
+2. ~~Migrate confirmation dialogs (#26-30) using the shared base~~ ✅ **Done** — 5 V2 subclasses created alongside V1:
+   - `ConfirmDeleteViewV2` in `commands/scene_commands.py`
+   - `ConfirmDeleteAllViewV2` + `ConfirmDeleteEntityViewV2` in `commands/entity_commands.py`
+   - `ConfirmRemoveAllLinksViewV2` in `commands/link_commands.py`
+   - `ConfirmDeleteCharacterViewV2` in `commands/character_commands.py`
+3. ~~Update call sites to use V2 confirmation dialogs~~ ✅ **Done** — all 5 call sites updated
+4. ~~Migrate `GenericContainerEditView` (#15)~~ ✅ **Done** — `GenericContainerEditViewV2` created in `core/generic_entities.py` with self-contained content, status messages, and V1↔V2 transitions for Take/Give sub-views. `ContainerAccessModal` bug fixed (`container_id=` → `char_id=`) and updated for V2 support.
+5. ~~Wire `GenericSheetEditViewV2` (#1) into actual use via `get_sheet_edit_view()`~~ ✅ **Done** — Added `guild_id: str = None` param to `get_sheet_edit_view()` across base class + all 7 overrides. When `guild_id` provided, returns V2 view with self-contained content. All 9 call sites updated with isinstance checks:
+   - `commands/entity_commands.py` entity_view
+   - `commands/character_commands.py` sheet
+   - `commands/message_context_menu.py` view character sheet
+   - `commands/user_context_menu.py` view character sheet
+   - `core/shared_views.py` EditNameModal + EditNotesModal
+   - `core/inventory_views.py` done_inventory + edit_item + _refresh_parent_view
+   - Utility: `embed_to_text()` added to `core/shared_views.py` for Embed→markdown conversion
 
 ### Phase 2: Sheet Edit Views
 4. `FateSheetEditView` → `FateSheetEditViewV2` (#34)
@@ -343,8 +356,8 @@ With Components v2, several UX improvements become possible:
 19. `GenericInitiativeView` (#9), `PopcornInitiativeView` (#10)
 20. Update `main.py` `setup_hook` to register all V2 persistent views
 
-### Phase 6: Confirmation Dialogs & Cleanup
-21. Migrate all confirmation dialogs (#26-30) using the shared base
+### Phase 6: Cleanup & Finalization
+21. ~~Migrate all confirmation dialogs (#26-30) using the shared base~~ ✅ **Moved to Phase 1**
 22. Update all call sites to use V2 views by default
 23. Add feature flag for V1 fallback
 24. Testing and deprecation of V1 classes
@@ -355,10 +368,10 @@ With Components v2, several UX improvements become possible:
 
 | Category | Count |
 |----------|-------|
-| **Views to migrate** | 45 (1 already done) |
+| **Views to migrate** | 45 (3 done) |
 | **Modals (no migration)** | 38 |
 | **Standalone components (reuse as-is)** | ~30 buttons + 6 selects |
 | **Persistent views (highest complexity)** | 5 (+ 2 abstract bases) |
-| **New V2 classes to create** | 44 |
+| **New V2 classes to create** | 42 remaining |
 | **Files affected** | 15+ |
 | **Estimated phases** | 6 |

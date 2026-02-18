@@ -64,7 +64,7 @@ class FateExtra(FateCharacter):
         # Ensure skills are empty by default for extras
         self.skills = self.DEFAULT_SKILLS.copy()
     
-    def get_sheet_edit_view(self, editor_id: int, is_gm: bool) -> discord.ui.View:
+    def get_sheet_edit_view(self, editor_id: int, is_gm: bool, guild_id: str = None) -> discord.ui.View:
         # For most entity types, use the full Fate sheet view
         from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
         return FateSheetEditView(editor_id=editor_id, char_id=self.id)

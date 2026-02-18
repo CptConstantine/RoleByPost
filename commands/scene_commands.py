@@ -4,6 +4,7 @@ from discord.ext import commands
 from discord import app_commands
 from commands.autocomplete import npcs_not_in_scene_autocomplete, npcs_in_scene_autocomplete, scene_names_autocomplete
 from core.command_decorators import gm_role_required, no_ic_channels, player_or_gm_role_required
+from core.shared_views import ConfirmDialogV2
 from data.repositories.repository_factory import repositories
 
 import core.factories as factories
@@ -159,13 +160,9 @@ class SceneCommands(commands.Cog):
             await interaction.response.send_message(f"❌ Scene '{scene_name}' not found.", ephemeral=True)
             return
             
-        # Create confirmation view
-        view = ConfirmDeleteView(interaction.guild.id, scene, self)
-        await interaction.response.send_message(
-            f"⚠️ Are you sure you want to delete scene **{scene_name}**? This action cannot be undone.",
-            view=view,
-            ephemeral=True
-        )
+        # Create confirmation view (Components v2)
+        view = ConfirmDeleteViewV2(interaction.guild.id, scene, self)
+        await interaction.response.send_message(view=view, ephemeral=True)
 
     @scene_group.command(name="rename", description="Rename a scene")
     @app_commands.describe(
@@ -687,6 +684,60 @@ class ConfirmDeleteView(discord.ui.View):
             content="Scene deletion cancelled.",
             view=None
         )
+
+
+class ConfirmDeleteViewV2(ConfirmDialogV2):
+    """Components v2 confirmation dialog for scene deletion."""
+
+    def __init__(self, guild_id, scene, cog):
+        self.guild_id = guild_id
+        self.scene = scene
+        self.cog = cog
+        super().__init__(
+            message=f"⚠️ Are you sure you want to delete scene **{scene.name}**?\n\nThis action cannot be undone.",
+            confirm_label="Delete",
+        )
+
+    async def on_confirm(self, interaction: discord.Interaction):
+        # Before deleting, unpin and update any pinned messages for this scene
+        try:
+            pinned_messages = repositories.pinned_scene.get_all_pinned_messages(str(interaction.guild.id))
+            for pinned_msg in pinned_messages:
+                if pinned_msg.scene_id == self.scene.scene_id:
+                    try:
+                        channel = interaction.guild.get_channel(int(pinned_msg.channel_id))
+                        if not channel:
+                            continue
+                        message = await channel.fetch_message(int(pinned_msg.message_id))
+                        if message:
+                            await message.unpin()
+                            await message.edit(
+                                content="🗑️ **SCENE DELETED** 🗑️",
+                                embed=discord.Embed(
+                                    title="Scene Deleted",
+                                    description=f"Scene **{self.scene.name}** has been deleted.",
+                                    color=discord.Color.red()
+                                ),
+                                view=None
+                            )
+                    except Exception as e:
+                        logging.error(f"Failed to update pinned message for deleted scene: {e}")
+        except Exception as e:
+            logging.error(f"Error handling scene deletion cleanup: {e}")
+
+        repositories.scene.delete_scene(str(self.guild_id), self.scene.scene_id)
+
+        await interaction.response.edit_message(
+            content=f"✅ Scene **{self.scene.name}** has been deleted.",
+            view=None,
+        )
+
+    async def on_cancel(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            content="Scene deletion cancelled.",
+            view=None,
+        )
+
 
 async def setup_scene_commands(bot: commands.Bot):
     await bot.add_cog(SceneCommands(bot))

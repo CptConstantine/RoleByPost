@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 from commands.autocomplete import link_type_autocomplete
 from core.command_decorators import no_ic_channels, player_or_gm_role_required
+from core.shared_views import ConfirmDialogV2
 from data.repositories.repository_factory import repositories
 from core.base_models import AccessType, EntityLinkType, EntityType
 from core.base_models import BaseEntity
@@ -163,33 +164,9 @@ class LinkCommands(commands.Cog):
             await interaction.response.send_message(f"**{entity_name}** has no links to remove.", ephemeral=True)
             return
         
-        # Show confirmation with link details
-        view = ConfirmRemoveAllLinksView(entity, all_links)
-        
-        embed = discord.Embed(
-            title=f"⚠️ Remove All Links for {entity_name}",
-            description=f"This will remove **{len(all_links)}** links involving this entity.",
-            color=discord.Color.orange()
-        )
-        
-        # Group links by type for display
-        link_summary = {}
-        for link in all_links:
-            link_type = link.link_type.replace("_", " ").title()
-            if link_type not in link_summary:
-                link_summary[link_type] = 0
-            link_summary[link_type] += 1
-        
-        summary_text = "\n".join([f"• {count}x {link_type}" for link_type, count in link_summary.items()])
-        embed.add_field(name="Links to Remove", value=summary_text, inline=False)
-        
-        embed.set_footer(text="This action cannot be undone. Click Confirm to proceed.")
-        
-        await interaction.response.send_message(
-            embed=embed,
-            view=view,
-            ephemeral=True
-        )
+        # Show confirmation with link details (Components v2)
+        view = ConfirmRemoveAllLinksViewV2(entity, all_links)
+        await interaction.response.send_message(view=view, ephemeral=True)
 
     @link_group.command(name="list", description="List all links for an entity")
     @app_commands.describe(entity_name="The entity to show links for")
@@ -442,6 +419,77 @@ class ConfirmRemoveAllLinksView(discord.ui.View):
             embed=embed,
             view=None
         )
+
+
+class ConfirmRemoveAllLinksViewV2(ConfirmDialogV2):
+    """Components v2 confirmation dialog for bulk link removal."""
+
+    def __init__(self, entity: BaseEntity, links_to_remove: List):
+        self.entity = entity
+        self.links_to_remove = links_to_remove
+
+        # Build warning text (replaces the embed from V1 call site)
+        lines = [
+            f"## ⚠️ Remove All Links for {entity.name}",
+            f"This will remove **{len(links_to_remove)}** links involving this entity.\n",
+        ]
+
+        # Group by type
+        link_summary: dict[str, int] = {}
+        for link in links_to_remove:
+            link_type = link.link_type.replace("_", " ").title()
+            link_summary[link_type] = link_summary.get(link_type, 0) + 1
+
+        lines.append("**Links to Remove:**")
+        lines.extend(f"• {count}x {lt}" for lt, count in link_summary.items())
+        lines.append("\n*This action cannot be undone.*")
+
+        super().__init__(
+            message="\n".join(lines),
+            confirm_label="Confirm Remove All",
+            accent_colour=discord.Colour.orange(),
+        )
+
+    async def on_confirm(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+
+        removed_count = 0
+        failed_removals = []
+
+        for link in self.links_to_remove:
+            try:
+                repositories.link.delete_link(link.id)
+                removed_count += 1
+            except Exception as e:
+                failed_removals.append(f"{link.link_type}: {str(e)}")
+
+        success_msg = f"✅ Successfully removed **{removed_count}** links from **{self.entity.name}**."
+        if failed_removals:
+            error_msg = "\n\n❌ **Failed to remove:**\n" + "\n".join(failed_removals[:3])
+            if len(failed_removals) > 3:
+                error_msg += f"\n... and {len(failed_removals) - 3} more errors"
+            success_msg += error_msg
+
+        embed = discord.Embed(
+            title="🔗 Link Removal Complete",
+            description=success_msg,
+            color=discord.Color.green() if not failed_removals else discord.Color.orange()
+        )
+        if removed_count > 0:
+            embed.add_field(name="Removed", value=f"{removed_count} links", inline=True)
+        if failed_removals:
+            embed.add_field(name="Failed", value=f"{len(failed_removals)} links", inline=True)
+
+        await interaction.edit_original_response(embed=embed, view=None)
+
+    async def on_cancel(self, interaction: discord.Interaction):
+        embed = discord.Embed(
+            title="❌ Link Removal Cancelled",
+            description="No links were removed.",
+            color=discord.Color.blue()
+        )
+        await interaction.response.edit_message(embed=embed, view=None)
+
 
 async def setup_link_commands(bot: commands.Bot):
     await bot.add_cog(LinkCommands(bot))
