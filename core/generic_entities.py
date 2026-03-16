@@ -242,7 +242,7 @@ class GenericSheetEditViewV2(ui.LayoutView):
 
         # Render sheet content if guild_id is available
         if self.guild_id:
-            entity = repositories.entity.get_entity(self.guild_id, self.char_id)
+            entity = repositories.entity.get_by_id(self.char_id)
             if entity:
                 embed = entity.format_full_sheet(guild_id=int(self.guild_id), is_gm=True)
                 sheet_text = embed_to_text(embed)
