@@ -4,10 +4,67 @@ from discord import ui
 from discord.ext import commands
 from core import factories
 from core.base_models import SystemType
-from core.scene_views import BasePinnableSceneView, PlaceholderPersistentButton, SceneNotesButton
+from core.scene_views import BasePinnableSceneView, BasePinnableSceneViewV2, PlaceholderPersistentButton, SceneNotesButton
 from data.repositories.repository_factory import repositories
 
 SYSTEM = SystemType.MGT2E
+
+
+def _build_mgt2e_scene_content(guild_id, scene_id, is_gm: bool):
+    scene = repositories.scene.find_by_id('scene_id', scene_id)
+    if not scene:
+        return discord.Embed(
+            title="❌ Scene Not Found",
+            description="This scene no longer exists.",
+            color=discord.Color.red()
+        ), "❌ **SCENE ERROR** ❌"
+
+    npc_ids = repositories.scene_npc.get_scene_npc_ids(str(guild_id), str(scene_id))
+
+    lines = []
+    for npc_id in npc_ids:
+        npc = repositories.entity.get_by_id(str(npc_id))
+        if npc:
+            lines.append(npc.format_npc_scene_entry(is_gm=is_gm))
+
+    notes = repositories.scene_notes.get_scene_notes(str(guild_id), str(scene_id))
+    environment = repositories.mgt2e_environment.get_environment(str(guild_id), str(scene_id)) or {}
+
+    embed = discord.Embed(
+        title=f"🎭 {('Current' if scene.is_active else 'Inactive')} Scene: {scene.name}",
+        color=discord.Color.purple() if scene.is_active else discord.Color.dark_grey()
+    )
+
+    description = ""
+    if notes:
+        description += f"**Notes:**\n{notes}\n\n"
+
+    if environment:
+        description += "**Environment:**\n"
+        for key, value in environment.items():
+            if value:
+                description += f"• **{key}:** {value}\n"
+        description += "\n"
+
+    if lines:
+        description += "**NPCs:**\n"
+        description += "\n\n".join(lines)
+    else:
+        description += "📭 No NPCs are currently in this scene."
+
+    embed.description = description
+
+    if scene.is_active:
+        embed.set_footer(text="Scene view will update automatically when the scene changes.")
+        content = "🎭 **CURRENT SCENE** 🎭"
+    else:
+        embed.set_footer(text="This is not the active scene. Use /scene switch to make it active.")
+        content = "🎭 **INACTIVE SCENE** 🎭"
+
+    if scene.image_url:
+        embed.set_thumbnail(url=scene.image_url)
+
+    return embed, content
 
 class MGT2ESceneView(BasePinnableSceneView):
     """Mongoose Traveller 2E scene view with environmental details"""
@@ -22,69 +79,7 @@ class MGT2ESceneView(BasePinnableSceneView):
             return
     
     async def create_scene_content(self):
-        # Get scene info
-        scene = repositories.scene.find_by_id('scene_id', self.scene_id)
-        if not scene:
-            return discord.Embed(
-                title="❌ Scene Not Found",
-                description="This scene no longer exists.",
-                color=discord.Color.red()
-            ), "❌ **SCENE ERROR** ❌"
-        
-        # Get NPCs in scene
-        npc_ids = repositories.scene_npc.get_scene_npc_ids(str(self.guild_id), str(self.scene_id))
-        
-        # Format scene content - standard part
-        lines = []
-        for npc_id in npc_ids:
-            npc = repositories.entity.get_by_id(str(npc_id))
-            if npc:
-                lines.append(npc.format_npc_scene_entry(is_gm=self.is_gm))
-                
-        # Get scene notes
-        notes = repositories.scene_notes.get_scene_notes(str(self.guild_id), str(self.scene_id))
-        
-        # Get MGT2E-specific scene data
-        environment = repositories.mgt2e_environment.get_environment(str(self.guild_id), str(self.scene_id)) or {}
-        
-        # Create embed
-        embed = discord.Embed(
-            title=f"🎭 {('Current' if scene.is_active else 'Inactive')} Scene: {scene.name}",
-            color=discord.Color.purple() if scene.is_active else discord.Color.dark_grey()
-        )
-        
-        description = ""
-        if notes:
-            description += f"**Notes:**\n{notes}\n\n"
-            
-        # Add MGT2E-specific sections
-        if environment:
-            description += "**Environment:**\n"
-            for key, value in environment.items():
-                if value:  # Only show non-empty values
-                    description += f"• **{key}:** {value}\n"
-            description += "\n"
-            
-        if lines:
-            description += "**NPCs:**\n"
-            description += "\n\n".join(lines)
-        else:
-            description += "📭 No NPCs are currently in this scene."
-            
-        embed.description = description
-        
-        # Add appropriate footer based on scene active status
-        if scene.is_active:
-            embed.set_footer(text="Scene view will update automatically when the scene changes.")
-            content = "🎭 **CURRENT SCENE** 🎭"
-        else:
-            embed.set_footer(text="This is not the active scene. Use /scene switch to make it active.")
-            content = "🎭 **INACTIVE SCENE** 🎭"
-        
-        if scene.image_url:
-            embed.set_thumbnail(url=scene.image_url)
-
-        return embed, content
+        return _build_mgt2e_scene_content(self.guild_id, self.scene_id, self.is_gm)
         
     def build_view_components(self):
         # Add all buttons regardless of GM status - the interaction_check will handle permissions
@@ -92,6 +87,27 @@ class MGT2ESceneView(BasePinnableSceneView):
         self.add_item(SceneNotesButton(self))
         self.add_item(EditEnvironmentButton(self))
         self.add_item(ManageNPCsButton(self))
+
+
+class MGT2ESceneViewV2(BasePinnableSceneViewV2):
+    """Components v2 Traveller scene view with environmental details and NPC management."""
+
+    def __init__(self, guild_id=None, channel_id=None, scene_id=None, message_id=None, status_message: str = None):
+        super().__init__(guild_id=guild_id, channel_id=channel_id, scene_id=scene_id, message_id=message_id, status_message=status_message)
+
+        if not self.is_initialized:
+            for row in self.build_action_rows():
+                self.add_item(row)
+
+    async def create_scene_content(self):
+        return _build_mgt2e_scene_content(self.guild_id, self.scene_id, self.is_gm)
+
+    def build_action_rows(self) -> list[ui.ActionRow]:
+        row = ui.ActionRow()
+        row.add_item(SceneNotesButton(self))
+        row.add_item(EditEnvironmentButton(self))
+        row.add_item(ManageNPCsButton(self))
+        return [row]
 
 
 class EditEnvironmentButton(ui.Button):
@@ -152,9 +168,8 @@ class ManageNPCsButton(ui.Button):
         
         # Send a message with the menu
         if options:
-            view = ManageNPCsView(self.parent_view, options)
+            view = MGT2EManageNPCsViewV2(self.parent_view, options) if isinstance(self.parent_view, ui.LayoutView) else ManageNPCsView(self.parent_view, options)
             await interaction.response.send_message(
-                "Select NPCs to add/remove from the scene:", 
                 view=view,
                 ephemeral=True
             )
@@ -171,6 +186,34 @@ class ManageNPCsView(discord.ui.View):
         self.parent_view = parent_view
         self.add_item(ManageNPCsSelect(parent_view, options))
         self.add_item(DoneButton(parent_view))
+
+
+class MGT2EManageNPCsViewV2(ui.LayoutView):
+    def __init__(self, parent_view, options):
+        super().__init__(timeout=300)
+        self.parent_view = parent_view
+        self.options = options
+        self._build_layout()
+
+    def _build_layout(self):
+        self.add_item(
+            ui.Container(
+                ui.TextDisplay(
+                    "## Manage Scene NPCs\n"
+                    "Selected NPCs stay in the scene. Unselected NPCs currently in the scene will be removed."
+                ),
+                accent_colour=discord.Colour.dark_teal(),
+            )
+        )
+        self.add_item(ui.Separator())
+
+        select_row = ui.ActionRow()
+        select_row.add_item(ManageNPCsSelect(self.parent_view, self.options))
+        self.add_item(select_row)
+
+        done_row = ui.ActionRow()
+        done_row.add_item(DoneButton(self.parent_view))
+        self.add_item(done_row)
 
 
 class ManageNPCsSelect(discord.ui.Select):
@@ -277,6 +320,10 @@ class EditEnvironmentModal(discord.ui.Modal, title="Edit Scene Environment"):
             "atmosphere": self.atmosphere.value,
             "temperature": self.temperature.value
         })
+
+        if isinstance(self.parent_view, ui.LayoutView):
+            await self.parent_view.update_view(interaction, status_message="✅ Environment updated.")
+            return
         
         # Check if this is the active scene before updating pins
         scene = repositories.scene.find_by_id('scene_id', self.parent_view.scene_id)

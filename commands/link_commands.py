@@ -4,6 +4,7 @@ from discord import app_commands
 from commands.autocomplete import link_type_autocomplete
 from core.command_decorators import no_ic_channels, player_or_gm_role_required
 from core.shared_views import ConfirmDialogV2
+from core.view_config import components_v2_enabled
 from data.repositories.repository_factory import repositories
 from core.base_models import AccessType, EntityLinkType, EntityType
 from core.base_models import BaseEntity
@@ -164,9 +165,31 @@ class LinkCommands(commands.Cog):
             await interaction.response.send_message(f"**{entity_name}** has no links to remove.", ephemeral=True)
             return
         
-        # Show confirmation with link details (Components v2)
-        view = ConfirmRemoveAllLinksViewV2(entity, all_links)
-        await interaction.response.send_message(view=view, ephemeral=True)
+        if components_v2_enabled():
+            view = ConfirmRemoveAllLinksViewV2(entity, all_links)
+            await interaction.response.send_message(view=view, ephemeral=True)
+        else:
+            link_summary: dict[str, int] = {}
+            for link in all_links:
+                link_type = link.link_type.replace("_", " ").title()
+                link_summary[link_type] = link_summary.get(link_type, 0) + 1
+
+            embed = discord.Embed(
+                title=f"⚠️ Remove All Links for {entity.name}",
+                description=(
+                    f"This will remove **{len(all_links)}** links involving this entity.\n\n"
+                    "This action cannot be undone."
+                ),
+                color=discord.Color.orange()
+            )
+            embed.add_field(
+                name="Links to Remove",
+                value="\n".join(f"• {count}x {link_type}" for link_type, count in link_summary.items()),
+                inline=False,
+            )
+
+            view = ConfirmRemoveAllLinksView(entity, all_links)
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     @link_group.command(name="list", description="List all links for an entity")
     @app_commands.describe(entity_name="The entity to show links for")

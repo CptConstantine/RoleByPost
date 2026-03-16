@@ -1,12 +1,25 @@
 import discord
 from discord import ui, SelectOption
-from core.inventory_views import EditInventoryView
-from core.shared_views import PaginatedSelectView, EditNameModal, EditNotesModal
+from core.inventory_views import EditInventoryView, EditInventoryViewV2
+from core.shared_views import PaginatedSelectView, PaginatedSelectViewV2, EditNameModal, EditNotesModal, embed_to_text
 from rpg_systems.fate.aspect import Aspect
 from rpg_systems.fate.fate_character import FateCharacter, get_character, SYSTEM
 from data.repositories.repository_factory import repositories
 from rpg_systems.fate.consequence_track import ConsequenceTrack, Consequence
 from rpg_systems.fate.stress_track import StressBox, StressTrack
+
+
+def _truncate_text(text: str, limit: int = 4000) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
+
+
+def _add_action_button(action_row: ui.ActionRow, label: str, style: discord.ButtonStyle, callback):
+    button = ui.Button(label=label, style=style)
+    button.callback = callback
+    action_row.add_item(button)
+    return button
 
 class FateSheetEditView(ui.View):
     def __init__(self, editor_id: int, char_id: str):
@@ -303,10 +316,11 @@ class EditStressTracksView(ui.View):
         return callback
 
 class RemoveStressBoxModal(ui.Modal, title="Remove Stress Box"):
-    def __init__(self, char_id: str, track_index: int):
+    def __init__(self, char_id: str, track_index: int, guild_id: int = None):
         super().__init__()
         self.char_id = char_id
         self.track_index = track_index
+        self.guild_id = guild_id
         
         # Get current boxes to show available options
         character = get_character(char_id)
@@ -357,16 +371,30 @@ class RemoveStressBoxModal(ui.Modal, title="Remove Stress Box"):
         character.stress_tracks = stress_tracks
         repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
-        await interaction.response.edit_message(
-            content=f"✅ Removed stress box with value {removed_box.value} from {track.track_name}.", 
-            view=EditStressTracksView(interaction.guild.id, interaction.user.id, self.char_id, self.track_index)
-        )
+        if self.guild_id is not None:
+            await interaction.response.edit_message(
+                content=None,
+                embed=None,
+                view=EditStressTracksViewV2(
+                    self.guild_id,
+                    interaction.user.id,
+                    self.char_id,
+                    track_index=self.track_index,
+                    status_message=f"✅ Removed stress box with value {removed_box.value} from {track.track_name}."
+                )
+            )
+        else:
+            await interaction.response.edit_message(
+                content=f"✅ Removed stress box with value {removed_box.value} from {track.track_name}.", 
+                view=EditStressTracksView(interaction.guild.id, interaction.user.id, self.char_id, self.track_index)
+            )
 
 class AddStressBoxModal(ui.Modal, title="Add Stress Box"):
-    def __init__(self, char_id: str, track_index: int):
+    def __init__(self, char_id: str, track_index: int, guild_id: int = None):
         super().__init__()
         self.char_id = char_id
         self.track_index = track_index
+        self.guild_id = guild_id
         
         self.value_field = ui.TextInput(
             label="Stress Box Value (1-10)",
@@ -401,15 +429,29 @@ class AddStressBoxModal(ui.Modal, title="Add Stress Box"):
         character.stress_tracks = stress_tracks
         repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
-        await interaction.response.edit_message(
-            content=f"✅ Added stress box with value {value} to {track.track_name}.", 
-            view=EditStressTracksView(interaction.guild.id, interaction.user.id, self.char_id, self.track_index)
-        )
+        if self.guild_id is not None:
+            await interaction.response.edit_message(
+                content=None,
+                embed=None,
+                view=EditStressTracksViewV2(
+                    self.guild_id,
+                    interaction.user.id,
+                    self.char_id,
+                    track_index=self.track_index,
+                    status_message=f"✅ Added stress box with value {value} to {track.track_name}."
+                )
+            )
+        else:
+            await interaction.response.edit_message(
+                content=f"✅ Added stress box with value {value} to {track.track_name}.", 
+                view=EditStressTracksView(interaction.guild.id, interaction.user.id, self.char_id, self.track_index)
+            )
 
 class AddStressTrackModal(ui.Modal, title="Add New Stress Track"):
-    def __init__(self, char_id: str):
+    def __init__(self, char_id: str, guild_id: int = None):
         super().__init__()
         self.char_id = char_id
+        self.guild_id = guild_id
         
         self.track_name_field = ui.TextInput(
             label="Track Name",
@@ -471,10 +513,23 @@ class AddStressTrackModal(ui.Modal, title="Add New Stress Track"):
         character.stress_tracks = stress_tracks
         repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
-        await interaction.response.edit_message(
-            content=f"✅ Added new stress track: '{track_name}' with {num_boxes} boxes.", 
-            view=EditStressTracksView(interaction.guild.id, interaction.user.id, self.char_id, len(character.stress_tracks) - 1)
-        )
+        if self.guild_id is not None:
+            await interaction.response.edit_message(
+                content=None,
+                embed=None,
+                view=EditStressTracksViewV2(
+                    self.guild_id,
+                    interaction.user.id,
+                    self.char_id,
+                    track_index=len(character.stress_tracks) - 1,
+                    status_message=f"✅ Added new stress track: '{track_name}' with {num_boxes} boxes."
+                )
+            )
+        else:
+            await interaction.response.edit_message(
+                content=f"✅ Added new stress track: '{track_name}' with {num_boxes} boxes.", 
+                view=EditStressTracksView(interaction.guild.id, interaction.user.id, self.char_id, len(character.stress_tracks) - 1)
+            )
 
 class EditConsequencesView(ui.View):
     def __init__(self, guild_id: int, user_id: int, char_id: str):
@@ -614,11 +669,12 @@ class EditConsequencesView(ui.View):
         return callback
 
 class EditConsequenceModal(ui.Modal, title="Edit Consequence"):
-    def __init__(self, char_id: str, track_index: int, consequence_index: int, consequence: Consequence):
+    def __init__(self, char_id: str, track_index: int, consequence_index: int, consequence: Consequence, guild_id: int = None):
         super().__init__()
         self.char_id = char_id
         self.track_index = track_index
         self.consequence_index = consequence_index
+        self.guild_id = guild_id
         
         # Aspect name field
         aspect_name = consequence.aspect.name if consequence.aspect else ""
@@ -675,15 +731,30 @@ class EditConsequenceModal(ui.Modal, title="Edit Consequence"):
         character.consequence_tracks = consequence_tracks
         repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
-        await interaction.response.edit_message(
-            content="✅ Consequence updated.", 
-            view=EditConsequencesView(interaction.guild.id, interaction.user.id, self.char_id)
-        )
+        if self.guild_id is not None:
+            await interaction.response.edit_message(
+                content=None,
+                embed=None,
+                view=EditConsequencesViewV2(
+                    self.guild_id,
+                    interaction.user.id,
+                    self.char_id,
+                    track_index=self.track_index,
+                    consequence_index=self.consequence_index,
+                    status_message="✅ Consequence updated."
+                )
+            )
+        else:
+            await interaction.response.edit_message(
+                content="✅ Consequence updated.", 
+                view=EditConsequencesView(interaction.guild.id, interaction.user.id, self.char_id)
+            )
 
 class AddConsequenceTrackModal(ui.Modal, title="Add New Consequence Track"):
-    def __init__(self, char_id: str):
+    def __init__(self, char_id: str, guild_id: int = None):
         super().__init__()
         self.char_id = char_id
+        self.guild_id = guild_id
         
         self.track_name_field = ui.TextInput(
             label="Track Name",
@@ -757,10 +828,24 @@ class AddConsequenceTrackModal(ui.Modal, title="Add New Consequence Track"):
         repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
         consequence_names = [f"{cons.name}({cons.severity})" for cons in consequences]
-        await interaction.response.edit_message(
-            content=f"✅ Added new consequence track: '{track_name}' with consequences: {', '.join(consequence_names)}", 
-            view=EditConsequencesView(interaction.guild.id, interaction.user.id, self.char_id)
-        )
+        if self.guild_id is not None:
+            await interaction.response.edit_message(
+                content=None,
+                embed=None,
+                view=EditConsequencesViewV2(
+                    self.guild_id,
+                    interaction.user.id,
+                    self.char_id,
+                    track_index=len(consequence_tracks) - 1,
+                    consequence_index=0,
+                    status_message=f"✅ Added new consequence track: '{track_name}' with consequences: {', '.join(consequence_names)}"
+                )
+            )
+        else:
+            await interaction.response.edit_message(
+                content=f"✅ Added new consequence track: '{track_name}' with consequences: {', '.join(consequence_names)}", 
+                view=EditConsequencesView(interaction.guild.id, interaction.user.id, self.char_id)
+            )
 
 class EditStuntsView(ui.View):
     def __init__(self, guild_id: int, user_id: int, char_id: str):
@@ -969,10 +1054,11 @@ class SkillManagementView(ui.View):
         )
 
 class EditAspectModal(ui.Modal, title="Edit Aspect"):
-    def __init__(self, char_id: str, index: int, aspect: Aspect):
+    def __init__(self, char_id: str, index: int, aspect: Aspect, guild_id: int = None):
         super().__init__()
         self.char_id = char_id
         self.index = index
+        self.guild_id = guild_id
         
         self.name_field = ui.TextInput(
             label="Aspect Name",
@@ -1023,18 +1109,32 @@ class EditAspectModal(ui.Modal, title="Edit Aspect"):
         character.aspects = aspects
         repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
-        # Local import to avoid circular dependency
-        from rpg_systems.fate.fate_sheet_edit_views import EditAspectsView
-        await interaction.response.edit_message(
-            content="✅ Aspect updated.", 
-            embed=character.format_full_sheet(interaction.guild.id), 
-            view=EditAspectsView(interaction.guild.id, interaction.user.id, self.char_id)
-        )
+        if self.guild_id is not None:
+            await interaction.response.edit_message(
+                content=None,
+                embed=None,
+                view=EditAspectsViewV2(
+                    self.guild_id,
+                    interaction.user.id,
+                    self.char_id,
+                    page=self.index,
+                    status_message="✅ Aspect updated."
+                )
+            )
+        else:
+            # Local import to avoid circular dependency
+            from rpg_systems.fate.fate_sheet_edit_views import EditAspectsView
+            await interaction.response.edit_message(
+                content="✅ Aspect updated.", 
+                embed=character.format_full_sheet(interaction.guild.id), 
+                view=EditAspectsView(interaction.guild.id, interaction.user.id, self.char_id)
+            )
 
 class AddAspectModal(ui.Modal, title="Add Aspect"):
-    def __init__(self, char_id: str):
+    def __init__(self, char_id: str, guild_id: int = None):
         super().__init__()
         self.char_id = char_id
+        self.guild_id = guild_id
         
         self.name_field = ui.TextInput(
             label="Aspect Name",
@@ -1095,21 +1195,35 @@ class AddAspectModal(ui.Modal, title="Add Aspect"):
         character.aspects = aspects
         repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
-        # Local import to avoid circular dependency
-        from rpg_systems.fate.fate_sheet_edit_views import EditAspectsView
-        await interaction.response.edit_message(
-            content="✅ Aspect added.", 
-            embed=character.format_full_sheet(interaction.guild.id), 
-            view=EditAspectsView(interaction.guild.id, interaction.user.id, self.char_id)
-        )
+        if self.guild_id is not None:
+            await interaction.response.edit_message(
+                content=None,
+                embed=None,
+                view=EditAspectsViewV2(
+                    self.guild_id,
+                    interaction.user.id,
+                    self.char_id,
+                    page=len(aspects) - 1,
+                    status_message="✅ Aspect added."
+                )
+            )
+        else:
+            # Local import to avoid circular dependency
+            from rpg_systems.fate.fate_sheet_edit_views import EditAspectsView
+            await interaction.response.edit_message(
+                content="✅ Aspect added.", 
+                embed=character.format_full_sheet(interaction.guild.id), 
+                view=EditAspectsView(interaction.guild.id, interaction.user.id, self.char_id)
+            )
 
 class EditFatePointsModal(ui.Modal, title="Edit Fate Points/Refresh"):
     fate_points = ui.TextInput(label="Fate Points", required=True)
     refresh = ui.TextInput(label="Refresh", required=True)
 
-    def __init__(self, char_id):
+    def __init__(self, char_id, guild_id: int = None):
         super().__init__()
         self.char_id = char_id
+        self.guild_id = guild_id
         
         # Get current values to show as defaults
         character = get_character(char_id)
@@ -1127,19 +1241,32 @@ class EditFatePointsModal(ui.Modal, title="Edit Fate Points/Refresh"):
             return
         repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
-        # Local import to avoid circular dependency
-        from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
-        await interaction.response.edit_message(
-            content="✅ Fate Points and Refresh updated.", 
-            embed=character.format_full_sheet(interaction.guild.id), 
-            view=FateSheetEditView(interaction.user.id, self.char_id)
-        )
+        if self.guild_id is not None:
+            await interaction.response.edit_message(
+                content=None,
+                embed=None,
+                view=FateSheetEditViewV2(
+                    editor_id=interaction.user.id,
+                    char_id=self.char_id,
+                    guild_id=self.guild_id,
+                    status_message="✅ Fate Points and Refresh updated."
+                )
+            )
+        else:
+            # Local import to avoid circular dependency
+            from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
+            await interaction.response.edit_message(
+                content="✅ Fate Points and Refresh updated.", 
+                embed=character.format_full_sheet(interaction.guild.id), 
+                view=FateSheetEditView(interaction.user.id, self.char_id)
+            )
 
 class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
-    def __init__(self, char_id: str, skill: str, current_value: int = 0):
+    def __init__(self, char_id: str, skill: str, current_value: int = 0, guild_id: int = None):
         super().__init__()
         self.char_id = char_id
         self.skill = skill
+        self.guild_id = guild_id
         label = f"Set value for {skill} (-3 to 6)"
         if len(label) > 45:
             label = label[:42] + "..."
@@ -1166,19 +1293,32 @@ class EditSkillValueModal(ui.Modal, title="Edit Skill Value"):
         character.skills = skills
         repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
-        # Local import to avoid circular dependency
-        from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
-        embed = character.format_full_sheet(interaction.guild.id)
-        view = FateSheetEditView(interaction.user.id, self.char_id)
-        await interaction.response.edit_message(content=f"✅ {self.skill} updated.", embed=embed, view=view)
+        if self.guild_id is not None:
+            await interaction.response.edit_message(
+                content=None,
+                embed=None,
+                view=FateSheetEditViewV2(
+                    editor_id=interaction.user.id,
+                    char_id=self.char_id,
+                    guild_id=self.guild_id,
+                    status_message=f"✅ {self.skill} updated."
+                )
+            )
+        else:
+            # Local import to avoid circular dependency
+            from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
+            embed = character.format_full_sheet(interaction.guild.id)
+            view = FateSheetEditView(interaction.user.id, self.char_id)
+            await interaction.response.edit_message(content=f"✅ {self.skill} updated.", embed=embed, view=view)
 
 class AddSkillModal(ui.Modal, title="Add New Skill"):
     skill_name = ui.TextInput(label="Skill Name", required=True, max_length=50)
     skill_value = ui.TextInput(label="Skill Value (-3 to 6)", required=True, default="0", max_length=2)
 
-    def __init__(self, char_id: str):
+    def __init__(self, char_id: str, guild_id: int = None):
         super().__init__()
         self.char_id = char_id
+        self.guild_id = guild_id
 
     async def on_submit(self, interaction: discord.Interaction):
         character = get_character(self.char_id)
@@ -1209,20 +1349,34 @@ class AddSkillModal(ui.Modal, title="Add New Skill"):
         character.skills = skills
         repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
-        # Local import to avoid circular dependency
-        from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
-        embed = character.format_full_sheet(interaction.guild.id)
-        view = FateSheetEditView(interaction.user.id, self.char_id)
-        await interaction.response.edit_message(
-            content=f"✅ Added new skill: **{skill_name}** (+{value_int if value_int >= 0 else value_int})",
-            embed=embed,
-            view=view
-        )
+        success_message = f"✅ Added new skill: **{skill_name}** (+{value_int if value_int >= 0 else value_int})"
+        if self.guild_id is not None:
+            await interaction.response.edit_message(
+                content=None,
+                embed=None,
+                view=FateSheetEditViewV2(
+                    editor_id=interaction.user.id,
+                    char_id=self.char_id,
+                    guild_id=self.guild_id,
+                    status_message=success_message
+                )
+            )
+        else:
+            # Local import to avoid circular dependency
+            from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
+            embed = character.format_full_sheet(interaction.guild.id)
+            view = FateSheetEditView(interaction.user.id, self.char_id)
+            await interaction.response.edit_message(
+                content=success_message,
+                embed=embed,
+                view=view
+            )
 
 class BulkEditSkillsModal(ui.Modal, title="Bulk Edit Skills"):
-    def __init__(self, char_id: str):
+    def __init__(self, char_id: str, guild_id: int = None):
         super().__init__()
         self.char_id = char_id
+        self.guild_id = guild_id
         
         # Get current skills to show as default
         character = get_character(char_id)
@@ -1248,21 +1402,35 @@ class BulkEditSkillsModal(ui.Modal, title="Bulk Edit Skills"):
         character.skills = skills_dict
         repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
-        # Local import to avoid circular dependency
-        from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
-        embed = character.format_full_sheet(interaction.guild.id)
-        view = FateSheetEditView(interaction.user.id, self.char_id)
-        await interaction.response.edit_message(
-            content="✅ Skills updated!",
-            embed=embed,
-            view=view
-        )
+        if self.guild_id is not None:
+            await interaction.response.edit_message(
+                content=None,
+                embed=None,
+                view=FateSheetEditViewV2(
+                    editor_id=interaction.user.id,
+                    char_id=self.char_id,
+                    guild_id=self.guild_id,
+                    status_message="✅ Skills updated!"
+                )
+            )
+        else:
+            # Local import to avoid circular dependency
+            from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
+            embed = character.format_full_sheet(interaction.guild.id)
+            view = FateSheetEditView(interaction.user.id, self.char_id)
+            await interaction.response.edit_message(
+                content="✅ Skills updated!",
+                embed=embed,
+                view=view
+            )
     
 class EditStuntModal(ui.Modal, title="Edit Stunt"):
-    def __init__(self, char_id: str, stunt_name: str, description: str):
+    def __init__(self, char_id: str, stunt_name: str, description: str, guild_id: int = None, page: int = 0):
         super().__init__()
         self.char_id = char_id
         self.original_name = stunt_name
+        self.guild_id = guild_id
+        self.page = page
         
         self.name_field = ui.TextInput(
             label="Stunt Name",
@@ -1304,17 +1472,32 @@ class EditStuntModal(ui.Modal, title="Edit Stunt"):
         character.stunts = stunts
         repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
-        # Local import to avoid circular dependency
-        from rpg_systems.fate.fate_sheet_edit_views import EditStuntsView
-        await interaction.response.edit_message(
-            content=f"✅ Stunt '{new_name}' updated.",
-            view=EditStuntsView(interaction.guild.id, interaction.user.id, self.char_id)
-        )
+        success_message = f"✅ Stunt '{new_name}' updated."
+        if self.guild_id is not None:
+            await interaction.response.edit_message(
+                content=None,
+                embed=None,
+                view=EditStuntsViewV2(
+                    self.guild_id,
+                    interaction.user.id,
+                    self.char_id,
+                    page=self.page,
+                    status_message=success_message
+                )
+            )
+        else:
+            # Local import to avoid circular dependency
+            from rpg_systems.fate.fate_sheet_edit_views import EditStuntsView
+            await interaction.response.edit_message(
+                content=success_message,
+                view=EditStuntsView(interaction.guild.id, interaction.user.id, self.char_id)
+            )
 
 class AddStuntModal(ui.Modal, title="Add New Stunt"):
-    def __init__(self, char_id: str):
+    def __init__(self, char_id: str, guild_id: int = None):
         super().__init__()
         self.char_id = char_id
+        self.guild_id = guild_id
         
         self.name_field = ui.TextInput(
             label="Stunt Name",
@@ -1350,9 +1533,825 @@ class AddStuntModal(ui.Modal, title="Add New Stunt"):
         character.stunts = stunts
         repositories.entity.upsert_entity(interaction.guild.id, character, system=SYSTEM)
         
-        # Local import to avoid circular dependency
-        from rpg_systems.fate.fate_sheet_edit_views import EditStuntsView
+        success_message = f"✅ Added new stunt: '{name}'"
+        if self.guild_id is not None:
+            await interaction.response.edit_message(
+                content=None,
+                embed=None,
+                view=EditStuntsViewV2(
+                    self.guild_id,
+                    interaction.user.id,
+                    self.char_id,
+                    page=len(stunts) - 1,
+                    status_message=success_message
+                )
+            )
+        else:
+            # Local import to avoid circular dependency
+            from rpg_systems.fate.fate_sheet_edit_views import EditStuntsView
+            await interaction.response.edit_message(
+                content=success_message,
+                view=EditStuntsView(interaction.guild.id, interaction.user.id, self.char_id)
+            )
+
+
+class FateSheetEditViewV2(ui.LayoutView):
+    def __init__(self, editor_id: int, char_id: str, guild_id: int, status_message: str = None):
+        super().__init__(timeout=86400)
+        self.editor_id = editor_id
+        self.char_id = char_id
+        self.guild_id = guild_id
+        self.status_message = status_message
+        self._build_layout()
+
+    def _build_layout(self):
+        character = get_character(self.char_id)
+        if not character:
+            container = ui.Container(accent_colour=discord.Colour.red())
+            container.add_item(ui.TextDisplay("❌ Character not found."))
+            self.add_item(container)
+            return
+
+        if self.status_message:
+            status = ui.Container(accent_colour=discord.Colour.green())
+            status.add_item(ui.TextDisplay(_truncate_text(self.status_message)))
+            self.add_item(status)
+
+        sheet_text = embed_to_text(character.format_full_sheet(self.guild_id, is_gm=True))
+        content = ui.Container(accent_colour=discord.Colour.purple())
+        content.add_item(ui.TextDisplay(_truncate_text(sheet_text)))
+        self.add_item(content)
+        self.add_item(ui.Separator())
+
+        primary_row = ui.ActionRow()
+        _add_action_button(primary_row, "Edit Stress", discord.ButtonStyle.primary, self.edit_stress)
+        _add_action_button(primary_row, "Edit Consequences", discord.ButtonStyle.primary, self.edit_consequences)
+        _add_action_button(primary_row, "Edit Fate Points/Refresh", discord.ButtonStyle.primary, self.edit_fate_points)
+        self.add_item(primary_row)
+
+        secondary_row = ui.ActionRow()
+        _add_action_button(secondary_row, "Edit Name", discord.ButtonStyle.secondary, self.edit_name)
+        _add_action_button(secondary_row, "Edit Notes", discord.ButtonStyle.secondary, self.edit_notes)
+        _add_action_button(secondary_row, "Edit Aspects", discord.ButtonStyle.secondary, self.edit_aspects)
+        _add_action_button(secondary_row, "Edit Skills", discord.ButtonStyle.secondary, self.edit_skills)
+        _add_action_button(secondary_row, "Edit Stunts", discord.ButtonStyle.secondary, self.edit_stunts)
+        self.add_item(secondary_row)
+
+        inventory_row = ui.ActionRow()
+        _add_action_button(inventory_row, "📦 Inventory", discord.ButtonStyle.secondary, self.edit_inventory)
+        self.add_item(inventory_row)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.editor_id:
+            await interaction.response.send_message("You can't edit this character.", ephemeral=True)
+            return False
+        return True
+
+    async def edit_stress(self, interaction: discord.Interaction):
         await interaction.response.edit_message(
-            content=f"✅ Added new stunt: '{name}'",
-            view=EditStuntsView(interaction.guild.id, interaction.user.id, self.char_id)
+            content=None,
+            embed=None,
+            view=EditStressTracksViewV2(self.guild_id, self.editor_id, self.char_id, 0)
+        )
+
+    async def edit_consequences(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=EditConsequencesViewV2(self.guild_id, self.editor_id, self.char_id)
+        )
+
+    async def edit_fate_points(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(EditFatePointsModal(self.char_id, guild_id=self.guild_id))
+
+    async def edit_name(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(EditNameModal(self.char_id, SYSTEM))
+
+    async def edit_notes(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(EditNotesModal(self.char_id, SYSTEM))
+
+    async def edit_aspects(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=EditAspectsViewV2(self.guild_id, self.editor_id, self.char_id)
+        )
+
+    async def edit_skills(self, interaction: discord.Interaction):
+        character = get_character(self.char_id)
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=SkillManagementViewV2(character, self.editor_id, self.char_id, self.guild_id)
+        )
+
+    async def edit_stunts(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=EditStuntsViewV2(self.guild_id, self.editor_id, self.char_id)
+        )
+
+    async def edit_inventory(self, interaction: discord.Interaction):
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=EditInventoryViewV2(interaction.guild.id, self.editor_id, self.char_id, is_gm=is_gm)
+        )
+
+
+class EditAspectsViewV2(ui.LayoutView):
+    def __init__(self, guild_id: int, user_id: int, char_id: str, page: int = 0, status_message: str = None):
+        super().__init__(timeout=86400)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.char_id = char_id
+        self.status_message = status_message
+        self.char = get_character(char_id)
+        self.aspects = self.char.aspects if self.char else []
+        self.page = max(0, min(page, len(self.aspects) - 1)) if self.aspects else 0
+        self.max_page = max(0, len(self.aspects) - 1)
+        self._build_layout()
+
+    def _build_layout(self):
+        if self.status_message:
+            status = ui.Container(accent_colour=discord.Colour.green())
+            status.add_item(ui.TextDisplay(_truncate_text(self.status_message)))
+            self.add_item(status)
+
+        content = ui.Container(accent_colour=discord.Colour.purple())
+        if self.aspects:
+            aspect = self.aspects[self.page]
+            lines = [
+                f"## Aspect {self.page + 1}/{len(self.aspects)}",
+                f"**Name:** {aspect.name}",
+                f"**Hidden:** {'Yes' if aspect.is_hidden else 'No'}",
+                f"**Free Invokes:** {aspect.free_invokes}",
+            ]
+            if aspect.description:
+                lines.extend(["", "**Description**", aspect.description])
+            content.add_item(ui.TextDisplay(_truncate_text("\n".join(lines))))
+        else:
+            content.add_item(ui.TextDisplay("## Aspects\nNo aspects available."))
+        self.add_item(content)
+        self.add_item(ui.Separator())
+
+        if self.aspects:
+            nav_row = ui.ActionRow()
+            if self.page > 0:
+                _add_action_button(nav_row, "◀️ Prev", discord.ButtonStyle.secondary, self.prev_page)
+            if self.page < self.max_page:
+                _add_action_button(nav_row, "Next ▶️", discord.ButtonStyle.secondary, self.next_page)
+            if nav_row.children:
+                self.add_item(nav_row)
+
+            action_row = ui.ActionRow()
+            _add_action_button(action_row, "✏️ Edit", discord.ButtonStyle.primary, self.edit_aspect)
+            _add_action_button(action_row, "🗑 Remove", discord.ButtonStyle.danger, self.remove_aspect)
+            toggle_label = "🙈 Hide" if not self.aspects[self.page].is_hidden else "👁 Unhide"
+            toggle_style = discord.ButtonStyle.secondary if not self.aspects[self.page].is_hidden else discord.ButtonStyle.success
+            _add_action_button(action_row, toggle_label, toggle_style, self.toggle_hidden)
+            self.add_item(action_row)
+
+        footer_row = ui.ActionRow()
+        _add_action_button(footer_row, "➕ Add New", discord.ButtonStyle.success, self.add_aspect)
+        _add_action_button(footer_row, "✅ Done", discord.ButtonStyle.secondary, self.done)
+        self.add_item(footer_row)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("You can't edit this character.", ephemeral=True)
+            return False
+        return True
+
+    async def prev_page(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=EditAspectsViewV2(self.guild_id, self.user_id, self.char_id, page=self.page - 1)
+        )
+
+    async def next_page(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=EditAspectsViewV2(self.guild_id, self.user_id, self.char_id, page=self.page + 1)
+        )
+
+    async def edit_aspect(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(EditAspectModal(self.char_id, self.page, self.aspects[self.page], guild_id=self.guild_id))
+
+    async def remove_aspect(self, interaction: discord.Interaction):
+        character = get_character(self.char_id)
+        aspects = character.aspects
+        removed_aspect = aspects.pop(self.page)
+        character.aspects = aspects
+        repositories.entity.upsert_entity(self.guild_id, character, system=SYSTEM)
+        next_page = max(0, min(self.page, len(aspects) - 1)) if aspects else 0
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=EditAspectsViewV2(
+                self.guild_id,
+                self.user_id,
+                self.char_id,
+                page=next_page,
+                status_message=f"✅ Removed aspect: **{removed_aspect.name}**"
+            )
+        )
+
+    async def toggle_hidden(self, interaction: discord.Interaction):
+        character = get_character(self.char_id)
+        aspects = character.aspects
+        aspects[self.page].is_hidden = not aspects[self.page].is_hidden
+        character.aspects = aspects
+        repositories.entity.upsert_entity(self.guild_id, character, system=SYSTEM)
+        status = "hidden" if aspects[self.page].is_hidden else "visible"
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=EditAspectsViewV2(
+                self.guild_id,
+                self.user_id,
+                self.char_id,
+                page=self.page,
+                status_message=f"✅ Aspect is now {status}."
+            )
+        )
+
+    async def add_aspect(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(AddAspectModal(self.char_id, guild_id=self.guild_id))
+
+    async def done(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=FateSheetEditViewV2(self.user_id, self.char_id, self.guild_id, status_message="✅ Done editing aspects.")
+        )
+
+
+class EditStressTracksViewV2(ui.LayoutView):
+    def __init__(self, guild_id: int, user_id: int, char_id: str, track_index: int = 0, status_message: str = None):
+        super().__init__(timeout=86400)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.char_id = char_id
+        self.status_message = status_message
+        self.char = get_character(char_id)
+        self.stress_tracks = self.char.stress_tracks if self.char else []
+        self.current_track_index = max(0, min(track_index, len(self.stress_tracks) - 1)) if self.stress_tracks else 0
+        self._build_layout()
+
+    def _build_layout(self):
+        if self.status_message:
+            status = ui.Container(accent_colour=discord.Colour.green())
+            status.add_item(ui.TextDisplay(_truncate_text(self.status_message)))
+            self.add_item(status)
+
+        content = ui.Container(accent_colour=discord.Colour.purple())
+        if not self.stress_tracks:
+            content.add_item(ui.TextDisplay("## Stress Tracks\nNo stress tracks available."))
+        else:
+            track = self.stress_tracks[self.current_track_index]
+            lines = [f"## {track.track_name}"]
+            if track.linked_skill:
+                lines.append(f"**Linked Skill:** {track.linked_skill}")
+            lines.append("")
+            lines.append("**Boxes**")
+            for box in track.boxes:
+                status = "☒" if box.is_filled else "☐"
+                lines.append(f"- {status} [{box.value}]")
+            if len(track.boxes) > 5:
+                lines.extend(["", "*Only the first 5 boxes have quick-toggle buttons.*"])
+            content.add_item(ui.TextDisplay(_truncate_text("\n".join(lines))))
+        self.add_item(content)
+        self.add_item(ui.Separator())
+
+        if self.stress_tracks:
+            track_row = ui.ActionRow()
+            track_options = [SelectOption(label=track.track_name, value=str(i)) for i, track in enumerate(self.stress_tracks)]
+            track_select = ui.Select(placeholder="Select stress track...", options=track_options)
+            track_select.callback = self.track_selected
+            track_row.add_item(track_select)
+            self.add_item(track_row)
+
+            box_row = ui.ActionRow()
+            for idx, box in enumerate(self.stress_tracks[self.current_track_index].boxes[:5]):
+                label = f"{'☒' if box.is_filled else '☐'}[{box.value}]"
+                button = ui.Button(
+                    label=label,
+                    style=discord.ButtonStyle.success if box.is_filled else discord.ButtonStyle.secondary
+                )
+                button.callback = self.make_box_callback(idx)
+                box_row.add_item(button)
+            if box_row.children:
+                self.add_item(box_row)
+
+            manage_row = ui.ActionRow()
+            _add_action_button(manage_row, "➕ Add Box", discord.ButtonStyle.success, self.add_box)
+            _add_action_button(manage_row, "🗑 Remove Box", discord.ButtonStyle.danger, self.remove_box)
+            _add_action_button(manage_row, "Clear All", discord.ButtonStyle.danger, self.clear_all)
+            self.add_item(manage_row)
+
+        footer_row = ui.ActionRow()
+        _add_action_button(footer_row, "➕ Add New Track", discord.ButtonStyle.primary, self.add_track)
+        _add_action_button(footer_row, "✅ Done", discord.ButtonStyle.secondary, self.done)
+        self.add_item(footer_row)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("You can't edit this character.", ephemeral=True)
+            return False
+        return True
+
+    async def track_selected(self, interaction: discord.Interaction):
+        selected_index = int(interaction.data["values"][0])
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=EditStressTracksViewV2(self.guild_id, self.user_id, self.char_id, track_index=selected_index)
+        )
+
+    def make_box_callback(self, box_index: int):
+        async def callback(interaction: discord.Interaction):
+            character = get_character(self.char_id)
+            stress_tracks = character.stress_tracks
+            track = stress_tracks[self.current_track_index]
+            track.boxes[box_index].is_filled = not track.boxes[box_index].is_filled
+            character.stress_tracks = stress_tracks
+            repositories.entity.upsert_entity(self.guild_id, character, system=SYSTEM)
+            await interaction.response.edit_message(
+                content=None,
+                embed=None,
+                view=EditStressTracksViewV2(
+                    self.guild_id,
+                    self.user_id,
+                    self.char_id,
+                    track_index=self.current_track_index,
+                    status_message=f"✅ Toggled box [{track.boxes[box_index].value}]."
+                )
+            )
+
+        return callback
+
+    async def add_box(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(AddStressBoxModal(self.char_id, self.current_track_index, guild_id=self.guild_id))
+
+    async def remove_box(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(RemoveStressBoxModal(self.char_id, self.current_track_index, guild_id=self.guild_id))
+
+    async def clear_all(self, interaction: discord.Interaction):
+        character = get_character(self.char_id)
+        stress_tracks = character.stress_tracks
+        track = stress_tracks[self.current_track_index]
+        track.clear_all_boxes()
+        character.stress_tracks = stress_tracks
+        repositories.entity.upsert_entity(self.guild_id, character, system=SYSTEM)
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=EditStressTracksViewV2(
+                self.guild_id,
+                self.user_id,
+                self.char_id,
+                track_index=self.current_track_index,
+                status_message=f"✅ Cleared all boxes on {track.track_name}."
+            )
+        )
+
+    async def add_track(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(AddStressTrackModal(self.char_id, guild_id=self.guild_id))
+
+    async def done(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=FateSheetEditViewV2(self.user_id, self.char_id, self.guild_id, status_message="✅ Done editing stress tracks.")
+        )
+
+
+class EditConsequencesViewV2(ui.LayoutView):
+    def __init__(self, guild_id: int, user_id: int, char_id: str, track_index: int = 0, consequence_index: int = 0, status_message: str = None):
+        super().__init__(timeout=86400)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.char_id = char_id
+        self.status_message = status_message
+        self.char = get_character(char_id)
+        self.consequence_tracks = self.char.consequence_tracks if self.char else []
+        self.track_index = track_index
+        self.consequence_index = consequence_index
+        self._build_layout()
+
+    def _all_consequences(self):
+        all_consequences = []
+        for track_idx, track in enumerate(self.consequence_tracks):
+            for cons_idx, consequence in enumerate(track.consequences):
+                all_consequences.append((track_idx, cons_idx, consequence))
+        return all_consequences
+
+    def _current_position(self, all_consequences):
+        if not all_consequences:
+            return 0
+        for idx, (track_idx, cons_idx, _consequence) in enumerate(all_consequences):
+            if track_idx == self.track_index and cons_idx == self.consequence_index:
+                return idx
+        return 0
+
+    def _build_layout(self):
+        if self.status_message:
+            status = ui.Container(accent_colour=discord.Colour.green())
+            status.add_item(ui.TextDisplay(_truncate_text(self.status_message)))
+            self.add_item(status)
+
+        all_consequences = self._all_consequences()
+        content = ui.Container(accent_colour=discord.Colour.purple())
+        if not all_consequences:
+            content.add_item(ui.TextDisplay("## Consequences\nNo consequences available."))
+        else:
+            current_pos = self._current_position(all_consequences)
+            self.track_index, self.consequence_index, consequence = all_consequences[current_pos]
+            track = self.consequence_tracks[self.track_index]
+            lines = [
+                f"## Consequence {current_pos + 1}/{len(all_consequences)}",
+                f"**Track:** {track.name}",
+                f"**Name:** {consequence.name}",
+                f"**Severity:** {consequence.severity}",
+                f"**Aspect:** {consequence.aspect.name if consequence.aspect else 'Empty'}",
+            ]
+            if consequence.aspect and consequence.aspect.free_invokes:
+                lines.append(f"**Free Invokes:** {consequence.aspect.free_invokes}")
+            content.add_item(ui.TextDisplay(_truncate_text("\n".join(lines))))
+        self.add_item(content)
+        self.add_item(ui.Separator())
+
+        if all_consequences:
+            current_pos = self._current_position(all_consequences)
+            nav_row = ui.ActionRow()
+            if current_pos > 0:
+                _add_action_button(nav_row, "◀️ Prev", discord.ButtonStyle.secondary, self.prev_consequence)
+            if current_pos < len(all_consequences) - 1:
+                _add_action_button(nav_row, "Next ▶️", discord.ButtonStyle.secondary, self.next_consequence)
+            if nav_row.children:
+                self.add_item(nav_row)
+
+            action_row = ui.ActionRow()
+            _add_action_button(action_row, "✏️ Edit", discord.ButtonStyle.primary, self.edit_consequence)
+            if all_consequences[current_pos][2].aspect:
+                _add_action_button(action_row, "🗑 Clear", discord.ButtonStyle.danger, self.clear_consequence)
+            self.add_item(action_row)
+
+        footer_row = ui.ActionRow()
+        _add_action_button(footer_row, "➕ Add New Track", discord.ButtonStyle.primary, self.add_track)
+        _add_action_button(footer_row, "✅ Done", discord.ButtonStyle.secondary, self.done)
+        self.add_item(footer_row)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("You can't edit this character.", ephemeral=True)
+            return False
+        return True
+
+    async def prev_consequence(self, interaction: discord.Interaction):
+        all_consequences = self._all_consequences()
+        current_pos = max(0, self._current_position(all_consequences) - 1)
+        track_index, consequence_index, _ = all_consequences[current_pos]
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=EditConsequencesViewV2(
+                self.guild_id,
+                self.user_id,
+                self.char_id,
+                track_index=track_index,
+                consequence_index=consequence_index
+            )
+        )
+
+    async def next_consequence(self, interaction: discord.Interaction):
+        all_consequences = self._all_consequences()
+        current_pos = min(len(all_consequences) - 1, self._current_position(all_consequences) + 1)
+        track_index, consequence_index, _ = all_consequences[current_pos]
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=EditConsequencesViewV2(
+                self.guild_id,
+                self.user_id,
+                self.char_id,
+                track_index=track_index,
+                consequence_index=consequence_index
+            )
+        )
+
+    async def edit_consequence(self, interaction: discord.Interaction):
+        all_consequences = self._all_consequences()
+        current_pos = self._current_position(all_consequences)
+        consequence = all_consequences[current_pos][2]
+        await interaction.response.send_modal(
+            EditConsequenceModal(
+                self.char_id,
+                self.track_index,
+                self.consequence_index,
+                consequence,
+                guild_id=self.guild_id
+            )
+        )
+
+    async def clear_consequence(self, interaction: discord.Interaction):
+        character = get_character(self.char_id)
+        consequence_tracks = character.consequence_tracks
+        consequence = consequence_tracks[self.track_index].consequences[self.consequence_index]
+        consequence.aspect = None
+        character.consequence_tracks = consequence_tracks
+        repositories.entity.upsert_entity(self.guild_id, character, system=SYSTEM)
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=EditConsequencesViewV2(
+                self.guild_id,
+                self.user_id,
+                self.char_id,
+                track_index=self.track_index,
+                consequence_index=self.consequence_index,
+                status_message=f"✅ Cleared consequence: **{consequence.name}**"
+            )
+        )
+
+    async def add_track(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(AddConsequenceTrackModal(self.char_id, guild_id=self.guild_id))
+
+    async def done(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=FateSheetEditViewV2(self.user_id, self.char_id, self.guild_id, status_message="✅ Done editing consequences.")
+        )
+
+
+class EditStuntsViewV2(ui.LayoutView):
+    def __init__(self, guild_id: int, user_id: int, char_id: str, page: int = 0, status_message: str = None):
+        super().__init__(timeout=86400)
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.char_id = char_id
+        self.status_message = status_message
+        self.char = get_character(char_id)
+        self.stunts = self.char.stunts if self.char else {}
+        self.stunt_names = list(self.stunts.keys())
+        self.page = max(0, min(page, len(self.stunt_names) - 1)) if self.stunt_names else 0
+        self.max_page = max(0, len(self.stunt_names) - 1)
+        self._build_layout()
+
+    def _build_layout(self):
+        if self.status_message:
+            status = ui.Container(accent_colour=discord.Colour.green())
+            status.add_item(ui.TextDisplay(_truncate_text(self.status_message)))
+            self.add_item(status)
+
+        content = ui.Container(accent_colour=discord.Colour.purple())
+        if self.stunt_names:
+            current_stunt = self.stunt_names[self.page]
+            lines = [
+                f"## Stunt {self.page + 1}/{len(self.stunt_names)}",
+                f"**Name:** {current_stunt}",
+                "",
+                "**Description**",
+                self.stunts.get(current_stunt, "No description available"),
+            ]
+            content.add_item(ui.TextDisplay(_truncate_text("\n".join(lines))))
+        else:
+            content.add_item(ui.TextDisplay("## Stunts\nNo stunts available."))
+        self.add_item(content)
+        self.add_item(ui.Separator())
+
+        if self.stunt_names:
+            nav_row = ui.ActionRow()
+            if self.page > 0:
+                _add_action_button(nav_row, "◀️ Prev", discord.ButtonStyle.secondary, self.prev_page)
+            if self.page < self.max_page:
+                _add_action_button(nav_row, "Next ▶️", discord.ButtonStyle.secondary, self.next_page)
+            if nav_row.children:
+                self.add_item(nav_row)
+
+            action_row = ui.ActionRow()
+            _add_action_button(action_row, "✏️ Edit", discord.ButtonStyle.primary, self.edit_stunt)
+            _add_action_button(action_row, "🗑 Remove", discord.ButtonStyle.danger, self.remove_stunt)
+            self.add_item(action_row)
+
+        footer_row = ui.ActionRow()
+        _add_action_button(footer_row, "➕ Add New", discord.ButtonStyle.success, self.add_stunt)
+        _add_action_button(footer_row, "✅ Done", discord.ButtonStyle.secondary, self.done)
+        self.add_item(footer_row)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("You can't edit this character.", ephemeral=True)
+            return False
+        return True
+
+    async def prev_page(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=EditStuntsViewV2(self.guild_id, self.user_id, self.char_id, page=self.page - 1)
+        )
+
+    async def next_page(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=EditStuntsViewV2(self.guild_id, self.user_id, self.char_id, page=self.page + 1)
+        )
+
+    async def edit_stunt(self, interaction: discord.Interaction):
+        current_stunt = self.stunt_names[self.page]
+        await interaction.response.send_modal(
+            EditStuntModal(
+                self.char_id,
+                current_stunt,
+                self.stunts.get(current_stunt, ""),
+                guild_id=self.guild_id,
+                page=self.page
+            )
+        )
+
+    async def remove_stunt(self, interaction: discord.Interaction):
+        character = get_character(self.char_id)
+        stunts = character.stunts
+        current_stunt = self.stunt_names[self.page]
+        del stunts[current_stunt]
+        character.stunts = stunts
+        repositories.entity.upsert_entity(self.guild_id, character, system=SYSTEM)
+        next_page = max(0, min(self.page, len(stunts) - 1)) if stunts else 0
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=EditStuntsViewV2(
+                self.guild_id,
+                self.user_id,
+                self.char_id,
+                page=next_page,
+                status_message=f"✅ Removed stunt: **{current_stunt}**"
+            )
+        )
+
+    async def add_stunt(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(AddStuntModal(self.char_id, guild_id=self.guild_id))
+
+    async def done(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=FateSheetEditViewV2(self.user_id, self.char_id, self.guild_id, status_message="✅ Done editing stunts.")
+        )
+
+
+class SkillManagementViewV2(ui.LayoutView):
+    def __init__(self, character: FateCharacter, editor_id: int, char_id: str, guild_id: int, status_message: str = None):
+        super().__init__(timeout=86400)
+        self.character = character or get_character(char_id)
+        self.editor_id = editor_id
+        self.char_id = char_id
+        self.guild_id = guild_id
+        self.status_message = status_message
+        self._build_layout()
+
+    def _build_layout(self):
+        if self.status_message:
+            status = ui.Container(accent_colour=discord.Colour.green())
+            status.add_item(ui.TextDisplay(_truncate_text(self.status_message)))
+            self.add_item(status)
+
+        summary = ui.Container(accent_colour=discord.Colour.purple())
+        skill_count = len((self.character.skills if self.character else {}) or {})
+        summary.add_item(ui.TextDisplay(f"## Skill Management\nChoose how to manage skills.\n\n**Current skills:** {skill_count}"))
+        self.add_item(summary)
+        self.add_item(ui.Separator())
+
+        primary_row = ui.ActionRow()
+        _add_action_button(primary_row, "Edit Existing Skill", discord.ButtonStyle.primary, self.edit_existing_skill)
+        _add_action_button(primary_row, "Add New Skill", discord.ButtonStyle.success, self.add_new_skill)
+        _add_action_button(primary_row, "Remove Skill", discord.ButtonStyle.danger, self.remove_skill)
+        self.add_item(primary_row)
+
+        secondary_row = ui.ActionRow()
+        _add_action_button(secondary_row, "Bulk Edit Skills", discord.ButtonStyle.secondary, self.bulk_edit_skills)
+        _add_action_button(secondary_row, "Cancel", discord.ButtonStyle.secondary, self.cancel)
+        self.add_item(secondary_row)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.editor_id:
+            await interaction.response.send_message("You can't edit this character.", ephemeral=True)
+            return False
+        return True
+
+    async def edit_existing_skill(self, interaction: discord.Interaction):
+        character = get_character(self.char_id)
+        skills = character.skills if character and character.skills else {}
+        if not skills:
+            await interaction.response.edit_message(
+                content=None,
+                embed=None,
+                view=SkillManagementViewV2(
+                    character,
+                    self.editor_id,
+                    self.char_id,
+                    self.guild_id,
+                    status_message="This character doesn't have any skills yet. Add some first!"
+                )
+            )
+            return
+
+        skill_options = [SelectOption(label=k, value=k) for k in sorted(skills.keys())]
+
+        async def on_skill_selected(_view, interaction2, skill):
+            current_value = get_character(self.char_id).skills.get(skill, 0)
+            await interaction2.response.send_modal(EditSkillValueModal(self.char_id, skill, current_value, guild_id=self.guild_id))
+
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=PaginatedSelectViewV2(
+                skill_options,
+                on_skill_selected,
+                interaction.user.id,
+                prompt="Select a skill to edit:",
+                title="## Select a skill to edit"
+            )
+        )
+
+    async def add_new_skill(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(AddSkillModal(self.char_id, guild_id=self.guild_id))
+
+    async def remove_skill(self, interaction: discord.Interaction):
+        character = get_character(self.char_id)
+        skills = character.skills if character and character.skills else {}
+        if not skills:
+            await interaction.response.edit_message(
+                content=None,
+                embed=None,
+                view=SkillManagementViewV2(
+                    character,
+                    self.editor_id,
+                    self.char_id,
+                    self.guild_id,
+                    status_message="This character doesn't have any skills to remove."
+                )
+            )
+            return
+
+        skill_options = [SelectOption(label=k, value=k) for k in sorted(skills.keys())]
+
+        async def on_skill_selected(_view, interaction2: discord.Interaction, skill):
+            current_character = get_character(self.char_id)
+            current_skills = current_character.skills
+            if skill in current_skills:
+                del current_skills[skill]
+                current_character.skills = current_skills
+                repositories.entity.upsert_entity(interaction2.guild.id, current_character, system=SYSTEM)
+                await interaction2.response.edit_message(
+                    content=None,
+                    embed=None,
+                    view=FateSheetEditViewV2(
+                        interaction2.user.id,
+                        self.char_id,
+                        self.guild_id,
+                        status_message=f"✅ Removed skill: **{skill}**"
+                    )
+                )
+            else:
+                await interaction2.response.edit_message(
+                    content=None,
+                    embed=None,
+                    view=SkillManagementViewV2(
+                        current_character,
+                        self.editor_id,
+                        self.char_id,
+                        self.guild_id,
+                        status_message=f"❌ Skill not found: {skill}"
+                    )
+                )
+
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=PaginatedSelectViewV2(
+                skill_options,
+                on_skill_selected,
+                interaction.user.id,
+                prompt="Select a skill to remove:",
+                title="## Select a skill to remove"
+            )
+        )
+
+    async def bulk_edit_skills(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(BulkEditSkillsModal(self.char_id, guild_id=self.guild_id))
+
+    async def cancel(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=FateSheetEditViewV2(self.editor_id, self.char_id, self.guild_id, status_message="Operation cancelled.")
         )

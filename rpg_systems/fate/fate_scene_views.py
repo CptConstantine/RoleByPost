@@ -2,12 +2,122 @@ import discord
 from discord import ui
 from discord.ext import commands
 from core.base_models import SystemType
-from core.scene_views import BasePinnableSceneView, PlaceholderPersistentButton, SceneNotesButton
+from core.scene_views import BasePinnableSceneView, BasePinnableSceneViewV2, PlaceholderPersistentButton, SceneNotesButton
 from rpg_systems.fate.aspect import Aspect
 from data.repositories.repository_factory import repositories
 
 
 SYSTEM = SystemType.FATE
+
+
+def _build_fate_scene_content(guild_id, scene_id, is_gm: bool):
+    scene = repositories.scene.find_by_id('scene_id', scene_id)
+    if not scene:
+        return discord.Embed(
+            title="❌ Scene Not Found",
+            description="This scene no longer exists.",
+            color=discord.Color.red()
+        ), "❌ **SCENE ERROR** ❌"
+
+    notes = repositories.scene_notes.get_scene_notes(str(guild_id), str(scene_id))
+
+    game_aspects = repositories.fate_game_aspects.get_game_aspects(str(guild_id)) or []
+    scene_aspects = repositories.fate_aspects.get_aspects(str(guild_id), str(scene_id)) or []
+    scene_zones = repositories.fate_zones.get_zones(str(guild_id), str(scene_id)) or []
+    zone_aspects = repositories.fate_zone_aspects.get_all_zone_aspects_for_scene(str(guild_id), str(scene_id)) or {}
+
+    embed = discord.Embed(
+        title=f"🎭 {('Current' if scene.is_active else 'Inactive')} Scene: {scene.name}",
+        color=discord.Color.purple() if scene.is_active else discord.Color.dark_grey()
+    )
+
+    description = ""
+    if notes:
+        description += f"**Notes:**\n{notes}\n\n"
+
+    if game_aspects:
+        description += "**Game Aspects:**\n"
+        hidden_game_aspect_count = 0
+
+        for aspect in game_aspects:
+            aspect_str = aspect.get_short_aspect_string(is_gm=is_gm)
+            if aspect_str:
+                description += f"• {aspect_str}\n"
+            else:
+                hidden_game_aspect_count += 1
+
+        if hidden_game_aspect_count > 0 and not is_gm:
+            description += f"• *{hidden_game_aspect_count} hidden aspect{'s' if hidden_game_aspect_count > 1 else ''}*\n"
+        description += "\n"
+
+    if scene_aspects:
+        description += "**Scene Aspects:**\n"
+        hidden_scene_aspect_count = 0
+
+        for aspect in scene_aspects:
+            aspect_str = aspect.get_short_aspect_string(is_gm=is_gm)
+            if aspect_str:
+                description += f"• {aspect_str}\n"
+            else:
+                hidden_scene_aspect_count += 1
+
+        if hidden_scene_aspect_count > 0 and not is_gm:
+            description += f"• *{hidden_scene_aspect_count} hidden aspect{'s' if hidden_scene_aspect_count > 1 else ''}*\n"
+        description += "\n"
+
+    if scene_zones:
+        description += "**Zones:**\n"
+        for zone in scene_zones:
+            zone_line = f"• **{zone}**"
+            if zone in zone_aspects and zone_aspects[zone]:
+                zone_aspect_strings = []
+                hidden_zone_aspect_count = 0
+
+                for aspect in zone_aspects[zone]:
+                    aspect_str = aspect.get_short_aspect_string(is_gm=is_gm)
+                    if aspect_str:
+                        zone_aspect_strings.append(aspect_str)
+                    else:
+                        hidden_zone_aspect_count += 1
+
+                if zone_aspect_strings:
+                    zone_line += f" - {', '.join(zone_aspect_strings)}"
+
+                if hidden_zone_aspect_count > 0 and not is_gm:
+                    if zone_aspect_strings:
+                        zone_line += f", *{hidden_zone_aspect_count} hidden*"
+                    else:
+                        zone_line += f" - *{hidden_zone_aspect_count} hidden aspect{'s' if hidden_zone_aspect_count > 1 else ''}*"
+
+            description += zone_line + "\n"
+        description += "\n"
+
+    npc_ids = repositories.scene_npc.get_scene_npc_ids(str(guild_id), str(scene_id))
+    lines = []
+    for npc_id in npc_ids:
+        npc = repositories.entity.get_by_id(str(npc_id))
+        if npc:
+            lines.append(npc.format_npc_scene_entry(is_gm=is_gm))
+
+    if lines:
+        description += "**NPCs:**\n"
+        description += "\n\n".join(lines)
+    else:
+        description += "📭 No NPCs are currently in this scene."
+
+    embed.description = description
+
+    if scene.is_active:
+        embed.set_footer(text="Scene view will update automatically when the scene changes.")
+        content = "🎭 **CURRENT SCENE** 🎭"
+    else:
+        embed.set_footer(text="This is not the active scene. Use /scene switch to make it active.")
+        content = "🎭 **INACTIVE SCENE** 🎭"
+
+    if scene.image_url:
+        embed.set_image(url=scene.image_url)
+
+    return embed, content
 
 class FateSceneView(BasePinnableSceneView):
     """Fate-specific scene view with aspects and zones"""
@@ -24,126 +134,7 @@ class FateSceneView(BasePinnableSceneView):
             return
 
     async def create_scene_content(self):
-        # Get scene info
-        scene = repositories.scene.find_by_id('scene_id', self.scene_id)
-        if not scene:
-            return discord.Embed(
-                title="❌ Scene Not Found",
-                description="This scene no longer exists.",
-                color=discord.Color.red()
-            ), "❌ **SCENE ERROR** ❌"
-        
-        # Format scene content - standard part
-                
-        # Get scene notes
-        notes = repositories.scene_notes.get_scene_notes(str(self.guild_id), str(self.scene_id))
-        
-        # Get Fate-specific data
-        game_aspects = repositories.fate_game_aspects.get_game_aspects(str(self.guild_id)) or []
-        scene_aspects = repositories.fate_aspects.get_aspects(str(self.guild_id), str(self.scene_id)) or []
-        scene_zones = repositories.fate_zones.get_zones(str(self.guild_id), str(self.scene_id)) or []
-        zone_aspects = repositories.fate_zone_aspects.get_all_zone_aspects_for_scene(str(self.guild_id), str(self.scene_id)) or {}
-        
-        # Create embed
-        embed = discord.Embed(
-            title=f"🎭 {('Current' if scene.is_active else 'Inactive')} Scene: {scene.name}",
-            color=discord.Color.purple() if scene.is_active else discord.Color.dark_grey()
-        )
-        
-        description = ""
-        if notes:
-            description += f"**Notes:**\n{notes}\n\n"
-            
-        # Add Game Aspects section
-        if game_aspects:
-            description += "**Game Aspects:**\n"
-            hidden_game_aspect_count = 0
-            
-            for aspect in game_aspects:
-                aspect_str = aspect.get_short_aspect_string(is_gm=self.is_gm)
-                if aspect_str:
-                    description += f"• {aspect_str}\n"
-                else:
-                    hidden_game_aspect_count += 1
-            
-            if hidden_game_aspect_count > 0 and not self.is_gm:
-                description += f"• *{hidden_game_aspect_count} hidden aspect{'s' if hidden_game_aspect_count > 1 else ''}*\n"
-            description += "\n"
-            
-        # Add Scene Aspects section
-        if scene_aspects:
-            description += "**Scene Aspects:**\n"
-            hidden_scene_aspect_count = 0
-            
-            for aspect in scene_aspects:
-                aspect_str = aspect.get_short_aspect_string(is_gm=self.is_gm)
-                if aspect_str:
-                    description += f"• {aspect_str}\n"
-                else:
-                    hidden_scene_aspect_count += 1
-            
-            if hidden_scene_aspect_count > 0 and not self.is_gm:
-                description += f"• *{hidden_scene_aspect_count} hidden aspect{'s' if hidden_scene_aspect_count > 1 else ''}*\n"
-            description += "\n"
-        
-        # Add Zones section with aspects
-        if scene_zones:
-            description += "**Zones:**\n"
-            for zone in scene_zones:
-                zone_line = f"• **{zone}**"
-                
-                # Add zone aspects if any exist
-                if zone in zone_aspects and zone_aspects[zone]:
-                    zone_aspect_strings = []
-                    hidden_zone_aspect_count = 0
-                    
-                    for aspect in zone_aspects[zone]:
-                        aspect_str = aspect.get_short_aspect_string(is_gm=self.is_gm)
-                        if aspect_str:
-                            zone_aspect_strings.append(aspect_str)
-                        else:
-                            hidden_zone_aspect_count += 1
-                    
-                    if zone_aspect_strings:
-                        zone_line += f" - {', '.join(zone_aspect_strings)}"
-                    
-                    if hidden_zone_aspect_count > 0 and not self.is_gm:
-                        if zone_aspect_strings:
-                            zone_line += f", *{hidden_zone_aspect_count} hidden*"
-                        else:
-                            zone_line += f" - *{hidden_zone_aspect_count} hidden aspect{'s' if hidden_zone_aspect_count > 1 else ''}*"
-                
-                description += zone_line + "\n"
-            description += "\n"
-        
-        # Get NPCs in scene
-        npc_ids = repositories.scene_npc.get_scene_npc_ids(str(self.guild_id), str(self.scene_id))
-        lines = []
-        for npc_id in npc_ids:
-            npc = repositories.entity.get_by_id(str(npc_id))
-            if npc:
-                lines.append(npc.format_npc_scene_entry(is_gm=self.is_gm))
-            
-        if lines:
-            description += "**NPCs:**\n"
-            description += "\n\n".join(lines)
-        else:
-            description += "📭 No NPCs are currently in this scene."
-            
-        embed.description = description
-        
-        # Add appropriate footer based on scene active status
-        if scene.is_active:
-            embed.set_footer(text="Scene view will update automatically when the scene changes.")
-            content = "🎭 **CURRENT SCENE** 🎭"
-        else:
-            embed.set_footer(text="This is not the active scene. Use /scene switch to make it active.")
-            content = "🎭 **INACTIVE SCENE** 🎭"
-        
-        if scene.image_url:
-            embed.set_image(url=scene.image_url)
-
-        return embed, content
+        return _build_fate_scene_content(self.guild_id, self.scene_id, self.is_gm)
         
     def build_view_components(self):
         # Add all buttons regardless of GM status - the interaction_check will handle permissions
@@ -153,6 +144,31 @@ class FateSceneView(BasePinnableSceneView):
         self.add_item(EditSceneAspectsButton(self))
         self.add_item(EditZonesButton(self))
         self.add_item(ManageNPCsButton(self))
+
+
+class FateSceneViewV2(BasePinnableSceneViewV2):
+    """Components v2 Fate scene view with aspects, zones, and NPC management."""
+
+    def __init__(self, guild_id=None, channel_id=None, scene_id=None, message_id=None, status_message: str = None):
+        super().__init__(guild_id=guild_id, channel_id=channel_id, scene_id=scene_id, message_id=message_id, status_message=status_message)
+
+        if not self.is_initialized:
+            for row in self.build_action_rows():
+                self.add_item(row)
+
+    async def create_scene_content(self):
+        return _build_fate_scene_content(self.guild_id, self.scene_id, self.is_gm)
+
+    def build_action_rows(self) -> list[ui.ActionRow]:
+        primary_row = ui.ActionRow()
+        primary_row.add_item(SceneNotesButton(self))
+        primary_row.add_item(EditGameAspectsButton(self))
+        primary_row.add_item(EditSceneAspectsButton(self))
+        primary_row.add_item(EditZonesButton(self))
+
+        secondary_row = ui.ActionRow()
+        secondary_row.add_item(ManageNPCsButton(self))
+        return [primary_row, secondary_row]
 
 
 class EditGameAspectsButton(ui.Button):
@@ -197,6 +213,10 @@ class EditZonesButton(ui.Button):
             return
             
         # Open zone selection for editing
+        if isinstance(self.parent_view, ui.LayoutView):
+            await interaction.response.send_message(view=ZoneEditOptionsViewV2(self.parent_view), ephemeral=True)
+            return
+
         await interaction.response.send_message(
             "Choose what to edit:",
             view=ZoneEditOptionsView(self.parent_view),
@@ -245,9 +265,8 @@ class ManageNPCsButton(ui.Button):
         
         # Send a message with the menu
         if options:
-            view = ManageNPCsView(self.parent_view, options)
+            view = FateManageNPCsViewV2(self.parent_view, options) if isinstance(self.parent_view, ui.LayoutView) else ManageNPCsView(self.parent_view, options)
             await interaction.response.send_message(
-                "Select NPCs to add/remove from the scene:", 
                 view=view,
                 ephemeral=True
             )
@@ -279,12 +298,78 @@ class ZoneEditOptionsView(discord.ui.View):
         await interaction.response.send_modal(EditZoneAspectsModal(self.parent_view, zones))
 
 
+class ZoneEditOptionsViewV2(ui.LayoutView):
+    def __init__(self, parent_view: 'FateSceneViewV2'):
+        super().__init__(timeout=300)
+        self.parent_view = parent_view
+        self._build_layout()
+
+    def _build_layout(self):
+        self.add_item(
+            ui.Container(
+                ui.TextDisplay("## Edit Fate Zones\nChoose whether to update the zone list or the aspects attached to zones."),
+                accent_colour=discord.Colour.purple(),
+            )
+        )
+        self.add_item(ui.Separator())
+
+        row = ui.ActionRow()
+        edit_zones_button = ui.Button(label="Edit Zone List", style=discord.ButtonStyle.primary)
+        edit_zones_button.callback = self.edit_zones
+        row.add_item(edit_zones_button)
+
+        edit_zone_aspects_button = ui.Button(label="Edit Zone Aspects", style=discord.ButtonStyle.secondary)
+        edit_zone_aspects_button.callback = self.edit_zone_aspects
+        row.add_item(edit_zone_aspects_button)
+        self.add_item(row)
+
+    async def edit_zones(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(EditZonesModal(self.parent_view))
+
+    async def edit_zone_aspects(self, interaction: discord.Interaction):
+        zones = repositories.fate_zones.get_zones(str(self.parent_view.guild_id), str(self.parent_view.scene_id)) or []
+
+        if not zones:
+            await interaction.response.send_message("❌ No zones found. Create zones first.", ephemeral=True)
+            return
+
+        await interaction.response.send_modal(EditZoneAspectsModal(self.parent_view, zones))
+
+
 class ManageNPCsView(discord.ui.View):
     def __init__(self, parent_view: FateSceneView, options):
         super().__init__(timeout=300)  # 5 minute timeout
         self.parent_view = parent_view
         self.add_item(ManageNPCsSelect(parent_view, options))
         self.add_item(DoneButton(parent_view))
+
+
+class FateManageNPCsViewV2(ui.LayoutView):
+    def __init__(self, parent_view, options):
+        super().__init__(timeout=300)
+        self.parent_view = parent_view
+        self.options = options
+        self._build_layout()
+
+    def _build_layout(self):
+        self.add_item(
+            ui.Container(
+                ui.TextDisplay(
+                    "## Manage Scene NPCs\n"
+                    "Selected NPCs stay in the scene. Unselected NPCs currently in the scene will be removed."
+                ),
+                accent_colour=discord.Colour.blurple(),
+            )
+        )
+        self.add_item(ui.Separator())
+
+        select_row = ui.ActionRow()
+        select_row.add_item(ManageNPCsSelect(self.parent_view, self.options))
+        self.add_item(select_row)
+
+        done_row = ui.ActionRow()
+        done_row.add_item(DoneButton(self.parent_view))
+        self.add_item(done_row)
 
 
 class ManageNPCsSelect(discord.ui.Select):

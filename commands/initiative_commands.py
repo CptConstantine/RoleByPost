@@ -73,7 +73,7 @@ class InitiativeCommands(commands.Cog):
         repositories.initiative.start_initiative(str(guild_id), str(channel_id), type, initiative.to_dict())
         
         # Create view and initialize the pinned message
-        view = factories.get_specific_initiative_view(guild_id, channel_id, initiative)
+        view = factories.get_specific_initiative_view(guild_id, channel_id, initiative, use_v2=True)
         
         # We need to trigger the view update to create the pinned message
         await view.update_view(interaction)
@@ -134,7 +134,8 @@ class InitiativeCommands(commands.Cog):
             interaction.guild.id, 
             interaction.channel.id, 
             initiative,
-            message_id
+            message_id,
+            use_v2=True
         )
         await view.update_view(interaction)
         
@@ -171,7 +172,8 @@ class InitiativeCommands(commands.Cog):
             interaction.guild.id, 
             interaction.channel.id, 
             initiative,
-            message_id
+            message_id,
+            use_v2=True
         )
         await view.update_view(interaction)
         

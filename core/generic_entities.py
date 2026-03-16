@@ -4,9 +4,10 @@ from discord import ui
 
 from core.generic_roll_mechanics import execute_roll
 from .base_models import AccessType, BaseCharacter, BaseEntity, EntityDefaults, EntityType, EntityLinkType, SystemType
-from .inventory_views import EditInventoryView
+from .inventory_views import EditInventoryView, EditInventoryViewV2
 from .shared_views import EditNameModal, EditNotesModal, embed_to_text
 from .generic_roll_formulas import GenericRollFormula, RollFormula
+from .view_config import components_v2_enabled
 
 
 class GenericEntity(BaseEntity):
@@ -28,7 +29,7 @@ class GenericEntity(BaseEntity):
         return cls(data)
     
     def get_sheet_edit_view(self, editor_id: int, is_gm: bool, guild_id: str = None) -> ui.View:
-        if guild_id:
+        if guild_id and components_v2_enabled():
             return GenericSheetEditViewV2(editor_id=editor_id, char_id=self.id, system=self.system, guild_id=guild_id)
         return GenericSheetEditView(editor_id=editor_id, char_id=self.id, system=self.system)
     
@@ -60,7 +61,7 @@ class GenericCharacter(BaseCharacter):
                 self._apply_default_field(key, value, guild_id) 
     
     def get_sheet_edit_view(self, editor_id: int, is_gm: bool, guild_id: str = None) -> ui.View:
-        if guild_id:
+        if guild_id and components_v2_enabled():
             return GenericSheetEditViewV2(editor_id=editor_id, char_id=self.id, system=self.system, guild_id=guild_id)
         return GenericSheetEditView(editor_id=editor_id, char_id=self.id, system=self.system)
 
@@ -110,11 +111,14 @@ class GenericCharacter(BaseCharacter):
         """
         from core import factories
         view = factories.get_specific_roll_formula_view(interaction.guild_id, self, SystemType.GENERIC, roll_formula_obj, difficulty)
-        await interaction.response.send_message(
-            content="Adjust your roll formula as needed, then finalize to roll.",
-            view=view,
-            ephemeral=True
-        )
+        if isinstance(view, discord.ui.LayoutView):
+            await interaction.response.send_message(view=view, ephemeral=True)
+        else:
+            await interaction.response.send_message(
+                content="Adjust your roll formula as needed, then finalize to roll.",
+                view=view,
+                ephemeral=True
+            )
 
     async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollFormula, difficulty: int = None):
         """
@@ -144,7 +148,7 @@ class GenericCompanion(BaseCharacter):
         return cls(data)
     
     def get_sheet_edit_view(self, editor_id: int, is_gm: bool, guild_id: str = None) -> ui.View:
-        if guild_id:
+        if guild_id and components_v2_enabled():
             return GenericSheetEditViewV2(editor_id=editor_id, char_id=self.id, system=self.system, guild_id=guild_id)
         return GenericSheetEditView(editor_id=editor_id, char_id=self.id, system=self.system)
 
@@ -180,12 +184,14 @@ class GenericCompanion(BaseCharacter):
         
         roll_formula_obj = GenericRollFormula(roll_parameters)
         view = factories.get_specific_roll_formula_view(interaction.guild_id, self, SystemType.GENERIC, roll_formula_obj, difficulty)
-
-        await interaction.response.send_message(
-            content=f"Rolling for {self.name}. Adjust as needed:",
-            view=view,
-            ephemeral=True
-        )
+        if isinstance(view, discord.ui.LayoutView):
+            await interaction.response.send_message(view=view, ephemeral=True)
+        else:
+            await interaction.response.send_message(
+                content=f"Rolling for {self.name}. Adjust as needed:",
+                view=view,
+                ephemeral=True
+            )
     
     async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollFormula, difficulty: int = None):
         """
@@ -301,9 +307,13 @@ class GenericSheetEditViewV2(ui.LayoutView):
     
     async def edit_inventory(self, interaction: discord.Interaction):
         """Switch to the inventory management view"""
+        from data.repositories.repository_factory import repositories
+
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
         await interaction.response.edit_message(
-            content="Editing inventory:", 
-            view=EditInventoryView(interaction.guild.id, self.editor_id, self.char_id)
+            content=None,
+            embed=None,
+            view=EditInventoryViewV2(interaction.guild.id, self.editor_id, self.char_id, is_gm=is_gm)
         )
 
 class GenericContainer(BaseEntity):
@@ -349,7 +359,7 @@ class GenericContainer(BaseEntity):
         return cls(data)
     
     def get_sheet_edit_view(self, editor_id: int, is_gm: bool, guild_id: str = None) -> ui.View:
-        if guild_id:
+        if guild_id and components_v2_enabled():
             return GenericContainerEditViewV2(editor_id=editor_id, char_id=self.id, system=self.system, guild_id=guild_id, is_gm=is_gm)
         return GenericContainerEditView(editor_id=editor_id, char_id=self.id, system=self.system, is_gm=is_gm)
 
@@ -1185,6 +1195,448 @@ class ContainerGiveQuantityModal(ui.Modal, title="Give Items"):
             await interaction.response.edit_message(content=success_message, view=None, embed=None)
 
 
+class ContainerTakeViewV2(ui.LayoutView):
+    """Components v2 interactive view for taking items from a container."""
+
+    def __init__(self, container_id: str, guild_id: int, user_id: int, parent_view=None,
+                 selected_item: dict = None, selected_character: dict = None):
+        super().__init__(timeout=300)
+        self.container_id = container_id
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.parent_view = parent_view
+        self.selected_item = selected_item
+        self.selected_character = selected_character
+        self._build_layout()
+
+    def _build_layout(self):
+        from data.repositories.repository_factory import repositories
+
+        container = repositories.entity.get_by_id(self.container_id)
+        container_name = container.name if container else "Container"
+
+        summary = ui.Container(accent_colour=discord.Colour.green())
+        summary.add_item(ui.TextDisplay(self._format_summary_text(container_name)))
+        self.add_item(summary)
+        self.add_item(ui.Separator())
+
+        if not self.selected_item:
+            item_options = self._get_container_items()
+            if item_options:
+                item_row = ui.ActionRow()
+                item_select = ui.Select(
+                    placeholder="Select item to take...",
+                    options=item_options[:25],
+                    custom_id=f"container_take_item_{self.container_id}_{self.user_id}"
+                )
+                item_select.callback = self.item_selected
+                item_row.add_item(item_select)
+                self.add_item(item_row)
+            else:
+                empty = ui.Container(accent_colour=discord.Colour.orange())
+                empty.add_item(ui.TextDisplay("No items are currently in this container."))
+                self.add_item(empty)
+
+        if self.selected_item and not self.selected_character:
+            char_options = self._get_user_characters()
+            if char_options:
+                char_row = ui.ActionRow()
+                char_select = ui.Select(
+                    placeholder="Select character to receive item...",
+                    options=char_options[:25],
+                    custom_id=f"container_take_character_{self.container_id}_{self.user_id}"
+                )
+                char_select.callback = self.character_selected
+                char_row.add_item(char_select)
+                self.add_item(char_row)
+            else:
+                empty = ui.Container(accent_colour=discord.Colour.orange())
+                empty.add_item(ui.TextDisplay("You do not have any accessible characters to receive this item."))
+                self.add_item(empty)
+
+        controls = ui.ActionRow()
+        if self.selected_item and self.selected_character:
+            transfer_btn = ui.Button(
+                label=f"Take {self.selected_item['name']} → {self.selected_character['name']}",
+                style=discord.ButtonStyle.success
+            )
+            transfer_btn.callback = self.confirm_take
+            controls.add_item(transfer_btn)
+
+        back_btn = ui.Button(label="🔙 Back to Container", style=discord.ButtonStyle.secondary)
+        back_btn.callback = self.back_to_container
+        controls.add_item(back_btn)
+        self.add_item(controls)
+
+    def _format_summary_text(self, container_name: str) -> str:
+        lines = [f"## 📤 Take Items from {container_name}", ""]
+        if self.selected_item:
+            lines.append(f"**Item:** {self.selected_item['name']} (x{self.selected_item['quantity']})")
+        else:
+            lines.append("1. Select an item from the container.")
+
+        if self.selected_character:
+            lines.append(f"**Recipient:** {self.selected_character['name']}")
+        elif self.selected_item:
+            lines.append("2. Select a character to receive the item.")
+
+        if self.selected_item and self.selected_character:
+            lines.append("")
+            lines.append("Use the button below to confirm the transfer quantity.")
+
+        return "\n".join(lines)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("You can't use this interface.", ephemeral=True)
+            return False
+        return True
+
+    def _get_container_items(self):
+        from data.repositories.repository_factory import repositories
+        container = repositories.entity.get_by_id(self.container_id)
+        if not container:
+            return []
+
+        items = container.get_contained_items(self.guild_id)
+        options = []
+        for item in items[:25]:
+            links = container.get_links_to_entity(self.guild_id, item.id, EntityLinkType.POSSESSES)
+            quantity = links[0].metadata.get("quantity", 1) if links else 1
+            quantity_str = f" (x{quantity})" if quantity > 1 else ""
+            options.append(discord.SelectOption(
+                label=f"{item.name}{quantity_str}",
+                value=item.id,
+                description=f"Available: {quantity}"
+            ))
+        return options
+
+    def _get_user_characters(self):
+        from data.repositories.repository_factory import repositories
+        user_chars = repositories.character.get_accessible_characters(self.guild_id, self.user_id)
+        options = []
+        for char in user_chars[:25]:
+            options.append(discord.SelectOption(
+                label=f"{char.name} ({char.entity_type.value})",
+                value=char.id,
+                description="Character"
+            ))
+        return options
+
+    async def item_selected(self, interaction: discord.Interaction):
+        selected_item_id = interaction.data['values'][0]
+
+        from data.repositories.repository_factory import repositories
+        container = repositories.entity.get_by_id(self.container_id)
+        items = container.get_contained_items(self.guild_id) if container else []
+        selected_item_entity = next((item for item in items if item.id == selected_item_id), None)
+
+        if not selected_item_entity:
+            await interaction.response.send_message("❌ Selected item not found.", ephemeral=True)
+            return
+
+        links = container.get_links_to_entity(self.guild_id, selected_item_id, EntityLinkType.POSSESSES)
+        quantity = links[0].metadata.get("quantity", 1) if links else 1
+        selected_item = {
+            'id': selected_item_id,
+            'entity': selected_item_entity,
+            'name': selected_item_entity.name,
+            'quantity': quantity
+        }
+
+        new_view = ContainerTakeViewV2(
+            self.container_id,
+            self.guild_id,
+            self.user_id,
+            parent_view=self.parent_view,
+            selected_item=selected_item,
+            selected_character=self.selected_character,
+        )
+        await interaction.response.edit_message(content=None, embed=None, view=new_view)
+
+    async def character_selected(self, interaction: discord.Interaction):
+        selected_char_id = interaction.data['values'][0]
+
+        from data.repositories.repository_factory import repositories
+        character = repositories.entity.get_by_id(selected_char_id)
+        if not character:
+            await interaction.response.send_message("❌ Selected character not found.", ephemeral=True)
+            return
+
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        if not character.can_be_accessed_by(str(self.user_id), is_gm):
+            await interaction.response.send_message("❌ You don't have access to that character.", ephemeral=True)
+            return
+
+        selected_character = {
+            'id': selected_char_id,
+            'entity': character,
+            'name': character.name
+        }
+
+        new_view = ContainerTakeViewV2(
+            self.container_id,
+            self.guild_id,
+            self.user_id,
+            parent_view=self.parent_view,
+            selected_item=self.selected_item,
+            selected_character=selected_character,
+        )
+        await interaction.response.edit_message(content=None, embed=None, view=new_view)
+
+    async def confirm_take(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(
+            ContainerTakeQuantityModal(
+                self.selected_item,
+                self.selected_character,
+                self.container_id,
+                self.guild_id,
+                parent_view=self.parent_view
+            )
+        )
+
+    async def back_to_container(self, interaction: discord.Interaction):
+        if self.parent_view:
+            await self.parent_view._refresh_container_view(interaction)
+            return
+
+        from data.repositories.repository_factory import repositories
+        container = repositories.entity.get_by_id(self.container_id)
+        if not container:
+            await interaction.response.send_message("❌ Container not found.", ephemeral=True)
+            return
+
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        view = GenericContainerEditViewV2(
+            interaction.user.id,
+            self.container_id,
+            container.system,
+            guild_id=str(interaction.guild.id),
+            is_gm=is_gm,
+        )
+        await interaction.response.edit_message(content=None, embed=None, view=view)
+
+
+class ContainerGiveViewV2(ui.LayoutView):
+    """Components v2 interactive view for giving items to a container."""
+
+    def __init__(self, container_id: str, guild_id: int, user_id: int, parent_view=None,
+                 selected_character: dict = None, selected_item: dict = None):
+        super().__init__(timeout=300)
+        self.container_id = container_id
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.parent_view = parent_view
+        self.selected_character = selected_character
+        self.selected_item = selected_item
+        self._build_layout()
+
+    def _build_layout(self):
+        from data.repositories.repository_factory import repositories
+
+        container = repositories.entity.get_by_id(self.container_id)
+        container_name = container.name if container else "Container"
+
+        summary = ui.Container(accent_colour=discord.Colour.blurple())
+        summary.add_item(ui.TextDisplay(self._format_summary_text(container_name)))
+        self.add_item(summary)
+        self.add_item(ui.Separator())
+
+        if not self.selected_character:
+            char_options = self._get_user_characters()
+            if char_options:
+                char_row = ui.ActionRow()
+                char_select = ui.Select(
+                    placeholder="Select character to give from...",
+                    options=char_options[:25],
+                    custom_id=f"container_give_character_{self.container_id}_{self.user_id}"
+                )
+                char_select.callback = self.character_selected
+                char_row.add_item(char_select)
+                self.add_item(char_row)
+            else:
+                empty = ui.Container(accent_colour=discord.Colour.orange())
+                empty.add_item(ui.TextDisplay("You do not have any accessible characters with inventory."))
+                self.add_item(empty)
+
+        if self.selected_character and not self.selected_item:
+            item_options = self._get_character_items()
+            if item_options:
+                item_row = ui.ActionRow()
+                item_select = ui.Select(
+                    placeholder="Select item to give...",
+                    options=item_options[:25],
+                    custom_id=f"container_give_item_{self.container_id}_{self.user_id}"
+                )
+                item_select.callback = self.item_selected
+                item_row.add_item(item_select)
+                self.add_item(item_row)
+            else:
+                empty = ui.Container(accent_colour=discord.Colour.orange())
+                empty.add_item(ui.TextDisplay("That character does not have any items to transfer."))
+                self.add_item(empty)
+
+        controls = ui.ActionRow()
+        if self.selected_character and self.selected_item:
+            transfer_btn = ui.Button(
+                label=f"Give {self.selected_item['name']} from {self.selected_character['name']}",
+                style=discord.ButtonStyle.primary
+            )
+            transfer_btn.callback = self.confirm_give
+            controls.add_item(transfer_btn)
+
+        back_btn = ui.Button(label="🔙 Back to Container", style=discord.ButtonStyle.secondary)
+        back_btn.callback = self.back_to_container
+        controls.add_item(back_btn)
+        self.add_item(controls)
+
+    def _format_summary_text(self, container_name: str) -> str:
+        lines = [f"## 📥 Give Items to {container_name}", ""]
+        if self.selected_character:
+            lines.append(f"**Source:** {self.selected_character['name']}")
+        else:
+            lines.append("1. Select a character to give items from.")
+
+        if self.selected_item:
+            lines.append(f"**Item:** {self.selected_item['name']} (x{self.selected_item['quantity']})")
+        elif self.selected_character:
+            lines.append("2. Select an item from that character.")
+
+        if self.selected_character and self.selected_item:
+            lines.append("")
+            lines.append("Use the button below to confirm the transfer quantity.")
+
+        return "\n".join(lines)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("You can't use this interface.", ephemeral=True)
+            return False
+        return True
+
+    def _get_user_characters(self):
+        from data.repositories.repository_factory import repositories
+        user_chars = repositories.character.get_accessible_characters(self.guild_id, self.user_id)
+        options = []
+        for char in user_chars[:25]:
+            options.append(discord.SelectOption(
+                label=f"{char.name} ({char.entity_type.value})",
+                value=char.id,
+                description="Character"
+            ))
+        return options
+
+    def _get_character_items(self):
+        if not self.selected_character:
+            return []
+
+        character = self.selected_character['entity']
+        items = character.get_inventory(self.guild_id)
+        options = []
+        for item in items[:25]:
+            links = character.get_links_to_entity(self.guild_id, item.id, EntityLinkType.POSSESSES)
+            quantity = links[0].metadata.get("quantity", 1) if links else 1
+            quantity_str = f" (x{quantity})" if quantity > 1 else ""
+            options.append(discord.SelectOption(
+                label=f"{item.name}{quantity_str}",
+                value=item.id,
+                description=f"Available: {quantity}"
+            ))
+        return options
+
+    async def character_selected(self, interaction: discord.Interaction):
+        selected_char_id = interaction.data['values'][0]
+
+        from data.repositories.repository_factory import repositories
+        character = repositories.entity.get_by_id(selected_char_id)
+        if not character:
+            await interaction.response.send_message("❌ Selected character not found.", ephemeral=True)
+            return
+
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        if not character.can_be_accessed_by(str(self.user_id), is_gm):
+            await interaction.response.send_message("❌ You don't have access to that character.", ephemeral=True)
+            return
+
+        selected_character = {
+            'id': selected_char_id,
+            'entity': character,
+            'name': character.name
+        }
+
+        new_view = ContainerGiveViewV2(
+            self.container_id,
+            self.guild_id,
+            self.user_id,
+            parent_view=self.parent_view,
+            selected_character=selected_character,
+            selected_item=self.selected_item,
+        )
+        await interaction.response.edit_message(content=None, embed=None, view=new_view)
+
+    async def item_selected(self, interaction: discord.Interaction):
+        selected_item_id = interaction.data['values'][0]
+
+        character = self.selected_character['entity']
+        items = character.get_inventory(self.guild_id)
+        selected_item_entity = next((item for item in items if item.id == selected_item_id), None)
+
+        if not selected_item_entity:
+            await interaction.response.send_message("❌ Selected item not found.", ephemeral=True)
+            return
+
+        links = character.get_links_to_entity(self.guild_id, selected_item_id, EntityLinkType.POSSESSES)
+        quantity = links[0].metadata.get("quantity", 1) if links else 1
+        selected_item = {
+            'id': selected_item_id,
+            'entity': selected_item_entity,
+            'name': selected_item_entity.name,
+            'quantity': quantity
+        }
+
+        new_view = ContainerGiveViewV2(
+            self.container_id,
+            self.guild_id,
+            self.user_id,
+            parent_view=self.parent_view,
+            selected_character=self.selected_character,
+            selected_item=selected_item,
+        )
+        await interaction.response.edit_message(content=None, embed=None, view=new_view)
+
+    async def confirm_give(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(
+            ContainerGiveQuantityModal(
+                self.selected_character,
+                self.selected_item,
+                self.container_id,
+                self.guild_id,
+                parent_view=self.parent_view
+            )
+        )
+
+    async def back_to_container(self, interaction: discord.Interaction):
+        if self.parent_view:
+            await self.parent_view._refresh_container_view(interaction)
+            return
+
+        from data.repositories.repository_factory import repositories
+        container = repositories.entity.get_by_id(self.container_id)
+        if not container:
+            await interaction.response.send_message("❌ Container not found.", ephemeral=True)
+            return
+
+        is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
+        view = GenericContainerEditViewV2(
+            interaction.user.id,
+            self.container_id,
+            container.system,
+            guild_id=str(interaction.guild.id),
+            is_gm=is_gm,
+        )
+        await interaction.response.edit_message(content=None, embed=None, view=view)
+
+
 class GenericContainerEditViewV2(ui.LayoutView):
     """Components v2 container edit view with self-contained content rendering"""
 
@@ -1366,15 +1818,15 @@ class GenericContainerEditViewV2(ui.LayoutView):
         container.reveal_to_players()
         repositories.entity.upsert_entity(str(interaction.guild.id), container, system=container.system)
 
-        # Send a public message (non-ephemeral) using V1 view
-        embed = container.format_full_sheet(interaction.guild.id, is_gm=False)
-        public_view = GenericContainerEditView(interaction.user.id, self.char_id, self.system, is_gm=False)
-        await interaction.response.send_message(
-            content=f"\U0001F4E6 **{container.name}** has been revealed!",
-            embed=embed,
-            view=public_view,
-            ephemeral=False
+        public_view = GenericContainerEditViewV2(
+            interaction.user.id,
+            self.char_id,
+            self.system,
+            guild_id=self.guild_id,
+            is_gm=False,
+            status_message=f"📦 **{container.name}** has been revealed!"
         )
+        await interaction.response.send_message(view=public_view, ephemeral=False)
 
     async def take_items_interactive(self, interaction: discord.Interaction):
         from data.repositories.repository_factory import repositories
@@ -1385,24 +1837,16 @@ class GenericContainerEditViewV2(ui.LayoutView):
             return
 
         # Transition to V1 Take view
-        view = ContainerTakeView(self.char_id, interaction.guild.id, interaction.user.id, parent_view=self)
-        await interaction.response.edit_message(
-            content=f"\U0001F4E4 **Take items from {container.name}**\nSelect an item and character:",
-            embed=None,
-            view=view
-        )
+        view = ContainerTakeViewV2(self.char_id, interaction.guild.id, interaction.user.id, parent_view=self)
+        await interaction.response.edit_message(content=None, embed=None, view=view)
 
     async def give_items_interactive(self, interaction: discord.Interaction):
         from data.repositories.repository_factory import repositories
         container = repositories.entity.get_by_id(self.char_id)
 
         # Transition to V1 Give view
-        view = ContainerGiveView(self.char_id, interaction.guild.id, interaction.user.id, parent_view=self)
-        await interaction.response.edit_message(
-            content=f"\U0001F4E5 **Give items to {container.name}**\nSelect a character and item:",
-            embed=None,
-            view=view
-        )
+        view = ContainerGiveViewV2(self.char_id, interaction.guild.id, interaction.user.id, parent_view=self)
+        await interaction.response.edit_message(content=None, embed=None, view=view)
 
     async def manage_access(self, interaction: discord.Interaction):
         from data.repositories.repository_factory import repositories

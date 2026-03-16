@@ -4,7 +4,93 @@ import discord
 from discord import ui, SelectOption
 from core.initiative_types import GenericInitiative, PopcornInitiative
 from core.base_models import BaseInitiative
+from core.shared_views import embed_to_text
 from data.repositories.repository_factory import repositories
+
+
+def _truncate_text(text: str, limit: int = 4000) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
+
+
+def _get_embed_colour(embed: discord.Embed, fallback: discord.Colour = discord.Colour.blue()) -> discord.Colour:
+    if embed and embed.colour and embed.colour.value:
+        return embed.colour
+    return fallback
+
+
+def _build_generic_initiative_content(initiative: GenericInitiative):
+    embed = discord.Embed(
+        title="📊 Initiative Tracker",
+        color=discord.Color.blue()
+    )
+
+    if not initiative or not initiative.is_started:
+        content = "🎲 **INITIATIVE TRACKING** 🎲\nPress Start Initiative to begin."
+        embed.description = "Press Start Initiative to begin."
+        embed.description += "\n\nCurrent Initiative Order: {" + ", ".join([p.name for p in initiative.participants]) + "}" if initiative and initiative.participants else ""
+    elif not initiative.participants:
+        content = "🎲 **INITIATIVE TRACKING** 🎲\nNo participants in initiative."
+        embed.description = "No participants in initiative."
+    else:
+        current_name = initiative.get_participant_name(initiative.current)
+        content = f"🎲 **INITIATIVE TRACKING** 🎲\n\n🔔 It's now **{current_name}**'s turn! (Round {initiative.round_number})"
+        embed.add_field(name="Round", value=str(initiative.round_number), inline=True)
+        embed.add_field(name="Current Turn", value=current_name, inline=True)
+
+        order_text = "\n".join([
+            f"{i+1}. {p.name}" + (" ◀️" if p.id == initiative.current else "")
+            for i, p in enumerate(initiative.participants)
+        ])
+        embed.add_field(name="Initiative Order", value=order_text or "No participants", inline=False)
+
+    return embed, content
+
+
+def _build_popcorn_initiative_content(initiative: PopcornInitiative):
+    embed = discord.Embed(
+        title="📊 Popcorn Initiative",
+        color=discord.Color.gold()
+    )
+
+    if not initiative:
+        content = "🎲 **POPCORN INITIATIVE** 🎲\nInitiating..."
+        embed.description = "Initiating..."
+        return embed, content
+
+    embed.add_field(name="Round", value=str(initiative.round_number), inline=True)
+
+    if initiative.remaining_in_round:
+        remaining_names = [initiative.get_participant_name(pid) for pid in initiative.remaining_in_round]
+        embed.add_field(name="Remaining", value=", ".join(remaining_names), inline=True)
+
+    current_participant = next((p for p in initiative.participants if p.id == initiative.current), None)
+    mention = ""
+    if current_participant and not current_participant.is_npc and current_participant.owner_id:
+        mention = f"<@{current_participant.owner_id}>, it's your turn!"
+
+    if initiative.is_round_end():
+        next_name = initiative.get_participant_name(initiative.current)
+        content = f"🎲 **POPCORN INITIATIVE** 🎲"
+        content += f"\n{mention}"
+        embed.description = f"Current Turn: **{next_name}**\n\nEnd of the round\nUse the dropdown below to pick who goes next when your turn is complete."
+    elif initiative.current:
+        next_name = initiative.get_participant_name(initiative.current)
+        content = f"🎲 **POPCORN INITIATIVE** 🎲"
+        content += f"\n{mention}"
+        embed.description = f"Current Turn: **{next_name}**\n\nUse the dropdown below to pick who goes next when your turn is complete."
+    else:
+        content = "🎲 **POPCORN INITIATIVE** 🎲"
+        embed.description = "GM: pick who goes first."
+
+    participants_list = "\n".join([
+        f"{p.name}" + (" ◀️" if p.id == initiative.current else "")
+        for p in initiative.participants
+    ])
+    embed.add_field(name="Participants", value=participants_list or "No participants", inline=False)
+
+    return embed, content
 
 async def get_gm_ids(guild: discord.Guild):
     """Get GM user IDs from the guild"""
@@ -164,6 +250,172 @@ class BasePinnedInitiativeView(ABC, discord.ui.View):
                 mention_str= f"{mention}"
                 await interaction.response.send_message(mention_str, ephemeral=False)
 
+
+class BasePinnedInitiativeViewV2(ABC, discord.ui.LayoutView):
+    """Components v2 base class for persistent initiative trackers."""
+
+    def __init__(self, guild_id=None, channel_id=None, initiative: BaseInitiative = None, message_id=None, status_message: str = None):
+        super().__init__(timeout=None)
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.initiative = initiative
+        self.message_id = message_id
+        self.status_message = status_message
+        self.is_initialized = guild_id is not None and channel_id is not None and initiative is not None
+
+    async def get_initiative_data(self, interaction):
+        guild_id = interaction.guild.id
+        channel_id = interaction.channel.id
+
+        initiative = repositories.initiative.get_active_initiative(str(guild_id), str(channel_id))
+        if not initiative:
+            return False
+
+        message_id = repositories.initiative.get_initiative_message_id(str(guild_id), str(channel_id))
+        if not message_id:
+            return False
+
+        self.guild_id = guild_id
+        self.channel_id = channel_id
+        self.message_id = message_id
+        self.initiative = initiative
+        self.is_initialized = True
+        return True
+
+    @abstractmethod
+    async def update_view(self, interaction: discord.Interaction):
+        pass
+
+    @abstractmethod
+    async def create_initiative_content(self):
+        pass
+
+    @abstractmethod
+    def build_action_rows(self) -> list[ui.ActionRow]:
+        pass
+
+    async def prepare_layout(self, status_message: str = None):
+        if status_message is not None:
+            self.status_message = status_message
+        await self._build_layout()
+
+    async def _build_layout(self):
+        self.clear_items()
+
+        if self.status_message:
+            self.add_item(
+                ui.Container(
+                    ui.TextDisplay(_truncate_text(self.status_message)),
+                    accent_colour=discord.Colour.green(),
+                )
+            )
+
+        if not self.is_initialized:
+            return
+
+        embed, content = await self.create_initiative_content()
+        colour = _get_embed_colour(embed)
+
+        if content:
+            self.add_item(
+                ui.Container(
+                    ui.TextDisplay(_truncate_text(content, 1000)),
+                    accent_colour=colour,
+                )
+            )
+
+        self.add_item(
+            ui.Container(
+                ui.TextDisplay(_truncate_text(embed_to_text(embed))),
+                accent_colour=colour,
+            )
+        )
+
+        action_rows = self.build_action_rows()
+        if action_rows:
+            self.add_item(ui.Separator())
+            for row in action_rows:
+                self.add_item(row)
+
+    async def get_pinned_initiative_message(self, interaction: discord.Interaction):
+        channel = interaction.channel
+
+        if not self.message_id:
+            self.message_id = repositories.initiative.get_initiative_message_id(str(self.guild_id), str(self.channel_id))
+
+        if self.message_id:
+            try:
+                return await channel.fetch_message(int(self.message_id))
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass
+
+        return None
+
+    async def _notify_current_participant(self, interaction: discord.Interaction, initiative: BaseInitiative = None):
+        initiative = initiative or self.initiative
+        if not initiative or not initiative.participants:
+            return
+
+        current_participant = next((p for p in initiative.participants if p.id == initiative.current), None)
+        if not current_participant or current_participant.is_npc or not current_participant.owner_id:
+            return
+
+        mention = f"<@{current_participant.owner_id}>, it's your turn!"
+        if not interaction.response.is_done():
+            await interaction.response.send_message(mention, ephemeral=False)
+        else:
+            await interaction.followup.send(mention, ephemeral=False)
+
+    async def update_initiative_message(self, interaction: discord.Interaction, content=None, embed: discord.Embed = None, view: discord.ui.View = None):
+        message = await self.get_pinned_initiative_message(interaction)
+
+        if embed is None or content is None:
+            embed, content = await self.create_initiative_content()
+
+        if not view:
+            view = self
+
+        try:
+            if hasattr(view, "prepare_layout"):
+                await view.prepare_layout()
+
+            if message:
+                await message.edit(content=None, embed=None, view=view)
+            else:
+                message = await interaction.channel.send(view=view)
+                try:
+                    await message.pin(reason="Initiative tracking")
+                    self.message_id = message.id
+                    repositories.initiative.set_initiative_message_id(str(self.guild_id), str(self.channel_id), str(message.id))
+
+                    temp_msg = await interaction.channel.send("📌 Initiative tracking has been pinned. You can always find the current turn at the top of the channel.")
+
+                    async for msg in interaction.channel.history(limit=10):
+                        if msg.type == discord.MessageType.pins_add:
+                            await msg.delete()
+                            break
+
+                    await temp_msg.delete(delay=8.0)
+                except discord.Forbidden:
+                    await message.edit(view=view)
+
+            initiative = view.initiative if hasattr(view, "initiative") else self.initiative
+            await self._notify_current_participant(interaction, initiative=initiative)
+            return message
+        except Exception as e:
+            logging.error(f"Error updating LayoutView initiative message: {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "⚠️ Failed to update the initiative message. The previous initiative message may have been deleted.",
+                    ephemeral=True
+                )
+            else:
+                await interaction.followup.send(
+                    "⚠️ Failed to update the initiative message. The previous initiative message may have been deleted.",
+                    ephemeral=True
+                )
+            return None
+
 class GenericInitiativeView(BasePinnedInitiativeView):
     """
     View for generic initiative: End Turn button, shows current participant.
@@ -313,38 +565,91 @@ class GenericInitiativeView(BasePinnedInitiativeView):
 
     async def create_initiative_content(self):
         """Create the content for a generic initiative view"""
-        embed = discord.Embed(
-            title="📊 Initiative Tracker",
-            color=discord.Color.blue()
-        )
-        
-        # Add fields to the embed based on initiative state
+        return _build_generic_initiative_content(self.initiative)
+
+
+class GenericInitiativeViewV2(BasePinnedInitiativeViewV2):
+    """Components v2 generic initiative tracker."""
+
+    def __init__(self, guild_id=None, channel_id=None, initiative: GenericInitiative = None, message_id=None, status_message: str = None):
+        super().__init__(guild_id, channel_id, initiative, message_id, status_message=status_message)
+
+        if not self.is_initialized:
+            row = ui.ActionRow()
+            row.add_item(StartInitiativeButton(self))
+            row.add_item(EndTurnButton(self))
+            row.add_item(SetOrderButton(self))
+            self.add_item(row)
+
+    def build_action_rows(self) -> list[ui.ActionRow]:
+        row = ui.ActionRow()
         if not self.initiative or not self.initiative.is_started:
-            content = "🎲 **INITIATIVE TRACKING** 🎲\nPress Start Initiative to begin."
-            embed.description = "Press Start Initiative to begin."
-            embed.description += "\n\nCurrent Initiative Order: {" + ", ".join([p.name for p in self.initiative.participants]) + "}" if self.initiative and self.initiative.participants else ""
-            
-        elif not self.initiative.participants:
-            content = "🎲 **INITIATIVE TRACKING** 🎲\nNo participants in initiative."
-            embed.description = "No participants in initiative."
-            
+            row.add_item(SetOrderButton(self))
+            row.add_item(StartInitiativeButton(self))
         else:
-            current_name = self.initiative.get_participant_name(self.initiative.current)
+            row.add_item(EndTurnButton(self))
+        return [row]
 
-            content = f"🎲 **INITIATIVE TRACKING** 🎲\n\n🔔 It's now **{current_name}**'s turn! (Round {self.initiative.round_number})"
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == interaction.client.user.id:
+            return True
 
-            # Add round information
-            embed.add_field(name="Round", value=str(self.initiative.round_number), inline=True)
-            embed.add_field(name="Current Turn", value=current_name, inline=True)
-            
-            # Add the initiative order to the embed
-            order_text = "\n".join([
-                f"{i+1}. {p.name}" + (" ◀️" if p.id == self.initiative.current else "") 
-                for i, p in enumerate(self.initiative.participants)
-            ])
-            embed.add_field(name="Initiative Order", value=order_text or "No participants", inline=False)
-            
-        return embed, content
+        if not self.is_initialized:
+            if not await self.get_initiative_data(interaction):
+                await interaction.response.send_message("❌ No active initiative in this channel.", ephemeral=True)
+                return False
+
+        component_id = interaction.data.get("custom_id", "")
+        gm_ids = await get_gm_ids(interaction.guild)
+        is_gm = str(interaction.user.id) in gm_ids
+
+        current_participant = None
+        if self.initiative and self.initiative.current:
+            current_participant = next((p for p in self.initiative.participants if p.id == self.initiative.current), None)
+
+        is_current_participant = (
+            current_participant is not None and str(current_participant.owner_id) == str(interaction.user.id)
+        )
+
+        if component_id in {"start_initiative", "set_initiative_order"} and not is_gm:
+            message = "❌ Only GMs can start initiative." if component_id == "start_initiative" else "❌ Only GMs can set the initiative order."
+            await interaction.response.send_message(message, ephemeral=True)
+            return False
+
+        if component_id == "end_turn" and not (is_gm or is_current_participant):
+            await interaction.response.send_message("❌ It's not your turn.", ephemeral=True)
+            return False
+
+        return True
+
+    async def handle_end_turn(self, interaction):
+        self.initiative.advance_turn()
+        repositories.initiative.update_initiative_state(str(self.guild_id), str(self.channel_id), self.initiative)
+        new_view = GenericInitiativeViewV2(self.guild_id, self.channel_id, self.initiative, self.message_id)
+        embed, content = await self.create_initiative_content()
+        await self.update_initiative_message(interaction, content=content, embed=embed, view=new_view)
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True, thinking=False)
+
+    async def handle_start_initiative(self, interaction):
+        self.initiative.is_started = True
+        self.initiative.current_index = 0
+        repositories.initiative.update_initiative_state(str(self.guild_id), str(self.channel_id), self.initiative)
+        new_view = GenericInitiativeViewV2(self.guild_id, self.channel_id, self.initiative, self.message_id)
+        embed, content = await self.create_initiative_content()
+        await self.update_initiative_message(interaction, content=content, embed=embed, view=new_view)
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True, thinking=False)
+
+    async def update_view(self, interaction: discord.Interaction):
+        new_view = GenericInitiativeViewV2(self.guild_id, self.channel_id, self.initiative, self.message_id)
+        embed, content = await self.create_initiative_content()
+        await self.update_initiative_message(interaction, content=content, embed=embed, view=new_view)
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True, thinking=False)
+
+    async def create_initiative_content(self):
+        return _build_generic_initiative_content(self.initiative)
 
 class StartInitiativeButton(ui.Button):
     def __init__(self, parent_view: GenericInitiativeView):
@@ -433,6 +738,49 @@ class EmptyPersistentSelect(ui.Select):
             "⚠️ The bot was restarted. The initiative view has been refreshed. Please make your selection now.",
             ephemeral=True
         )
+
+
+class EmptyPersistentSelectV2(ui.Select):
+    """Placeholder select used to register persistent Components v2 popcorn selectors."""
+
+    def __init__(self, parent_view, custom_id, placeholder):
+        super().__init__(
+            placeholder=placeholder,
+            min_values=1,
+            max_values=1,
+            options=[SelectOption(label="Loading...", value="loading")],
+            custom_id=custom_id
+        )
+        self.parent_view = parent_view
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        if not await self.parent_view.initialize_if_needed(interaction):
+            await interaction.followup.send("❌ No active initiative in this channel.", ephemeral=True)
+            return
+
+        new_view = PopcornInitiativeViewV2(
+            guild_id=self.parent_view.guild_id,
+            channel_id=self.parent_view.channel_id,
+            initiative=self.parent_view.initiative,
+            message_id=self.parent_view.message_id
+        )
+
+        try:
+            await new_view.prepare_layout()
+            message = await interaction.channel.fetch_message(int(self.parent_view.message_id))
+            await message.edit(content=None, embed=None, view=new_view)
+            await interaction.followup.send(
+                "⚠️ The bot was restarted. The initiative view has been refreshed. Please make your selection now.",
+                ephemeral=True
+            )
+        except Exception as e:
+            logging.error(f"Error refreshing LayoutView initiative after restart: {e}")
+            await interaction.followup.send(
+                "❌ Failed to refresh the initiative view. Please try again or restart initiative.",
+                ephemeral=True
+            )
 
 class PopcornInitiativeView(BasePinnedInitiativeView):
     """
@@ -625,6 +973,138 @@ class PopcornInitiativeView(BasePinnedInitiativeView):
         if not interaction.response.is_done():
                 await interaction.response.defer(ephemeral=True, thinking=False)
 
+
+class PopcornInitiativeViewV2(BasePinnedInitiativeViewV2):
+    """Components v2 popcorn initiative tracker."""
+
+    def __init__(self, guild_id=None, channel_id=None, initiative=None, message_id=None, status_message: str = None):
+        super().__init__(guild_id, channel_id, initiative, message_id, status_message=status_message)
+
+        if not self.is_initialized:
+            first_row = ui.ActionRow()
+            first_row.add_item(EmptyPersistentSelectV2(self, "first_picker", "Pick who goes first..."))
+            self.add_item(first_row)
+
+            next_row = ui.ActionRow()
+            next_row.add_item(EmptyPersistentSelectV2(self, "next_picker", "Pick who goes next..."))
+            self.add_item(next_row)
+
+    def build_action_rows(self) -> list[ui.ActionRow]:
+        if not self.initiative:
+            return []
+
+        if self.initiative.current is None:
+            unique_participants = {}
+            for participant in self.initiative.participants:
+                unique_participants[participant.id] = participant
+
+            options = [SelectOption(label=participant.name, value=participant.id) for participant in unique_participants.values()]
+            if not options:
+                return []
+
+            row = ui.ActionRow()
+            row.add_item(FirstPickerSelect(options, self))
+            return [row]
+
+        options = []
+        if self.initiative.is_round_end():
+            for participant in self.initiative.participants:
+                options.append(SelectOption(label=participant.name, value=participant.id))
+        else:
+            for participant_id in self.initiative.remaining_in_round:
+                name = self.initiative.get_participant_name(participant_id)
+                options.append(SelectOption(label=name, value=participant_id))
+
+        if not options:
+            return []
+
+        row = ui.ActionRow()
+        row.add_item(PopcornNextSelect(options, self))
+        return [row]
+
+    async def initialize_if_needed(self, interaction):
+        if not self.is_initialized:
+            if not await self.get_initiative_data(interaction):
+                return False
+        return True
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == interaction.client.user.id:
+            return True
+
+        was_initialized = self.is_initialized
+        if not await self.initialize_if_needed(interaction):
+            await interaction.response.send_message("❌ No active initiative in this channel.", ephemeral=True)
+            return False
+
+        gm_ids = await get_gm_ids(interaction.guild)
+        is_gm = str(interaction.user.id) in gm_ids
+
+        current_participant = None
+        if self.initiative and self.initiative.current:
+            current_participant = next((p for p in self.initiative.participants if p.id == self.initiative.current), None)
+
+        is_current_participant = (
+            current_participant is not None and str(current_participant.owner_id) == str(interaction.user.id)
+        )
+
+        if interaction.message and not self.message_id:
+            self.message_id = str(interaction.message.id)
+
+        if not was_initialized:
+            if self.initiative.current is None:
+                if not is_gm:
+                    await interaction.response.send_message("❌ Only GMs can pick who goes first.", ephemeral=True)
+                    return False
+            elif not (is_gm or is_current_participant):
+                await interaction.response.send_message("❌ It's not your turn or you're not a GM.", ephemeral=True)
+                return False
+
+            refreshed_view = PopcornInitiativeViewV2(
+                guild_id=self.guild_id,
+                channel_id=self.channel_id,
+                initiative=self.initiative,
+                message_id=self.message_id
+            )
+
+            try:
+                await refreshed_view.prepare_layout()
+                message = await interaction.channel.fetch_message(int(self.message_id))
+                await message.edit(content=None, embed=None, view=refreshed_view)
+                await interaction.response.send_message(
+                    "⚠️ The bot was restarted. The initiative view has been refreshed. Please make your selection again.",
+                    ephemeral=True
+                )
+            except Exception as e:
+                logging.error(f"Error updating LayoutView initiative after restart: {e}")
+                await interaction.response.send_message(
+                    "❌ Failed to update the initiative view. Please try again or restart initiative.",
+                    ephemeral=True
+                )
+            return False
+
+        if self.initiative.current is None:
+            if not is_gm:
+                await interaction.response.send_message("❌ Only GMs can pick who goes first.", ephemeral=True)
+                return False
+            return True
+
+        if not (is_gm or is_current_participant):
+            await interaction.response.send_message("❌ It's not your turn or you're not a GM.", ephemeral=True)
+            return False
+
+        return True
+
+    async def create_initiative_content(self):
+        return _build_popcorn_initiative_content(self.initiative)
+
+    async def update_view(self, interaction: discord.Interaction):
+        new_view = PopcornInitiativeViewV2(self.guild_id, self.channel_id, self.initiative, self.message_id)
+        embed, content = await self.create_initiative_content()
+        await self.update_initiative_message(interaction, content=content, embed=embed, view=new_view)
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True, thinking=False)
+
 class SetOrderButton(ui.Button):
     def __init__(self, parent_view: GenericInitiativeView):
         super().__init__(label="Set Order", style=discord.ButtonStyle.secondary, custom_id="set_initiative_order", row=1)
@@ -650,7 +1130,7 @@ class SetOrderButton(ui.Button):
         await interaction.response.send_modal(SetInitiativeOrderModal(self.parent_view, current_order))
 
 class SetInitiativeOrderModal(discord.ui.Modal, title="Set Initiative Order"):
-    def __init__(self, parent_view: GenericInitiativeView, current_order: str):
+    def __init__(self, parent_view, current_order: str):
         super().__init__()
         self.parent_view = parent_view
         
@@ -720,12 +1200,20 @@ class SetInitiativeOrderModal(discord.ui.Modal, title="Set Initiative Order"):
         )
         
         # Update the view
-        new_view = GenericInitiativeView(
-            self.parent_view.guild_id,
-            self.parent_view.channel_id,
-            self.parent_view.initiative,
-            self.parent_view.message_id
-        )
+        if isinstance(self.parent_view, ui.LayoutView):
+            new_view = GenericInitiativeViewV2(
+                self.parent_view.guild_id,
+                self.parent_view.channel_id,
+                self.parent_view.initiative,
+                self.parent_view.message_id
+            )
+        else:
+            new_view = GenericInitiativeView(
+                self.parent_view.guild_id,
+                self.parent_view.channel_id,
+                self.parent_view.initiative,
+                self.parent_view.message_id
+            )
         
         # Create content for the updated view
         embed, content = await new_view.create_initiative_content()
@@ -738,7 +1226,8 @@ class SetInitiativeOrderModal(discord.ui.Modal, title="Set Initiative Order"):
             view=new_view
         )
 
-        await interaction.response.send_message(
-            "✅ Initiative order set to " + ", ".join([p.name for p in new_order]),
-            ephemeral=False
-        )
+        confirmation = "✅ Initiative order set to " + ", ".join([p.name for p in new_order])
+        if not interaction.response.is_done():
+            await interaction.response.send_message(confirmation, ephemeral=False)
+        else:
+            await interaction.followup.send(confirmation, ephemeral=False)

@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 import discord
 import discord.ui as ui
 from httpx import get
-from core.shared_views import FinalizeRollButton, PaginatedSelectView, RollFormulaView
+from core.shared_views import FinalizeRollButton, PaginatedSelectView, PaginatedSelectViewV2, RollFormulaView, RollFormulaViewV2
 from rpg_systems.mgt2e.mgt2e_roll_formula import MGT2ERollFormula, BoonBane
 from data.repositories.repository_factory import repositories
 
@@ -31,6 +31,168 @@ class MGT2ERollFormulaView(RollFormulaView):
             await interaction.response.send_message("❌ No active character found.", ephemeral=True)
             return False
         return True
+
+
+class MGT2ERollFormulaViewV2(RollFormulaViewV2):
+    def _get_content_colour(self) -> discord.Colour:
+        return discord.Colour.dark_teal()
+
+    def _get_specific_summary_lines(self) -> list[str]:
+        lines = []
+
+        skill = self.roll_formula_obj.skill
+        if skill:
+            skill_mod = self.character.get_skill_modifier(self.character.skills, skill)
+            lines.append(f"**Selected Skill:** {skill} ({skill_mod})")
+        else:
+            lines.append("**Selected Skill:** None")
+
+        attribute = self.roll_formula_obj.attribute
+        if attribute:
+            attr_val = self.character.attributes.get(attribute.upper(), 0)
+            attr_mod = self.character.get_attribute_modifier(attr_val)
+            lines.append(f"**Selected Attribute:** {attribute.upper()} ({attr_val}, MOD: {attr_mod})")
+        else:
+            lines.append("**Selected Attribute:** None")
+
+        boon_bane = self.roll_formula_obj.boon_bane
+        lines.append(f"**Boon/Bane:** {str(boon_bane) if boon_bane.has_effect else 'None'}")
+        return lines
+
+    def _build_extra_action_rows(self) -> list[ui.ActionRow]:
+        row = ui.ActionRow()
+        row.add_item(self._make_button("Select Skill", discord.ButtonStyle.primary, self.select_skill))
+        row.add_item(self._make_button("Select Attribute", discord.ButtonStyle.secondary, self.select_attribute))
+
+        boon_bane = self.roll_formula_obj.boon_bane
+        if boon_bane.boons > 0:
+            label = "✨ Boon"
+            style = discord.ButtonStyle.success
+        elif boon_bane.banes > 0:
+            label = "⚡ Bane"
+            style = discord.ButtonStyle.danger
+        else:
+            label = "Boon/Bane"
+            style = discord.ButtonStyle.secondary
+
+        row.add_item(self._make_button(label, style, self.toggle_boon_bane))
+        return [row]
+
+    async def select_skill(self, interaction: discord.Interaction):
+        character = repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id)
+        if not character:
+            await interaction.response.send_message("❌ No active character found.", ephemeral=True)
+            return
+
+        from rpg_systems.mgt2e.mgt2e_character import get_skill_categories
+
+        skills = character.skills if hasattr(character, 'skills') else {}
+        categories = get_skill_categories(skills)
+        category_options = [discord.SelectOption(label=cat, value=cat) for cat in sorted(categories.keys())]
+
+        if not category_options:
+            await interaction.response.send_message("❌ Your character has no skill categories.", ephemeral=True)
+            return
+
+        async def on_category_selected(_view, interaction2: discord.Interaction, category):
+            skills_in_cat = categories[category]
+
+            if len(skills_in_cat) == 1 and skills_in_cat[0] == category:
+                self.roll_formula_obj.skill = category
+                skill_mod = character.get_skill_modifier(skills, category)
+                await interaction2.response.edit_message(
+                    content=None,
+                    embed=None,
+                    view=MGT2ERollFormulaViewV2(character, self.roll_formula_obj, self.difficulty, status_message=f"Selected skill: **{category}** ({skill_mod})")
+                )
+            else:
+                skill_options = [discord.SelectOption(label=f"{skill} ({skills.get(skill, -3)})", value=skill) for skill in sorted(skills_in_cat)]
+
+                async def on_skill_selected(_view2, interaction3: discord.Interaction, skill: str):
+                    self.roll_formula_obj.skill = skill
+                    skill_mod = character.get_skill_modifier(skills, skill)
+                    await interaction3.response.edit_message(
+                        content=None,
+                        embed=None,
+                        view=MGT2ERollFormulaViewV2(character, self.roll_formula_obj, self.difficulty, status_message=f"Selected skill: **{skill}** ({skill_mod})")
+                    )
+
+                await interaction2.response.edit_message(
+                    content=None,
+                    embed=None,
+                    view=PaginatedSelectViewV2(
+                        skill_options,
+                        on_skill_selected,
+                        interaction.user.id,
+                        prompt=f"Select a skill in {category}:",
+                        title=f"## Select a skill in {category}"
+                    )
+                )
+
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=PaginatedSelectViewV2(
+                category_options,
+                on_category_selected,
+                interaction.user.id,
+                prompt="Select a skill category:",
+                title="## Select a skill category"
+            )
+        )
+
+    async def select_attribute(self, interaction: discord.Interaction):
+        character = repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id)
+        if not character:
+            await interaction.response.send_message("❌ No active character found.", ephemeral=True)
+            return
+
+        attributes = character.attributes if hasattr(character, 'attributes') else {}
+        attr_options = []
+        for key, value in sorted(attributes.items()):
+            modifier = character.get_attribute_modifier(value)
+            attr_options.append(discord.SelectOption(label=f"{key}: {value} (MOD: {modifier})", value=key))
+
+        if not attr_options:
+            await interaction.response.send_message("❌ Your character has no attributes.", ephemeral=True)
+            return
+
+        async def on_attr_selected(_view, interaction2: discord.Interaction, attr: str):
+            self.roll_formula_obj.attribute = attr
+            attr_val = attributes.get(attr, 0)
+            attr_mod = character.get_attribute_modifier(attr_val)
+            await interaction2.response.edit_message(
+                content=None,
+                embed=None,
+                view=MGT2ERollFormulaViewV2(character, self.roll_formula_obj, self.difficulty, status_message=f"Selected attribute: **{attr}** ({attr_val}, MOD: {attr_mod})")
+            )
+
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=PaginatedSelectViewV2(
+                attr_options,
+                on_attr_selected,
+                interaction.user.id,
+                prompt="Select an attribute:",
+                title="## Select an attribute for your roll"
+            )
+        )
+
+    async def toggle_boon_bane(self, interaction: discord.Interaction):
+        current_boon_bane = self.roll_formula_obj.boon_bane
+        if not current_boon_bane.has_effect:
+            next_boon_bane = BoonBane(boons=1, banes=0)
+            status_message = "✅ Added boon - roll 3d6 and keep highest 2"
+        elif current_boon_bane.boons > 0:
+            next_boon_bane = BoonBane(boons=0, banes=1)
+            status_message = "✅ Added bane - roll 3d6 and keep lowest 2"
+        else:
+            next_boon_bane = BoonBane(boons=0, banes=0)
+            status_message = "✅ Cleared boons and banes - normal 2d6 roll"
+
+        self.roll_formula_obj.boon_bane = next_boon_bane
+        await self.refresh_view(interaction, status_message=status_message)
 
 class MGT2ESelectSkillButton(ui.Button):
     """Button that opens a skill category selection menu when clicked"""

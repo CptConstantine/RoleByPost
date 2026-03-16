@@ -4,7 +4,7 @@ from discord import ui
 import re
 from core.base_models import BaseCharacter
 from core.generic_roll_mechanics import RollMechanicConfig
-from core.shared_views import FinalizeRollButton, RollFormulaView
+from core.shared_views import FinalizeRollButton, RollFormulaView, RollFormulaViewV2
 from core.generic_roll_formulas import CustomRollFormula, DicePoolRollFormula, RollFormula
 from data.repositories.repository_factory import repositories
 
@@ -69,6 +69,86 @@ class CustomFormulaView(RollFormulaView):
             await interaction.response.send_message("❌ No active character found.", ephemeral=True)
             return False
         return True
+
+
+class RollAndSumFormulaViewV2(RollFormulaViewV2):
+    def _get_content_colour(self) -> discord.Colour:
+        return discord.Colour.blue()
+
+    def _get_specific_summary_lines(self) -> list[str]:
+        config = self.roll_formula_obj.roll_config
+        lines = [
+            "**Mechanic:** Roll and Sum",
+            f"**Success Criteria:** {config.success_criteria.value}",
+        ]
+        if config.exploding_dice:
+            lines.append(f"**Exploding Dice:** On {config.explode_threshold}")
+        return lines
+
+
+class DicePoolFormulaViewV2(RollFormulaViewV2):
+    def _get_content_colour(self) -> discord.Colour:
+        return discord.Colour.orange()
+
+    def _get_specific_summary_lines(self) -> list[str]:
+        config = self.roll_formula_obj.roll_config
+        lines = [
+            "**Mechanic:** Dice Pool",
+            f"**Success Criteria:** {config.success_criteria.value} {config.target_number}",
+        ]
+        additional_dice = getattr(self.roll_formula_obj, "additional_dice", [])
+        if additional_dice:
+            lines.append(f"**Added Dice:** {', '.join(additional_dice)}")
+        if config.exploding_dice:
+            lines.append(f"**Exploding Dice:** On {config.explode_threshold}")
+        return lines
+
+    def _build_extra_action_rows(self) -> list[ui.ActionRow]:
+        row = ui.ActionRow()
+        row.add_item(self._make_button("Add Dice", discord.ButtonStyle.primary, self.add_dice))
+        row.add_item(self._make_button("Clear Added", discord.ButtonStyle.danger, self.clear_added_dice))
+        target_label = f"Target: {self.roll_formula_obj.roll_config.target_number}" if self.roll_formula_obj.roll_config.target_number is not None else "Set Target Number"
+        row.add_item(self._make_button(target_label, discord.ButtonStyle.secondary, self.set_target_number))
+        return [row]
+
+    async def add_dice(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(AddDiceModal(self))
+
+    async def clear_added_dice(self, interaction: discord.Interaction):
+        additional_dice = getattr(self.roll_formula_obj, "additional_dice", [])
+        old_count = len(additional_dice)
+        additional_dice.clear()
+        if old_count > 0:
+            message = f"✅ Cleared {old_count} additional dice from pool."
+        else:
+            message = "ℹ️ No additional dice to clear."
+        await self.refresh_view(interaction, status_message=message)
+
+    async def set_target_number(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(SetTargetNumberModal(self))
+
+
+class CustomFormulaViewV2(RollFormulaViewV2):
+    def _get_content_colour(self) -> discord.Colour:
+        return discord.Colour.dark_purple()
+
+    def _get_specific_summary_lines(self) -> list[str]:
+        config = self.roll_formula_obj.roll_config
+        lines = [
+            "**Mechanic:** Custom",
+            f"**Success Criteria:** {config.success_criteria.value}",
+        ]
+        if config.exploding_dice:
+            lines.append(f"**Exploding Dice:** On {config.explode_threshold}")
+        return lines
+
+    def _build_extra_action_rows(self) -> list[ui.ActionRow]:
+        row = ui.ActionRow()
+        row.add_item(self._make_button("Set Formula", discord.ButtonStyle.primary, self.set_formula))
+        return [row]
+
+    async def set_formula(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(SetCustomFormulaModal(self))
 
 class AddDiceButton(ui.Button):
     """Button to add dice to a dice pool"""
@@ -179,6 +259,10 @@ class AddDiceModal(ui.Modal, title="Add Dice to Pool"):
         
         # Add to the additional dice list
         self.parent_view.roll_formula_obj.additional_dice.append(dice_expr)
+
+        if hasattr(self.parent_view, "refresh_view"):
+            await self.parent_view.refresh_view(interaction, status_message=f"✅ Added `{dice_expr}` to the dice pool.")
+            return
         
         new_view = DicePoolFormulaView(
             character=self.parent_view.character,
@@ -241,6 +325,10 @@ class SetTargetNumberModal(ui.Modal, title="Set Difficulty"):
             # Update the target number
             self.parent_view.roll_formula_obj.roll_config.target_number = target_number
 
+            if hasattr(self.parent_view, "refresh_view"):
+                await self.parent_view.refresh_view(interaction, status_message=f"✅ Set target number to {target_number}.")
+                return
+
             # Update the button label
             for item in self.parent_view.children:
                 if isinstance(item, SetTargetNumberButton):
@@ -290,6 +378,10 @@ class SetCustomFormulaModal(ui.Modal, title="Set Custom Formula"):
         
         # Store the custom formula in the roll config
         self.parent_view.roll_formula_obj.roll_config.dice_formula = formula
+
+        if hasattr(self.parent_view, "refresh_view"):
+            await self.parent_view.refresh_view(interaction, status_message=f"✅ Set custom formula to `{formula}`.")
+            return
 
         for item in self.parent_view.children:
             if isinstance(item, FinalizeRollButton):

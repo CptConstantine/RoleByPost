@@ -2,7 +2,7 @@
 from typing import TYPE_CHECKING
 import discord
 from discord import ui, SelectOption
-from core.shared_views import FinalizeRollButton, PaginatedSelectView, RollFormulaView
+from core.shared_views import FinalizeRollButton, PaginatedSelectView, PaginatedSelectViewV2, RollFormulaView, RollFormulaViewV2
 from rpg_systems.fate.fate_roll_formula import FateRollFormula
 from data.repositories.repository_factory import repositories
 
@@ -29,6 +29,66 @@ class FateRollFormulaView(RollFormulaView):
             await interaction.response.send_message("❌ No active character found.", ephemeral=True)
             return False
         return True
+
+
+class FateRollFormulaViewV2(RollFormulaViewV2):
+    def _get_content_colour(self) -> discord.Colour:
+        return discord.Colour.purple()
+
+    def _get_specific_summary_lines(self) -> list[str]:
+        skill = self.roll_formula_obj.skill
+        if not skill:
+            return ["**Selected Skill:** None"]
+
+        skill_value = self.character.skills.get(skill, 0) if self.character and getattr(self.character, "skills", None) else 0
+        formatted = f"+{skill_value}" if skill_value >= 0 else str(skill_value)
+        return [f"**Selected Skill:** {skill} ({formatted})"]
+
+    def _build_extra_action_rows(self) -> list[ui.ActionRow]:
+        row = ui.ActionRow()
+        row.add_item(self._make_button("Select Skill", discord.ButtonStyle.primary, self.select_skill))
+        return [row]
+
+    async def select_skill(self, interaction: discord.Interaction):
+        character = repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id)
+        if not character:
+            await interaction.response.send_message("❌ No active character found.", ephemeral=True)
+            return
+
+        skills = character.skills if hasattr(character, 'skills') else {}
+        skill_options = [
+            SelectOption(
+                label=f"{k} (+{v})" if v >= 0 else f"{k} ({v})",
+                value=k,
+            )
+            for k, v in sorted(skills.items(), key=lambda x: (-x[1], x[0]))
+        ]
+
+        if not skill_options:
+            await interaction.response.send_message("❌ Your character has no skills to select.", ephemeral=True)
+            return
+
+        async def on_skill_selected(_view, interaction2: discord.Interaction, skill: str):
+            self.roll_formula_obj.skill = skill
+            skill_value = character.skills.get(skill, 0)
+            formatted = f"+{skill_value}" if skill_value >= 0 else str(skill_value)
+            await interaction2.response.edit_message(
+                content=None,
+                embed=None,
+                view=FateRollFormulaViewV2(character, self.roll_formula_obj, self.difficulty, status_message=f"Selected skill: **{skill}** ({formatted})")
+            )
+
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=PaginatedSelectViewV2(
+                skill_options,
+                on_skill_selected,
+                interaction.user.id,
+                prompt="Select a skill:",
+                title="## Select a skill for your roll"
+            )
+        )
 
 class FateSelectSkillButton(ui.Button):
     """Button that opens a skill selection menu when clicked"""

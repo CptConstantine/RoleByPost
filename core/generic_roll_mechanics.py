@@ -894,9 +894,10 @@ class SuccessThresholdModal(ui.Modal, title="Set Success Threshold"):
         max_length=2
     )
     
-    def __init__(self, config: RollMechanicConfig):
+    def __init__(self, config: RollMechanicConfig, parent_view=None):
         super().__init__()
         self.config = config
+        self.parent_view = parent_view
         if config.target_number:
             self.threshold.default = str(config.target_number)
     
@@ -908,7 +909,10 @@ class SuccessThresholdModal(ui.Modal, title="Set Success Threshold"):
                 return
             
             self.config.target_number = threshold_val
-            await interaction.response.send_message("✅ Success threshold updated!", ephemeral=True)
+            if self.parent_view and hasattr(self.parent_view, "refresh_view"):
+                await self.parent_view.refresh_view(interaction, status_message=f"✅ Success threshold updated to {threshold_val}.")
+            else:
+                await interaction.response.send_message("✅ Success threshold updated!", ephemeral=True)
         except ValueError:
             await interaction.response.send_message("❌ Please enter a valid number.", ephemeral=True)
 
@@ -922,9 +926,10 @@ class CustomFormulaModal(ui.Modal, title="Custom Dice Formula"):
         max_length=100
     )
     
-    def __init__(self, config: RollMechanicConfig):
+    def __init__(self, config: RollMechanicConfig, parent_view=None):
         super().__init__()
         self.config = config
+        self.parent_view = parent_view
         if config.dice_formula and config.dice_formula != "1d20":
             self.formula.default = config.dice_formula
     
@@ -941,7 +946,10 @@ class CustomFormulaModal(ui.Modal, title="Custom Dice Formula"):
             return
         
         self.config.dice_formula = self.formula.value
-        await interaction.response.send_message("✅ Custom formula set!", ephemeral=True)
+        if self.parent_view and hasattr(self.parent_view, "refresh_view"):
+            await self.parent_view.refresh_view(interaction, status_message=f"✅ Custom formula set to `{self.formula.value}`.")
+        else:
+            await interaction.response.send_message("✅ Custom formula set!", ephemeral=True)
     
     def _validate_formula(self, formula: str) -> bool:
         """Validate dice formula format - now supports dice in modifiers"""
@@ -998,9 +1006,10 @@ class ExplodeThresholdModal(ui.Modal, title="Set Explosion Threshold"):
         max_length=2
     )
     
-    def __init__(self, config: RollMechanicConfig):
+    def __init__(self, config: RollMechanicConfig, parent_view=None):
         super().__init__()
         self.config = config
+        self.parent_view = parent_view
     
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -1010,7 +1019,10 @@ class ExplodeThresholdModal(ui.Modal, title="Set Explosion Threshold"):
                 return
             
             self.config.explode_threshold = threshold_val
-            await interaction.response.send_message("✅ Explosion threshold set!", ephemeral=True)
+            if self.parent_view and hasattr(self.parent_view, "refresh_view"):
+                await self.parent_view.refresh_view(interaction, status_message=f"✅ Explosion threshold set to {threshold_val}.")
+            else:
+                await interaction.response.send_message("✅ Explosion threshold set!", ephemeral=True)
         except ValueError:
             await interaction.response.send_message("❌ Please enter a valid number.", ephemeral=True)
 
@@ -1040,3 +1052,443 @@ class BasicConfigView(ui.View):
         )
         
         await interaction.response.edit_message(embed=embed, view=None)
+
+
+class BaseRollConfigViewV2(ui.LayoutView):
+    def __init__(self, config: RollMechanicConfig, status_message: str = None):
+        super().__init__(timeout=300)
+        self.config = config
+        self.status_message = status_message
+        self._build_layout()
+
+    def _build_layout(self):
+        if self.status_message:
+            self.add_item(
+                ui.Container(
+                    ui.TextDisplay(self.status_message),
+                    accent_colour=discord.Colour.green(),
+                )
+            )
+
+        self.add_item(
+            ui.Container(
+                ui.TextDisplay(self._get_summary_text()),
+                accent_colour=self._get_content_colour(),
+            )
+        )
+
+        action_rows = self._build_action_rows()
+        if action_rows:
+            self.add_item(ui.Separator())
+            for row in action_rows:
+                self.add_item(row)
+
+    def _get_content_colour(self) -> discord.Colour:
+        return discord.Colour.blue()
+
+    def _make_button(self, label: str, style: discord.ButtonStyle, callback, emoji: str = None):
+        button = ui.Button(label=label, style=style, emoji=emoji)
+        button.callback = callback
+        return button
+
+    def _make_select(self, placeholder: str, options: list[discord.SelectOption], callback):
+        select = ui.Select(placeholder=placeholder, options=options)
+        select.callback = callback
+        return select
+
+    def _clone(self, status_message: str = None):
+        return self.__class__(config=self.config, status_message=status_message)
+
+    async def refresh_view(self, interaction: discord.Interaction, status_message: str = None):
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=self._clone(status_message=status_message),
+        )
+
+    def _get_summary_text(self) -> str:
+        raise NotImplementedError
+
+    def _build_action_rows(self) -> list[ui.ActionRow]:
+        raise NotImplementedError
+
+
+class CoreRollMechanicSelectViewV2(ui.LayoutView):
+    def __init__(self):
+        super().__init__(timeout=300)
+        self._build_layout()
+
+    def _build_layout(self):
+        intro = ui.Container(
+            ui.TextDisplay(
+                "## 🎲 Configure Core Roll Mechanic\n"
+                "Choose the core dice mechanic that best fits your game system.\n\n"
+                "This will determine how players roll dice and what constitutes success."
+            ),
+            accent_colour=discord.Colour.blue(),
+        )
+        self.add_item(intro)
+        self.add_item(ui.Separator())
+
+        row = ui.ActionRow()
+        select = ui.Select(
+            placeholder="Choose your core roll mechanic type...",
+            options=[
+                discord.SelectOption(
+                    label="Roll and Sum",
+                    value="roll_and_sum",
+                    description="Roll dice, add them up, compare to target (D&D, Traveller, etc.)",
+                    emoji="🎲",
+                ),
+                discord.SelectOption(
+                    label="Dice Pool",
+                    value="dice_pool",
+                    description="Roll multiple dice, count individual successes (World of Darkness, etc.)",
+                    emoji="🎯",
+                ),
+                discord.SelectOption(
+                    label="Custom",
+                    value="custom",
+                    description="Flexible custom roll configuration for unique systems",
+                    emoji="🔧",
+                ),
+            ],
+        )
+        select.callback = self.select_mechanic
+        row.add_item(select)
+        self.add_item(row)
+
+    async def select_mechanic(self, interaction: discord.Interaction):
+        mechanic_type = CoreRollMechanicType(interaction.data["values"][0])
+        if mechanic_type == CoreRollMechanicType.ROLL_AND_SUM:
+            view = RollAndSumConfigViewV2()
+        elif mechanic_type == CoreRollMechanicType.DICE_POOL:
+            view = DicePoolConfigViewV2()
+        elif mechanic_type == CoreRollMechanicType.CUSTOM:
+            view = CustomConfigViewV2()
+        else:
+            view = BasicConfigViewV2(mechanic_type=mechanic_type)
+
+        await interaction.response.edit_message(content=None, embed=None, view=view)
+
+
+class RollAndSumConfigViewV2(BaseRollConfigViewV2):
+    def __init__(self, config: RollMechanicConfig = None, status_message: str = None):
+        config = config or RollMechanicConfig(
+            mechanic_type=CoreRollMechanicType.ROLL_AND_SUM,
+            dice_formula="1d20",
+            success_criteria=SuccessCriteria.GREATER_EQUAL,
+            description="Roll and sum dice vs target",
+        )
+        super().__init__(config=config, status_message=status_message)
+
+    def _get_summary_text(self) -> str:
+        lines = [
+            "## 🎲 Roll and Sum Configuration",
+            f"**Dice Formula:** {self.config.dice_formula}",
+            f"**Success Criteria:** {self.config.success_criteria.value}",
+            f"**Exploding Dice:** {'Enabled' if self.config.exploding_dice else 'Disabled'}",
+        ]
+        if self.config.exploding_dice:
+            lines.append(f"**Explode Threshold:** {self.config.explode_threshold}")
+        lines.extend([
+            "",
+            "**Example**",
+            f"`{self.config.dice_formula}` {self.config.success_criteria.value} target",
+        ])
+        return "\n".join(lines)
+
+    def _build_action_rows(self) -> list[ui.ActionRow]:
+        dice_row = ui.ActionRow()
+        dice_row.add_item(self._make_select(
+            "Choose base dice formula...",
+            [
+                discord.SelectOption(label="1d20 (D&D style)", value="1d20", description="Single d20 roll"),
+                discord.SelectOption(label="2d6 (Traveller style)", value="2d6", description="Two d6 dice"),
+                discord.SelectOption(label="3d6 (GURPS style)", value="3d6", description="Three d6 dice"),
+                discord.SelectOption(label="1d100 (Percentile)", value="1d100", description="d100 roll"),
+                discord.SelectOption(label="2d10 (Numenera style)", value="2d10", description="Two d10 dice"),
+            ],
+            self.select_dice,
+        ))
+
+        success_row = ui.ActionRow()
+        success_row.add_item(self._make_select(
+            "Choose success criteria...",
+            [
+                discord.SelectOption(label=">= (Greater than or equal)", value=">=", description="Roll must be >= target"),
+                discord.SelectOption(label="<= (Less than or equal)", value="<=", description="Roll must be <= target"),
+                discord.SelectOption(label="== (Exactly equal)", value="==", description="Roll must exactly equal target"),
+            ],
+            self.select_success,
+        ))
+
+        button_row = ui.ActionRow()
+        button_row.add_item(self._make_button("Set Custom Formula", discord.ButtonStyle.primary, self.set_custom_formula, emoji="🎲"))
+        button_row.add_item(self._make_button("Toggle Exploding Dice", discord.ButtonStyle.secondary, self.toggle_exploding, emoji="💥"))
+        button_row.add_item(self._make_button("Confirm Setup", discord.ButtonStyle.success, self.confirm_setup, emoji="✅"))
+        return [dice_row, success_row, button_row]
+
+    async def select_dice(self, interaction: discord.Interaction):
+        self.config.dice_formula = interaction.data["values"][0]
+        await self.refresh_view(interaction, status_message=f"✅ Dice formula set to `{self.config.dice_formula}`.")
+
+    async def select_success(self, interaction: discord.Interaction):
+        self.config.success_criteria = SuccessCriteria(interaction.data["values"][0])
+        await self.refresh_view(interaction, status_message=f"✅ Success criteria set to `{self.config.success_criteria.value}`.")
+
+    async def set_custom_formula(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(CustomFormulaModal(self.config, parent_view=self))
+
+    async def toggle_exploding(self, interaction: discord.Interaction):
+        self.config.exploding_dice = not self.config.exploding_dice
+        if self.config.exploding_dice and not self.config.explode_threshold:
+            if "d6" in self.config.dice_formula:
+                self.config.explode_threshold = 6
+            elif "d8" in self.config.dice_formula:
+                self.config.explode_threshold = 8
+            elif "d10" in self.config.dice_formula:
+                self.config.explode_threshold = 10
+            elif "d20" in self.config.dice_formula:
+                self.config.explode_threshold = 20
+            else:
+                self.config.explode_threshold = 6
+        await self.refresh_view(interaction, status_message=f"✅ Exploding dice {'enabled' if self.config.exploding_dice else 'disabled'}." )
+
+    async def confirm_setup(self, interaction: discord.Interaction):
+        from data.repositories.repository_factory import repositories
+        self.config.description = f"{self.config.dice_formula} {self.config.success_criteria.value} target"
+        repositories.server.set_core_roll_mechanic(interaction.guild.id, self.config.to_dict())
+        await interaction.response.edit_message(
+            content=(
+                "✅ **Roll and Sum** is now active for this server.\n\n"
+                f"Players will roll: `{self.config.dice_formula}` {self.config.success_criteria.value} target"
+            ),
+            embed=None,
+            view=None,
+        )
+
+
+class DicePoolConfigViewV2(BaseRollConfigViewV2):
+    def __init__(self, config: RollMechanicConfig = None, status_message: str = None):
+        config = config or RollMechanicConfig(
+            mechanic_type=CoreRollMechanicType.DICE_POOL,
+            dice_formula="1d10",
+            success_criteria=SuccessCriteria.GREATER_EQUAL,
+            target_number=8,
+            description="Count successes in dice pool",
+        )
+        super().__init__(config=config, status_message=status_message)
+
+    def _get_summary_text(self) -> str:
+        lines = [
+            "## 🎯 Dice Pool Configuration",
+            f"**Die Type:** {self.config.dice_formula}",
+            f"**Success Criteria:** {self.config.success_criteria.value}",
+            f"**Success Threshold:** {self.config.target_number}",
+            f"**Exploding Dice:** {'Enabled' if self.config.exploding_dice else 'Disabled'}",
+        ]
+        if self.config.exploding_dice:
+            lines.append(f"**Explode Threshold:** {self.config.explode_threshold}")
+        lines.extend([
+            "",
+            "**Example**",
+            f"Roll multiple {self.config.dice_formula}, count successes ({self.config.success_criteria.value} {self.config.target_number})",
+        ])
+        return "\n".join(lines)
+
+    def _build_action_rows(self) -> list[ui.ActionRow]:
+        die_row = ui.ActionRow()
+        die_row.add_item(self._make_select(
+            "Choose die type for pool...",
+            [
+                discord.SelectOption(label="d6 (many systems)", value="1d6", description="Single six-sided dice"),
+                discord.SelectOption(label="d8 (some systems)", value="1d8", description="Single eight-sided dice"),
+                discord.SelectOption(label="d10 (World of Darkness)", value="1d10", description="Single ten-sided dice"),
+                discord.SelectOption(label="d12 (rare systems)", value="1d12", description="Single twelve-sided dice"),
+                discord.SelectOption(label="2d6 (complex pools)", value="2d6", description="Two d6 per pool entry"),
+                discord.SelectOption(label="2d10 (complex pools)", value="2d10", description="Two d10 per pool entry"),
+            ],
+            self.select_die_type,
+        ))
+
+        success_row = ui.ActionRow()
+        success_row.add_item(self._make_select(
+            "Choose success criteria...",
+            [
+                discord.SelectOption(label=">= (Greater than or equal)", value=">=", description="Die shows >= target"),
+                discord.SelectOption(label="<= (Less than or equal)", value="<=", description="Die shows <= target"),
+                discord.SelectOption(label="== (Exactly equal)", value="==", description="Die shows exactly target"),
+            ],
+            self.select_success,
+        ))
+
+        button_row = ui.ActionRow()
+        button_row.add_item(self._make_button("Set Success Threshold", discord.ButtonStyle.primary, self.set_threshold, emoji="🎯"))
+        button_row.add_item(self._make_button("Set Custom Formula", discord.ButtonStyle.primary, self.set_custom_formula, emoji="🎲"))
+        button_row.add_item(self._make_button("Toggle Exploding Dice", discord.ButtonStyle.secondary, self.toggle_exploding, emoji="💥"))
+        button_row.add_item(self._make_button("Confirm Setup", discord.ButtonStyle.success, self.confirm_setup, emoji="✅"))
+        return [die_row, success_row, button_row]
+
+    async def select_die_type(self, interaction: discord.Interaction):
+        selected = interaction.data["values"][0]
+        self.config.dice_formula = selected
+        if "d6" in selected:
+            self.config.target_number = 5
+        elif "d8" in selected:
+            self.config.target_number = 6
+        elif "d10" in selected:
+            self.config.target_number = 8
+        elif "d12" in selected:
+            self.config.target_number = 9
+        if selected == "2d6":
+            self.config.target_number = 8
+        elif selected == "2d10":
+            self.config.target_number = 12
+        await self.refresh_view(interaction, status_message=f"✅ Pool die type set to `{selected}`.")
+
+    async def select_success(self, interaction: discord.Interaction):
+        self.config.success_criteria = SuccessCriteria(interaction.data["values"][0])
+        await self.refresh_view(interaction, status_message=f"✅ Success criteria set to `{self.config.success_criteria.value}`.")
+
+    async def set_threshold(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(SuccessThresholdModal(self.config, parent_view=self))
+
+    async def set_custom_formula(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(CustomFormulaModal(self.config, parent_view=self))
+
+    async def toggle_exploding(self, interaction: discord.Interaction):
+        self.config.exploding_dice = not self.config.exploding_dice
+        if self.config.exploding_dice and not self.config.explode_threshold:
+            if "d6" in self.config.dice_formula:
+                self.config.explode_threshold = 6
+            elif "d8" in self.config.dice_formula:
+                self.config.explode_threshold = 8
+            elif "d10" in self.config.dice_formula:
+                self.config.explode_threshold = 10
+            elif "d12" in self.config.dice_formula:
+                self.config.explode_threshold = 12
+        await self.refresh_view(interaction, status_message=f"✅ Exploding dice {'enabled' if self.config.exploding_dice else 'disabled'}." )
+
+    async def confirm_setup(self, interaction: discord.Interaction):
+        from data.repositories.repository_factory import repositories
+        self.config.description = f"Pool of {self.config.dice_formula}, success on {self.config.success_criteria.value} {self.config.target_number}"
+        repositories.server.set_core_roll_mechanic(interaction.guild.id, self.config.to_dict())
+        await interaction.response.edit_message(
+            content=(
+                "✅ **Dice Pool** is now active for this server.\n\n"
+                f"Players will roll pools of {self.config.dice_formula} and count successes ({self.config.success_criteria.value} {self.config.target_number})"
+            ),
+            embed=None,
+            view=None,
+        )
+
+
+class CustomConfigViewV2(BaseRollConfigViewV2):
+    def __init__(self, config: RollMechanicConfig = None, status_message: str = None):
+        config = config or RollMechanicConfig(
+            mechanic_type=CoreRollMechanicType.CUSTOM,
+            dice_formula="1d20",
+            success_criteria=SuccessCriteria.GREATER_EQUAL,
+            description="Custom roll configuration",
+        )
+        super().__init__(config=config, status_message=status_message)
+
+    def _get_summary_text(self) -> str:
+        lines = [
+            "## 🔧 Custom Configuration",
+            f"**Dice Formula:** {self.config.dice_formula}",
+            f"**Success Criteria:** {self.config.success_criteria.value}",
+            f"**Exploding Dice:** {'Enabled' if self.config.exploding_dice else 'Disabled'}",
+        ]
+        if self.config.exploding_dice and self.config.explode_threshold:
+            lines.append(f"**Explode Threshold:** {self.config.explode_threshold}")
+        lines.extend([
+            "",
+            "**Example**",
+            f"`{self.config.dice_formula}` {self.config.success_criteria.value} target",
+        ])
+        return "\n".join(lines)
+
+    def _build_action_rows(self) -> list[ui.ActionRow]:
+        success_row = ui.ActionRow()
+        success_row.add_item(self._make_select(
+            "Choose success criteria...",
+            [
+                discord.SelectOption(label=">= (Greater than or equal)", value=">=", description="Roll must be >= target"),
+                discord.SelectOption(label="<= (Less than or equal)", value="<=", description="Roll must be <= target"),
+                discord.SelectOption(label="== (Exactly equal)", value="==", description="Roll must exactly equal target"),
+            ],
+            self.select_success,
+        ))
+
+        button_row = ui.ActionRow()
+        button_row.add_item(self._make_button("Set Dice Formula", discord.ButtonStyle.primary, self.set_formula, emoji="🎲"))
+        button_row.add_item(self._make_button("Toggle Exploding Dice", discord.ButtonStyle.secondary, self.toggle_exploding, emoji="💥"))
+        button_row.add_item(self._make_button("Confirm Setup", discord.ButtonStyle.success, self.confirm_setup, emoji="✅"))
+        return [success_row, button_row]
+
+    async def select_success(self, interaction: discord.Interaction):
+        self.config.success_criteria = SuccessCriteria(interaction.data["values"][0])
+        await self.refresh_view(interaction, status_message=f"✅ Success criteria set to `{self.config.success_criteria.value}`.")
+
+    async def set_formula(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(CustomFormulaModal(self.config, parent_view=self))
+
+    async def toggle_exploding(self, interaction: discord.Interaction):
+        self.config.exploding_dice = not self.config.exploding_dice
+        if self.config.exploding_dice and not self.config.explode_threshold:
+            await interaction.response.send_modal(ExplodeThresholdModal(self.config, parent_view=self))
+            return
+        await self.refresh_view(interaction, status_message=f"✅ Exploding dice {'enabled' if self.config.exploding_dice else 'disabled'}." )
+
+    async def confirm_setup(self, interaction: discord.Interaction):
+        if not self.config.dice_formula or self.config.dice_formula == "1d20":
+            await interaction.response.send_message("❌ Please set a custom dice formula first.", ephemeral=True)
+            return
+
+        from data.repositories.repository_factory import repositories
+        self.config.description = f"Custom: {self.config.dice_formula} {self.config.success_criteria.value} target"
+        repositories.server.set_core_roll_mechanic(interaction.guild.id, self.config.to_dict())
+        await interaction.response.edit_message(
+            content=(
+                "✅ **Custom** mechanics are now active for this server.\n\n"
+                f"Players will use: `{self.config.dice_formula}` {self.config.success_criteria.value} target"
+            ),
+            embed=None,
+            view=None,
+        )
+
+
+class BasicConfigViewV2(BaseRollConfigViewV2):
+    def __init__(self, mechanic_type: CoreRollMechanicType = None, config: RollMechanicConfig = None, status_message: str = None):
+        config = config or RollMechanicConfig(
+            mechanic_type=mechanic_type,
+            dice_formula="1d20",
+            description=f"{mechanic_type.value} system",
+        )
+        super().__init__(config=config, status_message=status_message)
+
+    def _get_summary_text(self) -> str:
+        return "\n".join([
+            "## ✅ Confirm Roll Mechanic",
+            f"**Mechanic:** {self.config.mechanic_type.value}",
+            f"**Dice Formula:** {self.config.dice_formula}",
+        ])
+
+    def _clone(self, status_message: str = None):
+        return self.__class__(mechanic_type=self.config.mechanic_type, config=self.config, status_message=status_message)
+
+    def _build_action_rows(self) -> list[ui.ActionRow]:
+        row = ui.ActionRow()
+        row.add_item(self._make_button("Confirm Setup", discord.ButtonStyle.success, self.confirm_setup, emoji="✅"))
+        return [row]
+
+    async def confirm_setup(self, interaction: discord.Interaction):
+        from data.repositories.repository_factory import repositories
+        repositories.server.set_core_roll_mechanic(interaction.guild.id, self.config.to_dict())
+        await interaction.response.edit_message(
+            content=f"✅ **{self.config.mechanic_type.value}** is now active for this server.",
+            embed=None,
+            view=None,
+        )

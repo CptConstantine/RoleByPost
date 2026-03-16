@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import uuid
 from core import generic_roll_formulas
 from core.base_models import AccessType, BaseCharacter, EntityType, SystemType, BaseEntity
+from core.view_config import components_v2_enabled, prefer_components_v2
 
 if TYPE_CHECKING:
     from core.base_models import BaseInitiative
@@ -210,10 +211,19 @@ def get_specific_initiative(initiative_type: str):
     else:
         raise ValueError(f"Unknown initiative type: {initiative_type}")
 
-def get_specific_initiative_view(guild_id: str, channel_id: str, initiative: "BaseInitiative", message_id=None):
+def get_specific_initiative_view(guild_id: str, channel_id: str, initiative: "BaseInitiative", message_id=None, use_v2: bool = False):
     """Get the appropriate initiative view for the given initiative type"""
     from core import initiative_views
+    use_v2 = prefer_components_v2(use_v2)
+
     if initiative.type == "popcorn":
+        if use_v2:
+            return initiative_views.PopcornInitiativeViewV2(
+                guild_id=guild_id,
+                channel_id=channel_id,
+                initiative=initiative,
+                message_id=message_id
+            )
         return initiative_views.PopcornInitiativeView(
             guild_id=guild_id, 
             channel_id=channel_id, 
@@ -221,6 +231,13 @@ def get_specific_initiative_view(guild_id: str, channel_id: str, initiative: "Ba
             message_id=message_id
         )
     elif initiative.type == "generic":
+        if use_v2:
+            return initiative_views.GenericInitiativeViewV2(
+                guild_id=guild_id,
+                channel_id=channel_id,
+                initiative=initiative,
+                message_id=message_id
+            )
         return initiative_views.GenericInitiativeView(
             guild_id=guild_id, 
             channel_id=channel_id, 
@@ -257,11 +274,17 @@ def get_specific_roll_formula(guild_id: int, system: SystemType, roll_parameters
 
 def get_specific_roll_formula_view(guild_id: int, character: BaseCharacter, system: SystemType, roll_formula_obj: "RollFormula", difficulty: int = None):
     """Get the appropriate roll formula view for the given system"""
+    use_v2 = components_v2_enabled()
+
     if system == SystemType.FATE:
         from rpg_systems.fate import fate_roll_views
+        if use_v2:
+            return fate_roll_views.FateRollFormulaViewV2(character, roll_formula_obj, difficulty)
         return fate_roll_views.FateRollFormulaView(character, roll_formula_obj, difficulty)
     elif system == SystemType.MGT2E:
         from rpg_systems.mgt2e import mgt2e_roll_views
+        if use_v2:
+            return mgt2e_roll_views.MGT2ERollFormulaViewV2(character, roll_formula_obj, difficulty)
         return mgt2e_roll_views.MGT2ERollFormulaView(character, roll_formula_obj, difficulty)
     elif system == SystemType.GENERIC:
         from data.repositories.repository_factory import repositories
@@ -269,26 +292,41 @@ def get_specific_roll_formula_view(guild_id: int, character: BaseCharacter, syst
         from core.generic_roll_mechanics import CoreRollMechanicType
         roll_config = repositories.server.get_core_roll_mechanic(str(guild_id))
         if not roll_config:
+            if use_v2:
+                return generic_roll_views.CustomFormulaViewV2(character, roll_formula_obj, difficulty)
             return generic_roll_views.CustomFormulaView(character, roll_formula_obj, difficulty)
 
         if roll_config.mechanic_type == CoreRollMechanicType.DICE_POOL:
+            if use_v2:
+                return generic_roll_views.DicePoolFormulaViewV2(character, roll_formula_obj, difficulty)
             return generic_roll_views.DicePoolFormulaView(character, roll_formula_obj, difficulty)
         elif roll_config.mechanic_type == CoreRollMechanicType.ROLL_AND_SUM:
+            if use_v2:
+                return generic_roll_views.RollAndSumFormulaViewV2(character, roll_formula_obj, difficulty)
             return generic_roll_views.RollAndSumFormulaView(character, roll_formula_obj, difficulty)
         else:
+            if use_v2:
+                return generic_roll_views.CustomFormulaViewV2(character, roll_formula_obj, difficulty)
             return generic_roll_views.CustomFormulaView(character, roll_formula_obj, difficulty)
     else:
         raise ValueError(f"Unknown system: {system}")
 
-def get_specific_scene_view(system: SystemType, guild_id=None, channel_id=None, scene_id=None, message_id=None):
+def get_specific_scene_view(system: SystemType, guild_id=None, channel_id=None, scene_id=None, message_id=None, use_v2: bool = False):
     """Get the appropriate scene view for the given system"""
     from rpg_systems.fate import fate_scene_views
     from rpg_systems.mgt2e import mgt2e_scene_views
     from core import scene_views
+    use_v2 = prefer_components_v2(use_v2)
     
     if system == SystemType.FATE:
+        if use_v2:
+            return fate_scene_views.FateSceneViewV2(guild_id, channel_id, scene_id, message_id)
         return fate_scene_views.FateSceneView(guild_id, channel_id, scene_id, message_id)
     elif system == SystemType.MGT2E:
+        if use_v2:
+            return mgt2e_scene_views.MGT2ESceneViewV2(guild_id, channel_id, scene_id, message_id)
         return mgt2e_scene_views.MGT2ESceneView(guild_id, channel_id, scene_id, message_id)
     else:
+        if use_v2:
+            return scene_views.GenericSceneViewV2(guild_id, channel_id, scene_id, message_id)
         return scene_views.GenericSceneView(guild_id, channel_id, scene_id, message_id)

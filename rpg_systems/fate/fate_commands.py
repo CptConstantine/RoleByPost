@@ -8,10 +8,11 @@ from core.utils import _get_character_by_name_or_nickname
 from data.repositories.repository_factory import repositories
 from core import command_decorators
 from core.base_models import BaseEntity, EntityType, EntityLinkType, SystemType
+from core.view_config import components_v2_enabled
 import core.factories as factories
 from rpg_systems.fate.fate_autocomplete import active_player_characters_plus_fate_points_autocomplete
 from rpg_systems.fate.fate_character import FateCharacter
-from rpg_systems.fate.fate_compel_views import CompelType, CompelView
+from rpg_systems.fate.fate_compel_views import CompelType, CompelView, CompelViewV2
 
 SYSTEM = SystemType.FATE
 
@@ -271,26 +272,46 @@ class FateCommands(commands.Cog):
                 )
                 return
         
-        # Create compel view
-        view = CompelView(
-            compel_type=compel_type,
-            target_character=character.name,
-            compeller_user_id=interaction.user.id,
-            target_user_id=character.owner_id,
-            message=message,
-            guild_id=str(interaction.guild.id)
-        )
+        if components_v2_enabled():
+            announcement_lines = []
+            view = CompelViewV2(
+                compel_type=compel_type,
+                target_character=character.name,
+                compeller_user_id=interaction.user.id,
+                target_user_id=character.owner_id,
+                message=message,
+                guild_id=str(interaction.guild.id)
+            )
 
-        embed = view.create_status_embed()
-        mentions = await view.get_compel_interaction_mentions(interaction)
-        message_content = ", ".join(mentions) if mentions else ""
-        message_content += f"\n{interaction.user.display_name} proposed a compel for **{character.name}**"
+            mentions = await view.get_compel_interaction_mentions(interaction)
+            if mentions:
+                announcement_lines.append(", ".join(mentions))
+            announcement_lines.append(f"{interaction.user.display_name} proposed a compel for **{character.name}**")
+            view.announcement_message = "\n".join(announcement_lines)
 
-        await interaction.response.send_message(
-            content=message_content,
-            embed=embed,
-            view=view
-        )
+            await interaction.response.send_message(view=view)
+        else:
+            view = CompelView(
+                compel_type=compel_type,
+                target_character=character.name,
+                compeller_user_id=interaction.user.id,
+                target_user_id=character.owner_id,
+                message=message,
+                guild_id=str(interaction.guild.id)
+            )
+
+            embed = view.create_status_embed()
+            mentions = await view.get_compel_interaction_mentions(interaction)
+            message_lines = []
+            if mentions:
+                message_lines.append(", ".join(mentions))
+            message_lines.append(f"{interaction.user.display_name} proposed a compel for **{character.name}**")
+
+            await interaction.response.send_message(
+                content="\n".join(message_lines),
+                embed=embed,
+                view=view
+            )
 
     @fate_group.command(name="refresh", description="GM: Reset all active characters' fate points to their refresh values")
     @command_decorators.gm_role_required()

@@ -6,6 +6,7 @@ from commands.autocomplete import accessible_entities_autocomplete, entity_type_
 from core.base_models import AccessType, BaseEntity, EntityType, EntityLinkType
 from core.command_decorators import gm_role_required, no_ic_channels, player_or_gm_role_required
 from core.shared_views import ConfirmDialogV2
+from core.view_config import components_v2_enabled
 from data.repositories.repository_factory import repositories
 import core.factories as factories
 
@@ -110,9 +111,12 @@ class EntityCommands(commands.Cog):
         
         confirmation_msg += "\nThis action cannot be undone."
         
-        # Components v2 confirmation dialog
-        view = ConfirmDeleteEntityViewV2(entity, transfer_inventory, confirmation_msg)
-        await interaction.response.send_message(view=view, ephemeral=True)
+        if components_v2_enabled():
+            view = ConfirmDeleteEntityViewV2(entity, transfer_inventory, confirmation_msg)
+            await interaction.response.send_message(view=view, ephemeral=True)
+        else:
+            view = ConfirmDeleteEntityView(entity, transfer_inventory)
+            await interaction.response.send_message(content=confirmation_msg, view=view, ephemeral=True)
 
     @entity_group.command(name="list", description="List entities")
     @app_commands.describe(
@@ -361,9 +365,43 @@ class EntityCommands(commands.Cog):
             )
             return
         
-        # Show confirmation with detailed information (Components v2)
-        view = ConfirmDeleteAllViewV2(entities_to_delete, entity_type, preserved_count=len(entities_with_links))
-        await interaction.followup.send(view=view, ephemeral=True)
+        if components_v2_enabled():
+            view = ConfirmDeleteAllViewV2(entities_to_delete, entity_type, preserved_count=len(entities_with_links))
+            await interaction.followup.send(view=view, ephemeral=True)
+        else:
+            filter_text = f" of type '{entity_type}'" if entity_type else ""
+            embed = discord.Embed(
+                title="⚠️ Bulk Entity Deletion",
+                description=(
+                    f"Found **{len(entities_to_delete)}** entities{filter_text} without links that will be deleted.\n\n"
+                    "This action cannot be undone."
+                ),
+                color=discord.Color.orange()
+            )
+
+            grouped_entities: dict[str, list[str]] = {}
+            for entity in entities_to_delete:
+                grouped_entities.setdefault(entity.entity_type.value, []).append(entity.name)
+
+            for type_name, names in grouped_entities.items():
+                display_names = names[:10]
+                if len(names) > 10:
+                    display_names.append(f"... and {len(names) - 10} more")
+                embed.add_field(
+                    name=f"{type_name.title()} ({len(names)})",
+                    value="\n".join(f"• {name}" for name in display_names),
+                    inline=False,
+                )
+
+            if entities_with_links:
+                embed.add_field(
+                    name="Preserved",
+                    value=f"{len(entities_with_links)} entities with links will be preserved.",
+                    inline=False,
+                )
+
+            view = ConfirmDeleteAllView(entities_to_delete, entity_type)
+            await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
     @entity_group.command(name="set-access", description="Set access level for an entity and its possessed entities")
     @app_commands.describe(

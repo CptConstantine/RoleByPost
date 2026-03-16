@@ -66,7 +66,11 @@ class FateExtra(FateCharacter):
     
     def get_sheet_edit_view(self, editor_id: int, is_gm: bool, guild_id: str = None) -> discord.ui.View:
         # For most entity types, use the full Fate sheet view
-        from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
+        from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView, FateSheetEditViewV2
+        from core.view_config import components_v2_enabled
+
+        if guild_id and components_v2_enabled():
+            return FateSheetEditViewV2(editor_id=editor_id, char_id=self.id, guild_id=int(guild_id))
         return FateSheetEditView(editor_id=editor_id, char_id=self.id)
 
     def format_full_sheet(self, guild_id: int, is_gm: bool = False) -> discord.Embed:

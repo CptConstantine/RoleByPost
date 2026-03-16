@@ -174,36 +174,38 @@ class MGT2ECharacter(BaseCharacter):
                     setattr(self, key, value)
     
     def get_sheet_edit_view(self, editor_id: int, is_gm: bool, guild_id: str = None) -> discord.ui.View:
-        from rpg_systems.mgt2e.mgt2e_sheet_edit_views import MGT2ESheetEditView
+        from rpg_systems.mgt2e.mgt2e_sheet_edit_views import MGT2ESheetEditView, MGT2ESheetEditViewV2
+        from core.view_config import components_v2_enabled
+
+        if guild_id and components_v2_enabled():
+            return MGT2ESheetEditViewV2(editor_id=editor_id, char_id=self.id, guild_id=int(guild_id))
         return MGT2ESheetEditView(editor_id=editor_id, char_id=self.id)
     
     async def edit_requested_roll(self, interaction: discord.Interaction, roll_formula_obj: MGT2ERollFormula, difficulty: int = None):
         """
         Opens a view for editing the roll parameters, prepopulated with any requested skill and attribute.
         """
-        view = MGT2ERollFormulaView(self, roll_formula_obj, difficulty)
-        
-        # Create a message that shows what was initially requested
-        content = "Adjust your roll formula as needed, then finalize to roll."
-        parts = []
-        
-        if roll_formula_obj.skill:
-            skill_mod = self.get_skill_modifier(self.skills, roll_formula_obj.skill)
-            parts.append(f"skill: **{roll_formula_obj.skill}** ({skill_mod})")
-        
-        if roll_formula_obj.attribute:
-            attr_val = self.attributes.get(roll_formula_obj.attribute.upper(), 0)
-            attr_mod = self.get_attribute_modifier(attr_val)
-            parts.append(f"attribute: **{roll_formula_obj.attribute.upper()}** ({attr_val}, MOD: {attr_mod})")
-        
-        if parts:
-            content = f"Roll requested with {', '.join(parts)}\n{content}"
-        
-        await interaction.response.send_message(
-            content=content,
-            view=view,
-            ephemeral=True
-        )
+        from core import factories
+        view = factories.get_specific_roll_formula_view(interaction.guild.id, self, SystemType.MGT2E, roll_formula_obj, difficulty)
+        if isinstance(view, discord.ui.LayoutView):
+            await interaction.response.send_message(view=view, ephemeral=True)
+        else:
+            content = "Adjust your roll formula as needed, then finalize to roll."
+            parts = []
+            if roll_formula_obj.skill:
+                skill_mod = self.get_skill_modifier(self.skills, roll_formula_obj.skill)
+                parts.append(f"skill: **{roll_formula_obj.skill}** ({skill_mod})")
+            if roll_formula_obj.attribute:
+                attr_val = self.attributes.get(roll_formula_obj.attribute.upper(), 0)
+                attr_mod = self.get_attribute_modifier(attr_val)
+                parts.append(f"attribute: **{roll_formula_obj.attribute.upper()}** ({attr_val}, MOD: {attr_mod})")
+            if parts:
+                content = f"Roll requested with {', '.join(parts)}\n{content}"
+            await interaction.response.send_message(
+                content=content,
+                view=view,
+                ephemeral=True
+            )
 
     async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: RollFormula, difficulty: int = None):
         """

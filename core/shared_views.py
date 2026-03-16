@@ -164,6 +164,125 @@ class PaginatedNextButton(ui.Button):
             )
         )
 
+
+class PaginatedSelectViewV2(ui.LayoutView):
+    def __init__(self, options, select_callback, user_id, prompt="Select an option:", page=0, page_size=25, status_message: str = None, title: str = None):
+        super().__init__(timeout=60)
+        self.options = options
+        self.select_callback = select_callback
+        self.user_id = user_id
+        self.prompt = prompt
+        self.page = page
+        self.page_size = page_size
+        self.status_message = status_message
+        self.title = title or "## Selection"
+        self._build_layout()
+
+    def _build_layout(self):
+        if self.status_message:
+            self.add_item(
+                ui.Container(
+                    ui.TextDisplay(self.status_message),
+                    accent_colour=discord.Colour.green(),
+                )
+            )
+
+        total_pages = max(1, ((len(self.options) - 1) // self.page_size) + 1) if self.options else 1
+        page_options = self.options[self.page * self.page_size:(self.page + 1) * self.page_size]
+        summary_lines = [
+            self.title,
+            self.prompt,
+            f"**Page:** {self.page + 1}/{total_pages}",
+            f"**Options:** {len(self.options)} total",
+        ]
+        if not page_options:
+            summary_lines.extend(["", "*No options available.*"])
+
+        self.add_item(
+            ui.Container(
+                ui.TextDisplay("\n".join(summary_lines)),
+                accent_colour=discord.Colour.greyple(),
+            )
+        )
+
+        if page_options:
+            select_row = ui.ActionRow()
+            select = ui.Select(
+                placeholder="Select...",
+                min_values=1,
+                max_values=1,
+                options=page_options,
+            )
+            select.callback = self._on_select
+            select_row.add_item(select)
+            self.add_item(select_row)
+
+        if self.page > 0 or (self.page + 1) * self.page_size < len(self.options):
+            nav_row = ui.ActionRow()
+            if self.page > 0:
+                prev_btn = ui.Button(label="Previous", style=discord.ButtonStyle.secondary)
+                prev_btn.callback = self._previous_page
+                nav_row.add_item(prev_btn)
+            if (self.page + 1) * self.page_size < len(self.options):
+                next_btn = ui.Button(label="Next", style=discord.ButtonStyle.secondary)
+                next_btn.callback = self._next_page
+                nav_row.add_item(next_btn)
+            self.add_item(nav_row)
+
+    def _clone(self, *, page: int = None, status_message: str = None):
+        return PaginatedSelectViewV2(
+            self.options,
+            self.select_callback,
+            self.user_id,
+            prompt=self.prompt,
+            page=self.page if page is None else page,
+            page_size=self.page_size,
+            status_message=status_message,
+            title=self.title,
+        )
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("You can't use this selection menu.", ephemeral=True)
+            return False
+        return True
+
+    async def _on_select(self, interaction: discord.Interaction):
+        value = interaction.data["values"][0]
+        await self.select_callback(self, interaction, value)
+
+    async def _previous_page(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(content=None, embed=None, view=self._clone(page=self.page - 1))
+
+    async def _next_page(self, interaction: discord.Interaction):
+        await interaction.response.edit_message(content=None, embed=None, view=self._clone(page=self.page + 1))
+
+
+def _get_scene_notes_text(guild_id, scene_id, is_gm: bool) -> str:
+    active_scene = repositories.scene.get_active_scene(str(guild_id))
+    scene_name = active_scene.name if active_scene else f"Scene {scene_id}"
+
+    lines = [f"## 🎭 Scene: {scene_name}"]
+
+    notes = repositories.scene_notes.get_scene_notes(str(guild_id), str(scene_id))
+    if notes:
+        lines.extend(["", "**Notes**", notes])
+
+    npc_ids = repositories.scene_npc.get_scene_npc_ids(str(guild_id), str(scene_id))
+    npc_lines = []
+    for npc_id in npc_ids:
+        npc = repositories.entity.get_by_id(str(npc_id))
+        if npc:
+            npc_lines.append(npc.format_npc_scene_entry(is_gm))
+
+    lines.extend(["", "**Scene Entities**"])
+    if npc_lines:
+        lines.extend(npc_lines)
+    else:
+        lines.append("📭 No NPCs are currently in this scene.")
+
+    return "\n".join(lines)
+
 class SceneNotesButton(discord.ui.Button):
     def __init__(self, guild_id):
         super().__init__(label="Edit Scene Notes", style=discord.ButtonStyle.primary)
@@ -200,42 +319,47 @@ class EditSceneNotesModal(discord.ui.Modal, title="Edit Scene Notes"):
 
     async def on_submit(self, interaction: discord.Interaction):
         repositories.scene_notes.set_scene_notes(str(self.guild_id), str(self.scene_id), self.notes.value)
-        
-        # Rebuild the scene embed and view
-        npc_ids = repositories.scene_npc.get_scene_npc_ids(str(self.guild_id), str(self.scene_id))
         is_gm = await repositories.server.has_gm_permission(str(interaction.guild.id), interaction.user)
-        active_scene = repositories.scene.get_active_scene(str(self.guild_id))
-        
-        lines = []
-        for npc_id in npc_ids:
-            npc = repositories.entity.get_by_id(str(npc_id))
-            if npc:
-                lines.append(npc.format_npc_scene_entry(is_gm))
-                
-        notes = repositories.scene_notes.get_scene_notes(str(self.guild_id), str(self.scene_id))
-        description = ""
-        if notes:
-            description += f"**Notes:**\n{notes}\n\n"
-            
-        if lines:
-            description += "\n\n".join(lines)
-        else:
-            description += "📭 No NPCs are currently in this scene."
-            
-        embed = discord.Embed(
-            title=f"🎭 Scene: {active_scene.name}",
-            description=description,
-            color=discord.Color.purple()
-        )
-        
-        view = SceneNotesEditView(self.guild_id, is_gm)
-        await interaction.response.edit_message(embed=embed, view=view)
+        view = SceneNotesEditViewV2(self.guild_id, self.scene_id, is_gm=is_gm, status_message="✅ Scene notes updated.")
+        await interaction.response.edit_message(content=None, embed=None, view=view)
 
 class SceneNotesEditView(discord.ui.View):
     def __init__(self, guild_id, is_gm=False):
         super().__init__()
         if is_gm:
             self.add_item(SceneNotesButton(guild_id))
+
+
+class SceneNotesEditViewV2(ui.LayoutView):
+    def __init__(self, guild_id, scene_id, is_gm: bool = False, status_message: str = None):
+        super().__init__(timeout=60 * 60)
+        self.guild_id = guild_id
+        self.scene_id = scene_id
+        self.is_gm = is_gm
+        self.status_message = status_message
+        self._build_layout()
+
+    def _build_layout(self):
+        if self.status_message:
+            self.add_item(
+                ui.Container(
+                    ui.TextDisplay(self.status_message),
+                    accent_colour=discord.Colour.green(),
+                )
+            )
+
+        self.add_item(
+            ui.Container(
+                ui.TextDisplay(_get_scene_notes_text(self.guild_id, self.scene_id, self.is_gm)),
+                accent_colour=discord.Colour.purple(),
+            )
+        )
+
+        if self.is_gm:
+            self.add_item(ui.Separator())
+            action_row = ui.ActionRow()
+            action_row.add_item(SceneNotesButton(self.guild_id))
+            self.add_item(action_row)
 
 class EditNameModal(ui.Modal, title="Edit Character Name"):
     def __init__(self, entity_id: str, system: SystemType):
@@ -311,6 +435,48 @@ class RequestRollView(ui.View):
             return False
         return await super().interaction_check(interaction)
 
+
+class RequestRollViewV2(ui.LayoutView):
+    def __init__(self, users_requested: list[int], roll_formula: RollFormula = None, difficulty: int = None, request_message: str = None):
+        super().__init__(timeout=60 * 60 * 24 * 7)
+        self.users_requested = users_requested
+        self.roll_formula_obj = roll_formula
+        self.difficulty = difficulty
+        self.request_message = request_message or "A roll has been requested."
+        self._build_layout()
+
+    def _build_layout(self):
+        lines = [
+            "## 🎲 Roll Request",
+            self.request_message,
+            "",
+            f"**Formula:** `{self.roll_formula_obj.get_total_dice_formula()}`",
+        ]
+        if self.difficulty is not None:
+            lines.append(f"**Difficulty:** {self.difficulty}")
+
+        self.add_item(
+            ui.Container(
+                ui.TextDisplay("\n".join(lines)),
+                accent_colour=discord.Colour.gold(),
+            )
+        )
+        self.add_item(ui.Separator())
+
+        action_row = ui.ActionRow()
+        action_row.add_item(EditRequestedRollButton(self.roll_formula_obj, self.difficulty))
+        action_row.add_item(FinalizeRollButton(self.roll_formula_obj, self.difficulty))
+        self.add_item(action_row)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id not in self.users_requested:
+            await interaction.response.send_message(
+                "❌ You were not included in this roll request. Use `/roll check` or `/roll custom` to roll separately.",
+                ephemeral=True
+            )
+            return False
+        return True
+
 class EditRequestedRollButton(ui.Button):
     def __init__(self, roll_formula: RollFormula = None, difficulty: int = None):
         super().__init__(label="Modify Roll", style=discord.ButtonStyle.primary)
@@ -367,6 +533,183 @@ class RollFormulaView(ui.View):
         button = self.modifier_buttons[key]
         button.label = f"{key}: {value}"
         await interaction.response.edit_message(view=self)
+
+
+class RollFormulaViewV2(ui.LayoutView):
+    """Components v2 base class for interactive roll builders."""
+
+    def __init__(self, character: BaseCharacter, roll_formula_obj: RollFormula, difficulty: int = None, status_message: str = None):
+        super().__init__(timeout=60 * 60 * 24)
+        self.character = character
+        self.roll_formula_obj = roll_formula_obj
+        self.difficulty = difficulty
+        self.status_message = status_message
+        self._build_layout()
+
+    def _build_layout(self):
+        if self.status_message:
+            self.add_item(
+                ui.Container(
+                    ui.TextDisplay(self._truncate_text(self.status_message)),
+                    accent_colour=discord.Colour.green(),
+                )
+            )
+
+        self.add_item(
+            ui.Container(
+                ui.TextDisplay(self._truncate_text(self._get_summary_text())),
+                accent_colour=self._get_content_colour(),
+            )
+        )
+
+        extra_rows = self._build_extra_action_rows()
+        modifier_rows = self._build_modifier_action_rows()
+        footer_row = self._build_footer_row()
+
+        if extra_rows or modifier_rows or footer_row:
+            self.add_item(ui.Separator())
+
+        for row in extra_rows:
+            self.add_item(row)
+        for row in modifier_rows:
+            self.add_item(row)
+        if footer_row is not None:
+            self.add_item(footer_row)
+
+    def _truncate_text(self, text: str, limit: int = 4000) -> str:
+        if len(text) <= limit:
+            return text
+        return text[: limit - 1] + "…"
+
+    def _truncate_button_label(self, label: str, limit: int = 80) -> str:
+        if len(label) <= limit:
+            return label
+        return label[: limit - 1] + "…"
+
+    def _make_button(self, label: str, style: discord.ButtonStyle, callback):
+        button = ui.Button(label=self._truncate_button_label(label), style=style)
+        button.callback = callback
+        return button
+
+    def _get_content_colour(self) -> discord.Colour:
+        return discord.Colour.blurple()
+
+    def _get_instruction_text(self) -> str:
+        return "Adjust your roll formula as needed, then finalize to roll."
+
+    def _get_specific_summary_lines(self) -> list[str]:
+        return []
+
+    def _build_extra_action_rows(self) -> list[ui.ActionRow]:
+        return []
+
+    def _clone(self, status_message: str = None):
+        return self.__class__(
+            character=self.character,
+            roll_formula_obj=self.roll_formula_obj,
+            difficulty=self.difficulty,
+            status_message=status_message,
+        )
+
+    def _get_summary_text(self) -> str:
+        lines = [
+            "## 🎲 Roll Builder",
+            f"**Character:** {self.character.name if self.character else 'Unknown'}",
+            f"**Formula:** `{self.roll_formula_obj.get_total_dice_formula()}`",
+        ]
+
+        if self.difficulty is not None:
+            lines.append(f"**Difficulty:** {self.difficulty}")
+
+        specific_lines = self._get_specific_summary_lines()
+        if specific_lines:
+            lines.append("")
+            lines.extend(specific_lines)
+
+        modifiers = self.roll_formula_obj.modifiers if hasattr(self.roll_formula_obj, "modifiers") else {}
+        if modifiers:
+            lines.append("")
+            lines.append("**Modifiers**")
+            for key, value in modifiers.items():
+                lines.append(f"- {key}: {value}")
+
+        lines.append("")
+        lines.append(self._get_instruction_text())
+        return "\n".join(lines)
+
+    def _get_modifier_button_defs(self) -> list[tuple[str, discord.ButtonStyle, str, str]]:
+        defs = []
+        dice_pattern = re.compile(r"^\s*\d*d\d+([+-]\d+)?\s*$", re.IGNORECASE)
+        for key, value in self.roll_formula_obj.modifiers.items():
+            is_numeric = False
+            if not isinstance(value, bool):
+                try:
+                    int(value)
+                    is_numeric = True
+                except (ValueError, TypeError):
+                    pass
+            if is_numeric or dice_pattern.match(str(value)):
+                defs.append((f"{key}: {value}", discord.ButtonStyle.secondary, key, str(value)))
+        return defs
+
+    def _build_modifier_action_rows(self) -> list[ui.ActionRow]:
+        button_defs = self._get_modifier_button_defs()
+        rows: list[ui.ActionRow] = []
+        current_row = None
+
+        for index, (label, style, key, value) in enumerate(button_defs):
+            if index % 5 == 0:
+                current_row = ui.ActionRow()
+                rows.append(current_row)
+
+            current_row.add_item(self._make_button(label, style, self._make_modifier_callback(key, value)))
+
+        return rows
+
+    def _build_footer_row(self) -> ui.ActionRow:
+        row = ui.ActionRow()
+        row.add_item(self._make_button("Add Modifier", discord.ButtonStyle.primary, self.add_modifier_prompt))
+        row.add_item(self._make_button(f"Roll {self.roll_formula_obj.get_total_dice_formula()}", discord.ButtonStyle.success, self.finalize_roll))
+        return row
+
+    def _make_modifier_callback(self, key: str, value: str):
+        async def callback(interaction: discord.Interaction):
+            await interaction.response.send_modal(EditModifierModal(key, value, self, interaction))
+
+        return callback
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        active_character = repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id)
+        if not active_character:
+            await interaction.response.send_message("❌ No active character found.", ephemeral=True)
+            return False
+        self.character = active_character
+        return True
+
+    async def refresh_view(self, interaction: discord.Interaction, status_message: str = None):
+        await interaction.response.edit_message(
+            content=None,
+            embed=None,
+            view=self._clone(status_message=status_message),
+        )
+
+    async def update_modifier(self, interaction: discord.Interaction, key: str, value: str):
+        self.roll_formula_obj[key] = value
+        await self.refresh_view(interaction, status_message=f"✅ Updated **{key}** to `{value}`.")
+
+    async def add_modifier(self, interaction: discord.Interaction, key: str, value: str):
+        self.roll_formula_obj.modifiers[key] = value
+        await self.refresh_view(interaction, status_message=f"✅ Added modifier **{key}** = `{value}`.")
+
+    async def add_modifier_prompt(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(AddModifierModal(self, interaction))
+
+    async def finalize_roll(self, interaction: discord.Interaction):
+        character = repositories.active_character.get_active_character(interaction.guild.id, interaction.user.id) or self.character
+        if not character:
+            await interaction.response.send_message("❌ Active character not found. Use /setactive to set your active character.", ephemeral=True)
+            return
+        await character.send_roll_message(interaction, self.roll_formula_obj, self.difficulty)
 
 class EditModifierButton(discord.ui.Button):
     def __init__(self, key: str, value: str, parent_view: RollFormulaView):
@@ -427,6 +770,10 @@ class AddModifierModal(discord.ui.Modal, title="Add Modifier"):
     async def on_submit(self, interaction: discord.Interaction):
         key = self.key_input.value.strip()
         value = self.value_input.value.strip()
+        if hasattr(self.parent_view, "add_modifier"):
+            await self.parent_view.add_modifier(interaction, key, value)
+            return
+
         self.parent_view.roll_formula_obj.modifiers[key] = value
         self.parent_view.add_modifier_button(label=key, value=value)
         

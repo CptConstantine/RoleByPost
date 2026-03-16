@@ -5,6 +5,7 @@ from discord import app_commands
 from commands.autocomplete import npcs_not_in_scene_autocomplete, npcs_in_scene_autocomplete, scene_names_autocomplete
 from core.command_decorators import gm_role_required, no_ic_channels, player_or_gm_role_required
 from core.shared_views import ConfirmDialogV2
+from core.view_config import components_v2_enabled
 from data.repositories.repository_factory import repositories
 
 import core.factories as factories
@@ -99,12 +100,14 @@ class SceneCommands(commands.Cog):
             system=system,
             guild_id=str(interaction.guild.id),
             channel_id=str(interaction.channel.id),
-            scene_id=scene.scene_id
+            scene_id=scene.scene_id,
+            use_v2=True,
         )
         
         # Set is_gm to False for the pinned message to ensure hidden aspects remain hidden
         view.is_gm = False
-        view.build_view_components()
+        if not isinstance(view, discord.ui.LayoutView):
+            view.build_view_components()
         
         # Create and pin the message
         message = await view.pin_message(interaction)
@@ -160,9 +163,13 @@ class SceneCommands(commands.Cog):
             await interaction.response.send_message(f"❌ Scene '{scene_name}' not found.", ephemeral=True)
             return
             
-        # Create confirmation view (Components v2)
-        view = ConfirmDeleteViewV2(interaction.guild.id, scene, self)
-        await interaction.response.send_message(view=view, ephemeral=True)
+        confirmation_msg = f"⚠️ Are you sure you want to delete scene **{scene.name}**?\n\nThis action cannot be undone."
+        if components_v2_enabled():
+            view = ConfirmDeleteViewV2(interaction.guild.id, scene, self)
+            await interaction.response.send_message(view=view, ephemeral=True)
+        else:
+            view = ConfirmDeleteView(interaction.guild.id, scene, self)
+            await interaction.response.send_message(content=confirmation_msg, view=view, ephemeral=True)
 
     @scene_group.command(name="rename", description="Rename a scene")
     @app_commands.describe(
@@ -382,34 +389,49 @@ class SceneCommands(commands.Cog):
             guild_id=str(interaction.guild.id),
             channel_id=str(interaction.channel.id),
             scene_id=scene.scene_id,
-            message_id=pinned_msg.message_id if pinned_msg else None
+            message_id=pinned_msg.message_id if pinned_msg else None,
+            use_v2=True,
         )
         
         # Set the GM flag based on the user's permission
         # This allows GMs to see hidden aspects in their personal view
         view.is_gm = is_gm
-        view.build_view_components()
-        
-        # Get the embed and content
-        embed, content = await view.create_scene_content()
-        
-        # Add footer content
-        if scene.is_active:
-            # For active scene, mention if it's pinned
-            if pinned_msg:
-                if is_gm:
-                    embed.set_footer(text="This scene is also pinned at the top of the channel.")
-                else:
-                    embed.set_footer(text="This scene is also pinned at the top of the channel for easy reference.")
-        else:
-            # For non-active scene, add a note
-            if is_gm:
-                embed.set_footer(text=f"This is not the active scene. Use `/scene switch \"{scene.name}\"` to make it active.")
+
+        if isinstance(view, discord.ui.LayoutView):
+            footer_message = None
+            if scene.is_active:
+                if pinned_msg:
+                    footer_message = (
+                        "This scene is also pinned at the top of the channel."
+                        if is_gm
+                        else "This scene is also pinned at the top of the channel for easy reference."
+                    )
             else:
-                embed.set_footer(text="This is not the currently active scene.")
-        
-        # Send the message with our view - IMPORTANT: Using ephemeral=True here
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+                footer_message = (
+                    f"This is not the active scene. Use /scene switch \"{scene.name}\" to make it active."
+                    if is_gm
+                    else "This is not the currently active scene."
+                )
+
+            await view.prepare_layout(status_message=footer_message)
+            await interaction.response.send_message(view=view, ephemeral=True)
+        else:
+            view.build_view_components()
+            embed, content = await view.create_scene_content()
+
+            if scene.is_active:
+                if pinned_msg:
+                    if is_gm:
+                        embed.set_footer(text="This scene is also pinned at the top of the channel.")
+                    else:
+                        embed.set_footer(text="This scene is also pinned at the top of the channel for easy reference.")
+            else:
+                if is_gm:
+                    embed.set_footer(text=f"This is not the active scene. Use `/scene switch \"{scene.name}\"` to make it active.")
+                else:
+                    embed.set_footer(text="This is not the currently active scene.")
+
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     @scene_group.command(name="pin", description="Pin the current scene to this channel")
     @gm_role_required()
@@ -436,13 +458,15 @@ class SceneCommands(commands.Cog):
             system=system,
             guild_id=interaction.guild.id, 
             channel_id=interaction.channel.id,
-            scene_id=active_scene.scene_id
+            scene_id=active_scene.scene_id,
+            use_v2=True,
         )
         
         # IMPORTANT: Since pinned messages are always visible to all channel members,
         # we set is_gm to False regardless of who creates it, to ensure hidden aspects are hidden
         view.is_gm = False
-        view.build_view_components()
+        if not isinstance(view, discord.ui.LayoutView):
+            view.build_view_components()
         
         # Pin the message
         message = await view.pin_message(interaction)
@@ -565,7 +589,7 @@ class SceneCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     # Helper method to update all pinned scenes after a change
-    async def _update_all_pinned_scenes(self, guild, scene_id=None):
+    async def _update_all_pinned_scenes(self, guild, scene_id=None, use_v2: bool = False):
         """
         Update all pinned scene messages for a specific scene or for all scenes if scene_id is None
         
@@ -607,22 +631,24 @@ class SceneCommands(commands.Cog):
                         guild_id=str(guild.id), 
                         channel_id=pinned_msg.channel_id,
                         scene_id=pinned_msg.scene_id,
-                        message_id=pinned_msg.message_id
+                        message_id=pinned_msg.message_id,
+                        use_v2=use_v2,
                     )
                     
                     # IMPORTANT: Always set is_gm to False for pinned scene updates
                     # This ensures that hidden aspects are always hidden in public pinned messages
                     view.is_gm = False
-                    view.build_view_components()
-                    
-                    # Get the embed and content
-                    embed, content = await view.create_scene_content()
                     
                     # Get the message
                     message = await channel.fetch_message(int(pinned_msg.message_id))
                     if message:
-                        # Update the message
-                        await message.edit(content=content, embed=embed, view=view)
+                        if isinstance(view, discord.ui.LayoutView):
+                            await view.prepare_layout()
+                            await message.edit(content=None, embed=None, view=view)
+                        else:
+                            view.build_view_components()
+                            embed, content = await view.create_scene_content()
+                            await message.edit(content=content, embed=embed, view=view)
                 except Exception as e:
                     logging.error(f"Failed to update pinned scene message: {e}")
         except Exception as e:

@@ -6,6 +6,7 @@ from core.base_models import AccessType, BaseCharacter, EntityType, EntityLinkTy
 from core.command_decorators import gm_role_required, no_ic_channels, player_or_gm_role_required
 from core.shared_views import ConfirmDialogV2
 from core.utils import _can_user_edit_character, _can_user_view_character, _check_character_possessions, _get_character_by_name_or_nickname, _resolve_character, _set_character_avatar
+from core.view_config import components_v2_enabled
 from data.repositories.repository_factory import repositories
 import core.factories as factories
 
@@ -252,8 +253,12 @@ class CharacterCommands(commands.Cog):
         
         confirmation_msg += "\nThis action cannot be undone."
         
-        view = ConfirmDeleteCharacterViewV2(character, transfer_inventory, confirmation_msg)
-        await interaction.response.send_message(view=view, ephemeral=True)
+        if components_v2_enabled():
+            view = ConfirmDeleteCharacterViewV2(character, transfer_inventory, confirmation_msg)
+            await interaction.response.send_message(view=view, ephemeral=True)
+        else:
+            view = ConfirmDeleteCharacterView(character, transfer_inventory)
+            await interaction.response.send_message(content=confirmation_msg, view=view, ephemeral=True)
 
     @character_group.command(name="sheet", description="View a character, NPC, or companion's full sheet")
     @app_commands.describe(char_name="Leave blank to view your active character, or enter a character/NPC/companion name")

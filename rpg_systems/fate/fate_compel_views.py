@@ -1,9 +1,16 @@
 from enum import Enum
 import discord
 from core.base_models import SystemType
+from core.shared_views import embed_to_text
 from data.repositories.repository_factory import repositories
 from core.utils import _get_character_by_name_or_nickname, _get_gm_mention
 from rpg_systems.fate.fate_character import FateCharacter
+
+
+def _truncate_text(text: str, limit: int = 4000) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
 
 class CompelType(Enum):
     GM = "gm"
@@ -68,7 +75,7 @@ class CompelView(discord.ui.View):
                 target_user = interaction.guild.get_member(int(self.target_user_id))
                 if target_user:
                     mentions.append(target_user.mention)
-            elif interaction.user.id == self.target_user_id:
+            elif str(interaction.user.id) == str(self.target_user_id):
                 # Mention the GM role if the interaction is from the target player
                 gm_mention = await _get_gm_mention(interaction)
                 if gm_mention:
@@ -82,7 +89,7 @@ class CompelView(discord.ui.View):
                 gm_mention = await _get_gm_mention(interaction)
                 if gm_mention:
                     mentions.append(gm_mention)
-            elif interaction.user.id == self.target_user_id:
+            elif str(interaction.user.id) == str(self.target_user_id):
                 # Mention the GM if the interaction is from the target player
                 gm_mention = await _get_gm_mention(interaction)
                 if gm_mention:
@@ -212,6 +219,125 @@ class CompelView(discord.ui.View):
             return True
         except Exception:
             return False
+
+
+class CompelViewV2(discord.ui.LayoutView):
+    def __init__(self, compel_type: CompelType, target_character: str, compeller_user_id: int,
+                 target_user_id: str, message: str, guild_id: int, announcement_message: str = None,
+                 status_message: str = None):
+        super().__init__(timeout=60 * 60 * 24 * 7)
+        self.compel_type = compel_type
+        self.target_character = target_character
+        self.compeller_user_id = compeller_user_id
+        self.target_user_id = target_user_id
+        self.message = message
+        self.negotiation_message = ""
+        self.guild_id = guild_id
+        self.announcement_message = announcement_message
+        self.status_message = status_message
+
+        self.player_decision = None
+        self.gm_decision = None
+        self._build_layout()
+
+    def _build_layout(self):
+        self.clear_items()
+
+        if self.announcement_message:
+            self.add_item(
+                discord.ui.Container(
+                    discord.ui.TextDisplay(_truncate_text(self.announcement_message, 1500)),
+                    accent_colour=discord.Colour.blurple(),
+                )
+            )
+
+        if self.status_message:
+            self.add_item(
+                discord.ui.Container(
+                    discord.ui.TextDisplay(_truncate_text(self.status_message, 1500)),
+                    accent_colour=discord.Colour.green(),
+                )
+            )
+
+        self.add_item(
+            discord.ui.Container(
+                discord.ui.TextDisplay(_truncate_text(embed_to_text(self.create_status_embed()), 3000)),
+                accent_colour=discord.Colour.orange() if self.compel_type == CompelType.GM else discord.Colour.blue(),
+            )
+        )
+        self.add_item(discord.ui.Separator())
+
+        if self.compel_type == CompelType.GM:
+            decision_row = discord.ui.ActionRow()
+
+            accept_button = AcceptCompelButton()
+            accept_button.disabled = self.player_decision is not None or self.is_complete()
+            decision_row.add_item(accept_button)
+
+            reject_button = RejectCompelButton()
+            reject_button.disabled = self.player_decision is not None or self.is_complete()
+            decision_row.add_item(reject_button)
+            self.add_item(decision_row)
+
+            negotiate_row = discord.ui.ActionRow()
+            negotiate_button = NegotiateCompelButton()
+            negotiate_button.disabled = self.is_complete()
+            negotiate_row.add_item(negotiate_button)
+            self.add_item(negotiate_row)
+        else:
+            player_row = discord.ui.ActionRow()
+
+            accept_button = AcceptCompelButton()
+            accept_button.disabled = self.player_decision is not None or self.is_complete()
+            player_row.add_item(accept_button)
+
+            reject_button = RejectCompelButton()
+            reject_button.disabled = self.player_decision is not None or self.is_complete()
+            player_row.add_item(reject_button)
+
+            negotiate_button = NegotiateCompelButton()
+            negotiate_button.disabled = self.is_complete()
+            player_row.add_item(negotiate_button)
+            self.add_item(player_row)
+
+            gm_row = discord.ui.ActionRow()
+            approve_button = GMApproveButton()
+            approve_button.disabled = self.gm_decision is not None or self.is_complete()
+            gm_row.add_item(approve_button)
+
+            reject_gm_button = GMRejectButton()
+            reject_gm_button.disabled = self.gm_decision is not None or self.is_complete()
+            gm_row.add_item(reject_gm_button)
+            self.add_item(gm_row)
+
+    async def update_message(self, interaction: discord.Interaction, message: str = None):
+        mentions = await self.get_compel_interaction_mentions(interaction)
+        lines = []
+        if mentions:
+            lines.append(", ".join(mentions))
+        if message:
+            lines.append(f"**Update:** {message}")
+        self.status_message = "\n".join(lines) if lines else None
+        self._build_layout()
+        await interaction.response.edit_message(content=None, embed=None, view=self)
+
+    async def get_compel_interaction_mentions(self, interaction: discord.Interaction) -> list[str]:
+        return await CompelView.get_compel_interaction_mentions(self, interaction)
+
+    def create_status_embed(self) -> discord.Embed:
+        return CompelView.create_status_embed(self)
+
+    def is_complete(self) -> bool:
+        return CompelView.is_complete(self)
+
+    async def resolve_compel(self, interaction: discord.Interaction):
+        await CompelView.resolve_compel(self, interaction)
+
+    async def _award_fate_point(self, character: FateCharacter) -> bool:
+        return await CompelView._award_fate_point(self, character)
+
+    async def _spend_fate_point(self, character: FateCharacter) -> bool:
+        return await CompelView._spend_fate_point(self, character)
 
 class AcceptCompelButton(discord.ui.Button):
     def __init__(self):

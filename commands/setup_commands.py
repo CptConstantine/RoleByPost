@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 from core.base_models import SystemType
 from core.command_decorators import admin_required, gm_role_required, no_ic_channels, player_or_gm_role_required
+from core.view_config import components_v2_enabled
 import core.factories as factories
 from data.repositories.repository_factory import repositories
 
@@ -363,7 +364,7 @@ class SetupCommands(commands.Cog):
     @no_ic_channels()
     async def setup_core_roll_mechanic(self, interaction: discord.Interaction):
         """Configure the core roll mechanic for the Generic system"""
-        from core.generic_roll_mechanics import CoreRollMechanicSelectView
+        from core.generic_roll_mechanics import CoreRollMechanicSelectView, CoreRollMechanicSelectViewV2
         
         # Check if server is using generic system
         system = repositories.server.get_system(str(interaction.guild.id))
@@ -374,22 +375,27 @@ class SetupCommands(commands.Cog):
             )
             return
         
-        # Create the selection view
-        view = CoreRollMechanicSelectView()
-        
-        embed = discord.Embed(
-            title="🎲 Configure Core Roll Mechanic",
-            description="Choose the core dice mechanic that best fits your game system.\n\n"
-                       "This will determine how players roll dice and what constitutes success.",
-            color=discord.Color.blue()
-        )
-        embed.add_field(
-            name="Current Setup",
-            value="Select a roll mechanic below to get started.",
-            inline=False
-        )
-        
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        if components_v2_enabled():
+            view = CoreRollMechanicSelectViewV2()
+            await interaction.response.send_message(view=view, ephemeral=True)
+        else:
+            view = CoreRollMechanicSelectView()
+
+            embed = discord.Embed(
+                title="🎲 Configure Core Roll Mechanic",
+                description=(
+                    "Choose the core dice mechanic that best fits your game system.\n\n"
+                    "This will determine how players roll dice and what constitutes success."
+                ),
+                color=discord.Color.blue()
+            )
+            embed.add_field(
+                name="Current Setup",
+                value="Select a roll mechanic below to get started.",
+                inline=False
+            )
+
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     @setup_group.command(
         name="status",

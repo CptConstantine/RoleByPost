@@ -260,19 +260,20 @@ class FateCharacter(BaseCharacter):
         """
         Opens a view for editing the roll parameters, prepopulated with any requested skill.
         """
-        view = FateRollFormulaView(self, roll_formula_obj, difficulty)
-        
-        # Create a message that shows what was initially requested
-        content = "Adjust your roll formula as needed, then finalize to roll."
-        if roll_formula_obj.skill:
-            skill_value = self.skills.get(roll_formula_obj.skill, 0)
-            content = f"Roll requested with skill: **{roll_formula_obj.skill}** (+{skill_value if skill_value >= 0 else skill_value})\n{content}"
-        
-        await interaction.response.send_message(
-            content=content,
-            view=view,
-            ephemeral=True
-        )
+        from core import factories
+        view = factories.get_specific_roll_formula_view(interaction.guild.id, self, SystemType.FATE, roll_formula_obj, difficulty)
+        if isinstance(view, discord.ui.LayoutView):
+            await interaction.response.send_message(view=view, ephemeral=True)
+        else:
+            content = "Adjust your roll formula as needed, then finalize to roll."
+            if roll_formula_obj.skill:
+                skill_value = self.skills.get(roll_formula_obj.skill, 0)
+                content = f"Roll requested with skill: **{roll_formula_obj.skill}** (+{skill_value if skill_value >= 0 else skill_value})\n{content}"
+            await interaction.response.send_message(
+                content=content,
+                view=view,
+                ephemeral=True
+            )
         
     async def send_roll_message(self, interaction: discord.Interaction, roll_formula_obj: "FateRollFormula", difficulty: int = None):
         """
@@ -319,7 +320,11 @@ class FateCharacter(BaseCharacter):
         return skills_dict
     
     def get_sheet_edit_view(self, editor_id: int, is_gm: bool, guild_id: str = None) -> discord.ui.View:
-        from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView
+        from rpg_systems.fate.fate_sheet_edit_views import FateSheetEditView, FateSheetEditViewV2
+        from core.view_config import components_v2_enabled
+
+        if guild_id and components_v2_enabled():
+            return FateSheetEditViewV2(editor_id=editor_id, char_id=self.id, guild_id=int(guild_id))
         return FateSheetEditView(editor_id=editor_id, char_id=self.id)
 
     def format_full_sheet(self, guild_id: int, is_gm: bool = False) -> discord.Embed:

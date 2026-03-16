@@ -5,7 +5,8 @@ from commands.autocomplete import multi_character_autocomplete, roll_parameters_
 from core.command_decorators import no_ic_channels, player_or_gm_role_required
 from core.generic_roll_formulas import RollFormula
 from core.generic_roll_mechanics import execute_roll
-from core.shared_views import RequestRollView
+from core.shared_views import RequestRollView, RequestRollViewV2
+from core.view_config import components_v2_enabled
 import core.factories as factories
 from data.repositories import character_repository
 from data.repositories.repository_factory import repositories
@@ -101,11 +102,14 @@ class RollCommands(commands.Cog):
         system = repositories.server.get_system(str(interaction.guild.id))
         roll_formula_obj = factories.get_specific_roll_formula(interaction.guild.id, system, {})
         formula_view = factories.get_specific_roll_formula_view(interaction.guild.id, character, system, roll_formula_obj)
-        await interaction.response.send_message(
-            content=f"🎲 What will **{character.name}** roll?",
-            view=formula_view,
-            ephemeral=True
-        )
+        if isinstance(formula_view, discord.ui.LayoutView):
+            await interaction.response.send_message(view=formula_view, ephemeral=True)
+        else:
+            await interaction.response.send_message(
+                content=f"🎲 What will **{character.name}** roll?",
+                view=formula_view,
+                ephemeral=True
+            )
 
     @roll_group.command(
         name="request", 
@@ -155,11 +159,18 @@ class RollCommands(commands.Cog):
         roll_parameters_dict = RollFormula.roll_parameters_to_dict(roll_parameters)
         roll_formula_obj = factories.get_specific_roll_formula(interaction.guild.id, system, roll_parameters_dict)
 
-        view = RequestRollView(users_requested=users_requested, roll_formula=roll_formula_obj, difficulty=difficulty)
-        await interaction.response.send_message(
-            content=f"{mention_str}\n{interaction.user.display_name} requests a roll: `{roll_parameters}`",
-            view=view
-        )
+        request_message = f"{mention_str}\n{interaction.user.display_name} requests a roll: `{roll_parameters}`"
+        if components_v2_enabled():
+            view = RequestRollViewV2(
+                users_requested=users_requested,
+                roll_formula=roll_formula_obj,
+                difficulty=difficulty,
+                request_message=request_message
+            )
+            await interaction.response.send_message(view=view)
+        else:
+            view = RequestRollView(users_requested=users_requested, roll_formula=roll_formula_obj, difficulty=difficulty)
+            await interaction.response.send_message(content=request_message, view=view)
 
 async def setup_roll_commands(bot: commands.Bot):
     await bot.add_cog(RollCommands(bot))

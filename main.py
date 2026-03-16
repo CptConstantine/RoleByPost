@@ -8,10 +8,10 @@ from commands import message_context_menu, narration_commands, user_context_menu
 from commands.narration import can_user_speak_as_character, process_narration, send_narration_webhook
 from commands import character_commands, entity_commands, help_commands, initiative_commands, link_commands, reminder_commands, roll_commands, scene_commands, setup_commands, recap_commands, rules_commands
 from rpg_systems.fate import fate_commands
-from core.initiative_views import GenericInitiativeView, PopcornInitiativeView
-from core.scene_views import GenericSceneView
-from rpg_systems.fate.fate_scene_views import FateSceneView
-from rpg_systems.mgt2e.mgt2e_scene_views import MGT2ESceneView
+from core.initiative_views import GenericInitiativeView, GenericInitiativeViewV2, PopcornInitiativeView, PopcornInitiativeViewV2
+from core.scene_views import GenericSceneView, GenericSceneViewV2
+from rpg_systems.fate.fate_scene_views import FateSceneView, FateSceneViewV2
+from rpg_systems.mgt2e.mgt2e_scene_views import MGT2ESceneView, MGT2ESceneViewV2
 
 dotenv.load_dotenv()
 
@@ -69,10 +69,15 @@ async def setup_hook():
     
     # Register empty instances of views for persistence
     bot.add_view(GenericInitiativeView()) 
+    bot.add_view(GenericInitiativeViewV2())
     bot.add_view(PopcornInitiativeView())
+    bot.add_view(PopcornInitiativeViewV2())
     bot.add_view(GenericSceneView())
+    bot.add_view(GenericSceneViewV2())
     bot.add_view(FateSceneView())
+    bot.add_view(FateSceneViewV2())
     bot.add_view(MGT2ESceneView())
+    bot.add_view(MGT2ESceneViewV2())
 
     # Sync the command tree
     await bot.tree.sync()
