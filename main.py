@@ -2,6 +2,9 @@ import os
 import logging
 import re
 import dotenv
+
+dotenv.load_dotenv()
+
 import discord
 from discord.ext import commands
 from commands import message_context_menu, narration_commands, user_context_menu
@@ -12,8 +15,6 @@ from core.initiative_views import GenericInitiativeView, GenericInitiativeViewV2
 from core.scene_views import GenericSceneView, GenericSceneViewV2
 from rpg_systems.fate.fate_scene_views import FateSceneView, FateSceneViewV2
 from rpg_systems.mgt2e.mgt2e_scene_views import MGT2ESceneView, MGT2ESceneViewV2
-
-dotenv.load_dotenv()
 
 # Check if we're using PostgreSQL or SQLite
 use_postgresql = os.getenv('DATABASE_URL') is not None
