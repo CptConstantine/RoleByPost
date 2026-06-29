@@ -1,5 +1,5 @@
-python-dotenv>=1.2.1
-psycopg2-binary>=2.9.11
-cryptography>=46.0.3
-discord.py>=2.6.4
-openai>=2.15.0
+python-dotenv>=1.2.2
+psycopg2-binary>=2.9.12
+cryptography>=49.0.0
+discord.py>=2.7.1
+openai>=2.44.0
