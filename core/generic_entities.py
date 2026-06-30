@@ -608,12 +608,21 @@ class ContainerAccessModal(ui.Modal, title="Manage Container Access"):
         super().__init__()
         self.container_id = container_id
         self._guild_id = guild_id  # If set, creates V2 view on submit
-        
-    access_type = ui.TextInput(
-        label="Access Type",
-        placeholder="Enter: public or gm",
-        required=True
-    )
+        self.access_type = ui.RadioGroup(
+            options=[
+                discord.RadioGroupOption(
+                    label="Public",
+                    value=AccessType.PUBLIC.value,
+                    description="Anyone who can view the container can access it.",
+                ),
+                discord.RadioGroupOption(
+                    label="GM Only",
+                    value=AccessType.GM_ONLY.value,
+                    description="Only GMs can access this container.",
+                ),
+            ]
+        )
+        self.add_item(self.access_type)
     
     async def on_submit(self, interaction: discord.Interaction):
         from data.repositories.repository_factory import repositories
@@ -622,18 +631,8 @@ class ContainerAccessModal(ui.Modal, title="Manage Container Access"):
         if not container:
             await interaction.response.send_message("❌ Container not found.", ephemeral=True)
             return
-        
-        access_type = self.access_type.value.strip().lower()
-        valid_types = ["public", "gm"]
-        
-        if access_type not in valid_types:
-            await interaction.response.send_message(
-                f"❌ Invalid access type. Must be one of: {', '.join(valid_types)}", 
-                ephemeral=True
-            )
-            return
-        
-        access_type = AccessType(access_type if access_type == "public" else "gm_only")
+
+        access_type = AccessType(self.access_type.value)
         
         try:
             container.set_access_type(access_type)

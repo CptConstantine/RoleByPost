@@ -1159,13 +1159,15 @@ class AddAspectModal(ui.Modal, title="Add Aspect"):
             required=False
         )
         self.add_item(self.free_invokes_field)
-        
-        # Add hidden checkbox (simulated with text field since modal doesn't have checkboxes)
-        self.is_hidden_field = ui.TextInput(
-            label="Hidden? (yes/no)",
-            default="no",
-            max_length=3,
-            required=False
+
+        self.is_hidden_field = ui.CheckboxGroup(
+            required=False,
+            options=[
+                discord.CheckboxGroupOption(
+                    label="Hidden",
+                    value="hidden"
+                )
+            ]
         )
         self.add_item(self.is_hidden_field)
 
@@ -1179,9 +1181,8 @@ class AddAspectModal(ui.Modal, title="Add Aspect"):
             free_invokes = max(0, free_invokes)  # Ensure non-negative
         except ValueError:
             free_invokes = 0
-            
-        # Process the is_hidden input
-        is_hidden = self.is_hidden_field.value.lower().strip() in ["yes", "y", "true", "1"]
+
+        is_hidden = "hidden" in self.is_hidden_field.values
         
         # Create new aspect as an Aspect object
         new_aspect = Aspect(
